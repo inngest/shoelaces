@@ -1,6 +1,6 @@
 module github.com/thousandeyes/shoelaces
 
-go 1.19
+go 1.24
 
 require (
 	github.com/go-kit/kit v0.12.0
