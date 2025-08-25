@@ -1,9 +1,9 @@
 networkMaps:
-  - network: 192.168.0.0/24
+  - network: 104.225.9.96/27
     script:
-      name: ubuntu-minimal.ipxe
+      name: debian.ipxe
       params:
-        release: xenial
+        release: bookworm
   - network: 10.0.10.0/24
     script:
       name: coreos.ipxe
