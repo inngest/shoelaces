@@ -18,7 +18,7 @@ chmod 0600 /root/.ssh/authorized_keys
 chown -R root:root /root/.ssh
 
 # 4) Kick off ansible-pull
-ansible-pull -U {{ .Params.ansible_repo_url }} -C {{ .Params.ansible_branch }} {{ .Params.ansible_playbook | default("site.yml") }} || true
+ansible-pull -U {{ .Params.ansible_repo_url }} -C {{ .Params.ansible_branch }} {{ .Params.ansible_playbook | default("baremetal.yml") }} -e "enable_rollout=false" || true
 
 # Optional: drop a marker so the service stops on success
 touch /var/lib/firstboot.done
