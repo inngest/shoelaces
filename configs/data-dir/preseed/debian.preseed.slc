@@ -43,7 +43,7 @@ d-i pkgsel/include string openssh-server curl ca-certificates git ansible-core
 # (3) ensure an SSH key is present so you can log in even if firstboot fails early.
 #
 # Requirements:
-#  - Place your script at: configs/data-dir/static/firstboot.sh  (served at {{ .BaseURL }}/static/firstboot.sh)
+#  - Place your script at: configs/data-dir/static/firstboot.sh  (served at {{ .baseURL }}/static/firstboot.sh)
 #  - Provide these params in mappings.yaml for the machine (or network):
 #       ssh_authorized_key, ansible_repo_url, ansible_branch, (optional) ansible_playbook
 #
@@ -54,13 +54,13 @@ d-i pkgsel/include string openssh-server curl ca-certificates git ansible-core
 #
 d-i preseed/late_command string \
   set -eux; \
-  wget -O /target/usr/local/bin/firstboot.sh {{ .BaseURL }}/static/firstboot.sh; \
+  wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
   mkdir -p /target/etc/systemd/system; \
   cat >/target/etc/systemd/system/firstboot.service <<'EOF_SYSUNIT'\n[Unit]\nDescription=Run first-boot bootstrap and then exit\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/firstboot.sh\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nEOF_SYSUNIT\n; \
   chroot /target /bin/ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
   install -d -m 0700 /target/root/.ssh; \
-  /bin/sh -c 'echo "{{ .Params.ssh_authorized_key }}" >>/target/root/.ssh/authorized_keys'; \
+  wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
   chmod 0600 /target/root/.ssh/authorized_keys; \
   chown -R 0:0 /target/root/.ssh; \
   printf "\nUseDNS no\n" >> /target/etc/ssh/sshd_config

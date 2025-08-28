@@ -4,11 +4,6 @@ networkMaps:
       name: debian.ipxe
       params:
         release: bookworm
-  - network: 10.0.10.0/24
-    script:
-      name: coreos.ipxe
-      params:
-        release: stable
 hostnameMaps:
   - hostname: msc1.example.com
     script:
