@@ -8,14 +8,52 @@ d-i apt-setup/non-free-firmware boolean true
 d-i apt-setup/non-free boolean true
 d-i apt-setup/contrib boolean true
 
-d-i partman-auto/method string regular
+d-i partman-auto/method string lvm
 d-i partman-lvm/device_remove_lvm boolean true
-d-i partman-md/device_remove_md boolean true
-d-i partman-lvm/confirm boolean true
-d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-auto-lvm/new_vg_name string vg0
+d-i partman-auto/expert_recipe string                         \
+  lvmlayout ::                                                \
+    512 512 512 fat32                                         \
+        $primary{ } $iflabel{ gpt } method{ efi } format{ }   \
+    .                                                         \
+    200 200 2000 ext4                                         \
+        $primary{ } method{ keep }                            \
+        $iflabel{ gpt }                                       \
+        $reusemethod{ }                                       \
+        $defaultignore{ }                                     \
+    .                                                         \
+    1000 10000 -1 lvm                                         \
+        method{ lvm } vg_name{ vg0 }                          \
+    .                                                         \
+    8192 10000 200% ext4                                      \
+        in_vg{ vg0 } lv_name{ root }                          \
+        method{ format } format{ }                            \
+        use_filesystem{ } filesystem{ ext4 }                  \
+        mountpoint{ / }                                       \
+    .                                                         \
+    512 1024 4096 swap                                        \
+        in_vg{ vg0 } lv_name{ swap }                          \
+        method{ swap } format{ }                              \
+    .
+d-i partman-auto/choose_recipe select lvmlayout
+d-i partman/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
 
-# atomic: Just one partition
-d-i partman-auto/choose_recipe select atomic
+# --- Select target disk (default to /dev/sda; override via mappings param "disk") ---
+d-i partman-auto/disk string {{ if .disk }}{{ .disk }}{{ else }}/dev/sda{{ end }}
+
+# Say "yes" to creating labels/partitions without asking
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman-auto/confirm boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+# Make sure GRUB goes to the same disk (avoids bootdev prompt)
+d-i grub-installer/bootdev string {{ if .disk }}{{ .disk }}{{ else }}/dev/sda{{ end }}
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/with_other_os boolean true
 
 d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
