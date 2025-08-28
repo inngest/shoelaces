@@ -1,5 +1,5 @@
-{{define "preseeds/debian" -}}
-{{template "preseeds/common"}}
+{{define "preseed/debian" -}}
+{{template "preseed/common"}}
 
 # Enable firmware & non-free sections (needed for mlx5 on many platforms)
 d-i hw-detect/load_firmware boolean true

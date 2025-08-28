@@ -1,5 +1,5 @@
-{{define "preseeds/ubuntu-minimal" -}}
-{{template "preseeds/common"}}
+{{define "preseed/ubuntu-minimal" -}}
+{{template "preseed/common"}}
 
 d-i partman-auto/method string regular
 d-i partman-lvm/device_remove_lvm boolean true
