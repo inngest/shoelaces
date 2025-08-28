@@ -21,10 +21,7 @@ d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
 d-i partman/confirm boolean true
 d-i partman/confirm_nooverwrite boolean true
-
-# If encrypt_home is not passed, default to false (avoid panics)
-{{- $enc := .encrypt_home | default "false" -}}
-d-i user-setup/encrypt-home boolean {{$enc}}
+d-i user-setup/encrypt-home boolean {{ .encrypt_home }}
 
 d-i base-installer/install-recommends boolean true
 
