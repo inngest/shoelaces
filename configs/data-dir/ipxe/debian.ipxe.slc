@@ -1,10 +1,12 @@
 {{define "debian.ipxe" -}}
 #!ipxe
 
-echo This automatically overwrites data!
-echo Debian {{.release}}
+echo Debian {{.release}} netboot (this will erase disks)
 
 set mirror http://ftp.debian.org/debian/dists/{{.release}}/main/installer-amd64/current/images/netboot/debian-installer/amd64
+
+# Choose interface: use `.iface` from mappings if set; else auto
+set iface {{ if .iface }}{{ .iface }}{{ else }}auto{{ end }}
 
 chain http://{{.baseURL}}/configs/linux.cfg?hostname={{.hostname}}
 
@@ -19,6 +21,7 @@ kernel ${mirror}/linux \
   auto=true priority=critical \
   netcfg/choose_interface=auto \
   ip=dhcp \
+  hostname={{ .hostname }} \
   domain=local \
   firmware=1 \
   preseed/url=http://{{.baseURL}}/configs/preseeds/debian?encrypt_home={{.encrypt_home}} \
