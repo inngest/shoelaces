@@ -1,0 +1,111 @@
+{{define "preseed/debian" -}}
+{{template "preseed/common"}}
+
+# Enable firmware & non-free sections (needed for mlx5 on many platforms)
+d-i hw-detect/load_firmware boolean true
+d-i firmware/nonfree boolean true
+d-i apt-setup/non-free-firmware boolean true
+d-i apt-setup/non-free boolean true
+d-i apt-setup/contrib boolean true
+
+d-i partman-auto/method string lvm
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-auto-lvm/new_vg_name string vg0
+d-i partman-auto/expert_recipe string                         \
+  lvmlayout ::                                                \
+    512 512 512 fat32                                         \
+        $primary{ } $iflabel{ gpt } method{ efi } format{ }   \
+    .                                                         \
+    200 200 2000 ext4                                         \
+        $primary{ } method{ keep }                            \
+        $iflabel{ gpt }                                       \
+        $reusemethod{ }                                       \
+        $defaultignore{ }                                     \
+    .                                                         \
+    1000 10000 -1 lvm                                         \
+        method{ lvm } vg_name{ vg0 }                          \
+    .                                                         \
+    8192 10000 200% ext4                                      \
+        in_vg{ vg0 } lv_name{ root }                          \
+        method{ format } format{ }                            \
+        use_filesystem{ } filesystem{ ext4 }                  \
+        mountpoint{ / }                                       \
+    .                                                         \
+    512 1024 4096 swap                                        \
+        in_vg{ vg0 } lv_name{ swap }                          \
+        method{ swap } format{ }                              \
+    .
+d-i partman-auto/choose_recipe select lvmlayout
+d-i partman/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+
+# --- Select target disk (default to /dev/sda; override via mappings param "disk") ---
+d-i partman-auto/disk string {{ if .disk }}{{ .disk }}{{ else }}/dev/sda{{ end }}
+
+# Say "yes" to creating labels/partitions without asking
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman-auto/confirm boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+# Make sure GRUB goes to the same disk (avoids bootdev prompt)
+d-i grub-installer/bootdev string {{ if .disk }}{{ .disk }}{{ else }}/dev/sda{{ end }}
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/with_other_os boolean true
+
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+d-i user-setup/encrypt-home boolean {{ .encrypt_home }}
+
+d-i base-installer/install-recommends boolean true
+
+d-i clock-setup/utc boolean true
+d-i time/zone string America/Los_Angeles
+
+d-i clock-setup/ntp boolean true
+
+d-i debian-installer/quiet boolean false
+d-i debian-installer/splash boolean false
+
+d-i pkgsel/update-policy select unattended-upgrades
+
+# We install SSH for access, curl/git for bootstrap, and ansible-core for ansible-pull
+d-i pkgsel/include string openssh-server curl ca-certificates git ansible-core
+
+# This "late_command" runs in the installer context, with the target system mounted at /target.
+# We: (1) fetch a firstboot script from Shoelaces static/, (2) install a systemd unit to run it once,
+# (3) ensure an SSH key is present so you can log in even if firstboot fails early.
+#
+# Requirements:
+#  - Place your script at: configs/data-dir/static/firstboot.sh  (served at {{ .baseURL }}/static/firstboot.sh)
+#  - Provide these params in mappings.yaml for the machine (or network):
+#       ssh_authorized_key, ansible_repo_url, ansible_branch, (optional) ansible_playbook
+#
+# Notes:
+#  - We use a heredoc to write the unit file safely.
+#  - We enable the unit by linking it into multi-user.target.wants.
+#  - We set UseDNS no to speed SSH logins on fresh hosts.
+#
+d-i preseed/late_command string \
+  set -eux; \
+  wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
+  chmod 0755 /target/usr/local/bin/firstboot.sh; \
+  mkdir -p /target/etc/systemd/system; \
+  cat >/target/etc/systemd/system/firstboot.service <<'EOF_SYSUNIT'\n[Unit]\nDescription=Run first-boot bootstrap and then exit\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/firstboot.sh\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nEOF_SYSUNIT\n; \
+  chroot /target /bin/ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
+  install -d -m 0700 /target/root/.ssh; \
+  wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
+  chmod 0600 /target/root/.ssh/authorized_keys; \
+  chown -R 0:0 /target/root/.ssh; \
+  printf "\nUseDNS no\n" >> /target/etc/ssh/sshd_config
+
+
+d-i grub-installer/timeout string 5
+d-i popularity-contest/participate boolean false
+
+d-i finish-install/reboot_in_progress note
+{{end}}
