@@ -39,34 +39,30 @@ d-i partman-md/device_remove_md boolean true
 d-i partman-md/confirm boolean true
 d-i partman-md/confirm_nooverwrite boolean true
 
-# ---- VG name (keep consistent here and below) ----
-# You can override via mappings param vg_name; default to vg0.
-# (Go templating: if/else for a default value)
-# -------------------------------------------------
-# shellcheck disable=SC2016
-{{- $vg := (cond (.vg_name) .vg_name "vg0") -}}
-
 # Expert recipe: ESP + LVM PV, with root+swap LVs
-d-i partman-auto/expert_recipe string                        \
-  uefi-lvm ::                                                \
-    512 512 512 fat32                                        \
-        $primary{ } $iflabel{ gpt }                          \
-        method{ efi } format{ }                              \
-        mountpoint{ /boot/efi }                              \
-    .                                                        \
-    1000 10000 -1 lvm                                        \
-        $primary{ } $iflabel{ gpt }                          \
-        method{ lvm } format{ } vg_name{ vg0 }               \
-    .                                                        \
-    8192 8192 8192 linux-swap                                \
-        in_vg{ vg0 } lv_name{ swap }                         \
-        method{ swap } format{ }                             \
-    .                                                        \
-    20000 100000000 -1 ext4                                  \
-        in_vg{ vg0 } lv_name{ root }                         \
-        method{ format } format{ }                           \
-        use_filesystem{ } filesystem{ ext4 }                 \
-        mountpoint{ / }                                      \
+d-i partman-auto/expert_recipe string                                    \
+  uefi-lvm ::                                                            \
+    512 512 512 fat32                                                    \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        mountpoint{ /boot/efi }                                          \
+    .                                                                    \
+    1000 10000 -1 lvm                                                    \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ lvm }                                                    \
+        vg_name{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} } \
+    .                                                                    \
+    8192 8192 8192 linux-swap                                            \
+        in_vg{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} }   \ 
+        lv_name{ swap }                                                  \
+        method{ swap } format{ }                                         \
+    .                                                                    \
+    20000 100000000 -1 ext4                                              \
+        in_vg{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} }   \
+        lv_name{ root }                                                  \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ ext4 }                             \
+        mountpoint{ / }                                                  \
     .
 
 d-i partman-auto/choose_recipe select uefi-lvm
