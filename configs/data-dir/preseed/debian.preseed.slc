@@ -14,22 +14,14 @@ d-i partman-auto/disk string /dev/nvme0n1
 # Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
 d-i partman/early_command string \
   /bin/ash -c 'set -eux; \
+    mdadm --stop --scan || true; \
+    vgchange -an || true; \
+    vgs --noheadings -o vg_name 2>/dev/null | awk "NF{print \$1}" | while read -r vg; do vgremove -ff "$vg" || true; done; \
+    pvs --noheadings -o pv_name 2>/dev/null | awk "NF{print \$1}" | while read -r pv; do pvremove -ff "$pv" || true; done; \
     for d in /dev/nvme0n1 /dev/nvme1n1; do \
       [ -b "$d" ] || continue; \
-      mdadm --stop --scan || true; \
-      mdadm --zero-superblock --force $d* 2>/dev/null || true; \
-      # Remove any VGs/PVs sitting on child partitions
-      for p in $(ls ${d}p* 2>/dev/null || true); do \
-        pvremove -ff -y "$p" 2>/dev/null || true; \
-        wipefs -fa "$p" 2>/dev/null || true; \
-      done; \
-      vgremove -ff -y 124-vg 2>/dev/null || true; \
-      vgremove -ff -y vg0    2>/dev/null || true; \
-      pvremove -ff -y "$d"   2>/dev/null || true; \
-      wipefs -fa "$d" || true; \
-      sgdisk --zap-all "$d" 2>/dev/null || true; \
-      dd if=/dev/zero of="$d" bs=1M count=8 oflag=direct 2>/dev/null || true; \
-      partprobe "$d" || true; \
+      sfdisk --delete "$d" 2>/dev/null || true; \
+      dd if=/dev/zero of="$d" bs=1M count=10 conv=fsync || true; \
     done'
 
 # Use LVM
