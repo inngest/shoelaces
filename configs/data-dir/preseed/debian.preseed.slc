@@ -47,6 +47,12 @@ d-i partman-auto/expert_recipe string \
         method{ efi } format{ }                                          \
         mountpoint{ /boot/efi }                                          \
     .                                                                    \
+    1024 1024 1024 ext4                                                  \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ ext4 }                             \
+        mountpoint{ /boot }                                              \
+    .                                                                    \
     1000 10000 -1 lvm                                                    \
         $primary{ } $iflabel{ gpt }                                      \
         method{ lvm }                                                    \
