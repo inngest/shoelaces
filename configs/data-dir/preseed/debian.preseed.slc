@@ -110,6 +110,10 @@ d-i preseed/late_command string \
   chmod 0600 /target/root/.ssh/authorized_keys; \
   printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config
 
+
+# Set root password (crypted# SHA-512 hash)
+d-i passwd/root-password-crypted password $6$6C2rNs/iVblJ.PbR$Qu8.kmf0MmdSrSFGAMhThqFpIOoB7UT7M1LwngRo2LRfvUE.5/EYnCYQtWD0.7dea4m7szucDuSUTnVwBuu3K/
+
 d-i grub-installer/timeout string 5
 d-i popularity-contest/participate boolean false
 d-i finish-install/reboot_in_progress note
