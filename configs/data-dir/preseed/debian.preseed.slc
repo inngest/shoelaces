@@ -62,7 +62,6 @@ dd-i partman-auto/expert_recipe string                        \
         method{ swap } format{ }                             \
     .                                                        \
     20000 100000000 -1 ext4                                  \
-
         in_vg{ vg0 } lv_name{ root }                         \
         method{ format } format{ }                           \
         use_filesystem{ } filesystem{ ext4 }                 \
