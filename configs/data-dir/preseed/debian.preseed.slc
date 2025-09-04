@@ -46,7 +46,7 @@ d-i partman-md/confirm_nooverwrite boolean true
 {{- $vg := (cond (.vg_name) .vg_name "vg0") -}}
 
 # Expert recipe: ESP + LVM PV, with root+swap LVs
-dd-i partman-auto/expert_recipe string                        \
+d-i partman-auto/expert_recipe string                        \
   uefi-lvm ::                                                \
     512 512 512 fat32                                        \
         $primary{ } $iflabel{ gpt }                          \
