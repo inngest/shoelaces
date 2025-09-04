@@ -7,6 +7,7 @@ d-i apt-setup/non-free-firmware boolean true
 d-i apt-setup/non-free boolean true
 d-i apt-setup/contrib boolean true
 
+
 # ---- Select installation disk
 d-i partman-auto/disk string /dev/nvme0n1
 
@@ -24,6 +25,8 @@ d-i partman/early_command string \
       dd if=/dev/zero of="$d" bs=1M count=10 conv=fsync || true; \
     done'
 
+d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4
+
 # Use LVM
 d-i partman-auto/method string lvm
 d-i partman-auto-lvm/guided_size string max
@@ -39,8 +42,6 @@ d-i partman-md/confirm_nooverwrite boolean true
 # ---- VG name (keep consistent here and below) ----
 # You can override via mappings param vg_name; default to vg0.
 # (Go templating: if/else for a default value)
-# Example to keep old name: set vg_name: "124-vg"
-# and this will create/use that instead of vg0.
 # -------------------------------------------------
 # shellcheck disable=SC2016
 {{- $vg := (cond (.vg_name) .vg_name "vg0") -}}
