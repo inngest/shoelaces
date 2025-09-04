@@ -102,20 +102,7 @@ d-i preseed/late_command string \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
   install -d /target/etc/systemd/system; \
-  chroot /target /bin/sh -c "printf '%s\n' \
-'[Unit]' \
-'Description=Run first-boot bootstrap and then exit' \
-'After=network-online.target' \
-'Wants=network-online.target' \
-'' \
-'[Service]' \
-'Type=oneshot' \
-'ExecStart=/usr/local/bin/firstboot.sh' \
-'RemainAfterExit=yes' \
-'' \
-'[Install]' \
-'WantedBy=multi-user.target' \
-> /etc/systemd/system/firstboot.service"; \
+  wget -O /target/etc/systemd/system/firstboot.service http://{{ .baseURL }}/static/firstboot.service; \
   chroot /target /bin/systemctl enable firstboot.service || \
     ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
   install -d -m 0700 /target/root/.ssh; \
