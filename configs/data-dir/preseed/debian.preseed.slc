@@ -101,27 +101,27 @@ d-i preseed/late_command string \
   set -eux; \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
-  mkdir -p /target/etc/systemd/system; \
-    cat <<'EOF_SYSUNIT' >/target/etc/systemd/system/firstboot.service
-[Unit]
-Description=Run first-boot bootstrap and then exit
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/firstboot.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF_SYSUNIT
-  chroot /target /bin/ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
+  install -d /target/etc/systemd/system; \
+  chroot /target /bin/sh -c "printf '%s\n' \
+'[Unit]' \
+'Description=Run first-boot bootstrap and then exit' \
+'After=network-online.target' \
+'Wants=network-online.target' \
+'' \
+'[Service]' \
+'Type=oneshot' \
+'ExecStart=/usr/local/bin/firstboot.sh' \
+'RemainAfterExit=yes' \
+'' \
+'[Install]' \
+'WantedBy=multi-user.target' \
+> /etc/systemd/system/firstboot.service"; \
+  chroot /target /bin/systemctl enable firstboot.service || \
+    ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
   install -d -m 0700 /target/root/.ssh; \
   wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
   chmod 0600 /target/root/.ssh/authorized_keys; \
-  chown -R 0:0 /target/root/.ssh; \
-  printf "\nUseDNS no\n" >> /target/etc/ssh/sshd_config
+  printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config
 
 d-i grub-installer/timeout string 5
 d-i popularity-contest/participate boolean false
