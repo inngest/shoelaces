@@ -41,31 +41,31 @@ d-i partman-md/confirm_nooverwrite boolean true
 # Expert recipe: ESP + LVM PV, with root+swap LVs
 # LVM recipe: ESP + PV on nvme0n1 + LVs (root, swap)
 d-i partman-auto/expert_recipe string \
-  uefi-lvm :: \
-    512 512 512 fat32 \
-        $primary{ } $iflabel{ gpt } \
-        method{ efi } format{ } \
-        mountpoint{ /boot/efi } \
-    . \
-    1000 10000 -1 lvm \
-        $primary{ } $iflabel{ gpt } \
-        method{ lvm } \
-        device{ /dev/nvme0n1 } \
+  uefi-lvm ::                                                            \
+    512 512 512 fat32                                                    \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        mountpoint{ /boot/efi }                                          \
+    .                                                                    \
+    1000 10000 -1 lvm                                                    \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ lvm }                                                    \
+        device{ /dev/nvme0n1 }                                           \
         vg_name{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} } \
-    . \
-    8192 8192 8192 linux-swap \
-        $lvmok{ } \
-        in_vg{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} } \
-        lv_name{ swap } \
-        method{ swap } format{ } \
-    . \
-    20000 100000000 -1 ext4 \
-        $lvmok{ } \
-        in_vg{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} } \
-        lv_name{ root } \
-        method{ format } format{ } \
-        use_filesystem{ } filesystem{ ext4 } \
-        mountpoint{ / } \
+    .                                                                    \
+    8192 8192 8192 linux-swap                                            \
+        $lvmok{ }                                                        \
+        in_vg{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} }   \
+        lv_name{ swap }                                                  \
+        method{ swap } format{ }                                         \
+    .                                                                    \
+    20000 100000000 -1 ext4                                              \
+        $lvmok{ }                                                        \
+        in_vg{ {{ if .vg_name }}{{ .vg_name }}{{ else }}vg0{{ end }} }   \
+        lv_name{ root }                                                  \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ ext4 }                             \
+        mountpoint{ / }                                                  \
     .
 
 d-i partman-auto/choose_recipe select uefi-lvm
