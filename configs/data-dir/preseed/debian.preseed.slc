@@ -10,58 +10,75 @@ d-i apt-setup/contrib boolean true
 # ---- Select installation disk
 d-i partman-auto/disk string /dev/nvme0n1
 
-# Clean any old RAID/LVM/labels so partman starts fresh
+# ---- HARD RESET OF BOTH NVMes (kills old GPT/md/LVM) ----
+# Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
 d-i partman/early_command string \
   /bin/ash -c 'set -eux; \
-    mdadm --stop --scan || true; \
-    vgchange -an || true; \
     for d in /dev/nvme0n1 /dev/nvme1n1; do \
       [ -b "$d" ] || continue; \
+      mdadm --stop --scan || true; \
+      mdadm --zero-superblock --force $d* 2>/dev/null || true; \
+      # Remove any VGs/PVs sitting on child partitions
+      for p in $(ls ${d}p* 2>/dev/null || true); do \
+        pvremove -ff -y "$p" 2>/dev/null || true; \
+        wipefs -fa "$p" 2>/dev/null || true; \
+      done; \
+      vgremove -ff -y 124-vg 2>/dev/null || true; \
+      vgremove -ff -y vg0    2>/dev/null || true; \
+      pvremove -ff -y "$d"   2>/dev/null || true; \
       wipefs -fa "$d" || true; \
-      for p in $(ls ${d}p* 2>/dev/null || true); do wipefs -fa "$p" || true; done; \
+      sgdisk --zap-all "$d" 2>/dev/null || true; \
+      dd if=/dev/zero of="$d" bs=1M count=8 oflag=direct 2>/dev/null || true; \
+      partprobe "$d" || true; \
     done'
 
 # Use LVM
 d-i partman-auto/method string lvm
-d-i partman-auto-lvm/new_vg_name string vg0
 d-i partman-auto-lvm/guided_size string max
+
+# Make sure any leftovers can be replaced without prompts
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-lvm/confirm boolean true
 d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
 
-# --- Expert recipe: ESP + /boot + VG with root & swap ---
-d-i partman-auto/expert_recipe string                          \
-  nvme-uefi-lvm ::                                             \
-    512 512 512 fat32                                          \
-        $primary{ } $iflabel{ gpt }                            \
-        method{ efi } format{ }                                \
-        mountpoint{ /boot/efi }                                \
-    .                                                          \
-    512 1024 1024 ext4                                         \
-        $primary{ } $iflabel{ gpt }                            \
-        method{ format } format{ }                             \
-        use_filesystem{ } filesystem{ ext4 }                   \
-        mountpoint{ /boot }                                    \
-    .                                                          \
-    1000 10000 -1 lvm                                          \
-        $primary{ } $iflabel{ gpt }                            \
-        method{ lvm } vg_name{ vg0 }                           \
-    .                                                          \
-    8192 8192 8192 linux-swap                                  \
-        in_vg{ vg0 } lv_name{ swap }                           \
-        method{ swap } format{ }                               \
-    .                                                          \
-    20000 100000000 -1 ext4                                    \
-        in_vg{ vg0 } lv_name{ root }                           \
-        method{ format } format{ }                             \
-        use_filesystem{ } filesystem{ ext4 }                   \
-        mountpoint{ / }                                        \
+# ---- VG name (keep consistent here and below) ----
+# You can override via mappings param vg_name; default to vg0.
+# (Go templating: if/else for a default value)
+# Example to keep old name: set vg_name: "124-vg"
+# and this will create/use that instead of vg0.
+# -------------------------------------------------
+# shellcheck disable=SC2016
+{{- $vg := (cond (.vg_name) .vg_name "vg0") -}}
+
+# Expert recipe: ESP + LVM PV, with root+swap LVs
+d-i partman-auto/expert_recipe string                        \
+  uefi-lvm ::                                                \
+    512 512 512 fat32                                        \
+        $primary{ } $iflabel{ gpt }                          \
+        method{ efi } format{ }                              \
+        mountpoint{ /boot/efi }                              \
+    .                                                        \
+    1000 10000 -1 lvm                                        \
+        $primary{ } $iflabel{ gpt }                          \
+        method{ lvm } vg_name{ {{$vg}} }                     \
+    .                                                        \
+    8192 8192 8192 linux-swap                                \
+        in_vg{ {{$vg}} } lv_name{ swap }                     \
+        method{ swap } format{ }                             \
+    .                                                        \
+    20000 100000000 -1 ext4                                  \
+        in_vg{ {{$vg}} } lv_name{ root }                     \
+        method{ format } format{ }                           \
+        use_filesystem{ } filesystem{ ext4 }                 \
+        mountpoint{ / }                                      \
     .
 
-d-i partman-auto/choose_recipe select nvme-uefi-lvm
+d-i partman-auto/choose_recipe select uefi-lvm
 
-
-# ---- Apply without prompts
+# Commit without asking
 d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/confirm boolean true
 d-i partman/confirm_nooverwrite boolean true
