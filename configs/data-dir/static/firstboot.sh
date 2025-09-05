@@ -17,6 +17,6 @@ chown -R root:root /root/.ssh
 ansible-pull \
   -U "${ANSIBLE_REPO_URL}" \
   -C "${ANSIBLE_BRANCH}" \
-  "${ANSIBLE_PLAYBOOK}" \
+  "${ANSIBLE_PLAYBOOK:=baremetal.yml}" \
   -e "enable_rollout=false" || true
 touch /var/lib/firstboot.done
