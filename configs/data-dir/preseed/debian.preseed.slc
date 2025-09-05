@@ -101,12 +101,7 @@ d-i preseed/late_command string \
   set -eux; \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
-  cat >/target/etc/default/firstboot <<'EOF'
-ANSIBLE_REPO_URL="{{ .Params.ansible_repo_url }}"
-ANSIBLE_BRANCH="{{ .Params.ansible_branch }}"
-ANSIBLE_PLAYBOOK="{{ .Params.ansible_playbook }}"
-EOF
-  ; \
+  wget -O /target/etc/default/firstboot http://{{ .baseURL }}/plain/firstboot.defaults; \
   mkdir -p /target/etc/systemd/system; \
   wget -O /target/etc/systemd/system/firstboot.service http://{{ .baseURL }}/static/firstboot.service; \
   chroot /target /bin/systemctl enable firstboot.service || \

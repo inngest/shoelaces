@@ -1,0 +1,12 @@
+{{define "plain/firstboot.defaults" -}}
+# Rendered by Shoelaces (Go template). Values come from URL query params.
+# Example fetch:
+#   /configs/plain/firstboot.defaults?ansible_repo_url=...&ansible_branch=...&ansible_playbook=...
+
+ANSIBLE_REPO_URL={{ .ansible_repo_url }}
+ANSIBLE_BRANCH={{ .ansible_branch }}
+ANSIBLE_PLAYBOOK={{ .ansible_playbook }}
+
+# Optional extra vars passed to ansible-pull (space-separated)
+EXTRA_VARS="enable_rollout=false"
+{{end}}
