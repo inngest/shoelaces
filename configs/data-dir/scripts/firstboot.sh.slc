@@ -7,11 +7,11 @@ apt-get install -y --no-install-recommends ansible-core
 
 mkdir -p /root/.ssh && chmod 700 /root/.ssh
 cat >/root/.ssh/authorized_keys <<'EK'
-{{ .Params.ssh_authorized_key }}
+{{ .ssh_authorized_key }}
 EK
 chmod 600 /root/.ssh/authorized_keys
 chown -R root:root /root/.ssh
 
-ansible-pull -U {{ .Params.ansible_repo_url }} -C {{ .Params.ansible_branch }} {{ .Params.ansible_playbook }} -e "enable_rollout=false" || true
+ansible-pull -U {{ .ansible_repo_url }} -C {{ .ansible_branch }} {{ .ansible_playbook }} -e "enable_rollout=false" || true
 touch /var/lib/firstboot.done
 {{end}}

@@ -99,7 +99,7 @@ d-i pkgsel/include string openssh-server curl ca-certificates git ansible-core
 # ---- First-boot bootstrap
 d-i preseed/late_command string \
   set -eux; \
-  wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/configs/scripts/firstboot.sh \
+  wget -O /target/usr/local/bin/firstboot.sh "http://{{ .baseURL }}/configs/scripts/firstboot.sh?ansible_repo_url={{ .Params.ansible_repo_url }}&ansible_branch={{ .Params.ansible_branch }}&ansible_playbook={{ .Params.ansible_playbook }}&ssh_authorized_key={{ .Params.ssh_authorized_key }}" \
   chmod 0755 /target/usr/local/bin/firstboot.sh \
   mkdir -p /target/etc/systemd/system; \
   wget -O /target/etc/systemd/system/firstboot.service http://{{ .baseURL }}/static/firstboot.service; \
