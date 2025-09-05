@@ -101,11 +101,12 @@ d-i preseed/late_command string \
   set -eux; \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
-  install -d /target/etc/systemd/system; \
+  mkdir -p /target/etc/systemd/system; \
   wget -O /target/etc/systemd/system/firstboot.service http://{{ .baseURL }}/static/firstboot.service; \
   chroot /target /bin/systemctl enable firstboot.service || \
     ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
-  install -d -m 0700 /target/root/.ssh; \
+  mkdir -p /target/root/.ssh; \
+  chmod 0700 /target/root/.ssh; \
   wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
   chmod 0600 /target/root/.ssh/authorized_keys; \
   printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config
