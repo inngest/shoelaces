@@ -14,8 +14,9 @@ EOF
 chmod 600 /root/.ssh/authorized_keys
 chown -R root:root /root/.ssh
 
-REPO=$1
-BRANCH=$2
-PLAYBOOK=$3
-ansible-pull -U $REPO -C $BRANCH $PLAYBOOK -e "enable_rollout=false" || true
+ansible-pull \
+  -U "${ANSIBLE_REPO_URL}" \
+  -C "${ANSIBLE_BRANCH}" \
+  "${ANSIBLE_PLAYBOOK}" \
+  -e "enable_rollout=false" || true
 touch /var/lib/firstboot.done

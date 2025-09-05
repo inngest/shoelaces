@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/default/firstboot
-ExecStart=/usr/local/bin/firstboot.sh "$ANSIBLE_REPO_URL" "$ANSIBLE_BRANCH" "$ANSIBLE_PLAYBOOK"
+ExecStart=/usr/local/bin/firstboot.sh
 RemainAfterExit=yes
 
 [Install]
