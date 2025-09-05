@@ -24,7 +24,11 @@ kernel ${mirror}/linux \
   hostname={{ .hostname }} \
   domain=local \
   firmware=1 \
-  preseed/url=http://{{.baseURL}}/configs/preseed/debian?encrypt_home={{.encrypt_home}} \
+  preseed/url=http://{{ .baseURL }}/configs/preseed/debian?encrypt_home={{ .encrypt_home }}\
+&ansible_repo_url={{ .ansible_repo_url | urlquery }}\
+&ansible_branch={{ .ansible_branch | urlquery }}\
+&ansible_playbook={{ .ansible_playbook | urlquery }} \
+  {{if .linuxargs}}{{ .linuxargs }}{{end}}
   {{if .linuxargs}}{{.linuxargs}}{{end}}
 
 initrd ${mirror}/initrd.gz
