@@ -1,4 +1,3 @@
-{{define "scripts/firstboot.sh" -}}
 #!/bin/sh
 set -eux
 apt-get update
@@ -6,12 +5,14 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca
 apt-get install -y --no-install-recommends ansible-core
 
 mkdir -p /root/.ssh && chmod 700 /root/.ssh
-cat >/root/.ssh/authorized_keys <<'EK'
-{{ .ssh_authorized_key }}
-EK
+cat >/root/.ssh/authorized_keys <<'EOF'
+{{ .Params.ssh_authorized_key }}
+EOF
 chmod 600 /root/.ssh/authorized_keys
 chown -R root:root /root/.ssh
 
-ansible-pull -U {{ .ansible_repo_url }} -C {{ .ansible_branch }} {{ .ansible_playbook }} -e "enable_rollout=false" || true
+REPO=$1
+BRANCH=$2
+PLAYBOOK=$3
+ansible-pull -U $REPO -C $BRANCH $PLAYBOOK -e "enable_rollout=false" || true
 touch /var/lib/firstboot.done
-{{end}}
