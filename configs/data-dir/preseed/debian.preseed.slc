@@ -102,9 +102,9 @@ d-i preseed/late_command string \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/configs/scripts/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
   cat >/target/etc/default/firstboot <<'EOF'
-ANSIBLE_REPO_URL={{ .ansible_repo_url }}
-ANSIBLE_BRANCH={{ .ansible_branch }}
-ANSIBLE_PLAYBOOK={{ .ansible_playbook }}
+ANSIBLE_REPO_URL={{ urlquery .ansible_repo_url }}
+ANSIBLE_BRANCH={{ urlquery .ansible_branch }}
+ANSIBLE_PLAYBOOK={{ urlquery .ansible_playbook }}
 EOF
   ; \
   mkdir -p /target/etc/systemd/system; \

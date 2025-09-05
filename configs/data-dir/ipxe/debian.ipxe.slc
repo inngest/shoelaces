@@ -25,7 +25,6 @@ kernel ${mirror}/linux \
   domain=local \
   firmware=1 \
   preseed/url=http://{{.baseURL}}/configs/preseed/debian?encrypt_home={{.encrypt_home}}\
-&ssh_authorized_key={{ .ssh_authorized_key }}\
 &ansible_repo_url={{ .ansible_repo_url }}\
 &ansible_branch={{ .ansible_branch }}\
 &ansible_playbook={{ .ansible_playbook }} \
