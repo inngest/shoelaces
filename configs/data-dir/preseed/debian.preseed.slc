@@ -102,9 +102,9 @@ d-i preseed/late_command string \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/configs/scripts/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh; \
   cat >/target/etc/default/firstboot <<'EOF'
-ANSIBLE_REPO_URL={{ urlquery .ansible_repo_url }}
-ANSIBLE_BRANCH={{ urlquery .ansible_branch }}
-ANSIBLE_PLAYBOOK={{ urlquery .ansible_playbook }}
+ANSIBLE_REPO_URL="{{ .Params.ansible_repo_url }}"
+ANSIBLE_BRANCH="{{ .Params.ansible_branch }}"
+ANSIBLE_PLAYBOOK="{{ .Params.ansible_playbook }}"
 EOF
   ; \
   mkdir -p /target/etc/systemd/system; \
@@ -116,7 +116,6 @@ EOF
   wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
   chmod 0600 /target/root/.ssh/authorized_keys; \
   printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config
-
 
 # Set root password (crypted# SHA-512 hash)
 d-i passwd/root-password-crypted password $6$6C2rNs/iVblJ.PbR$Qu8.kmf0MmdSrSFGAMhThqFpIOoB7UT7M1LwngRo2LRfvUE.5/EYnCYQtWD0.7dea4m7szucDuSUTnVwBuu3K/

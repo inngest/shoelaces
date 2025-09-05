@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eux
+
+[ -f /etc/default/firstboot ] && . /etc/default/firstboot
+
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates curl
 apt-get install -y --no-install-recommends ansible-core
