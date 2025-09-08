@@ -9,7 +9,7 @@ d-i clock-setup/utc boolean true
 
 d-i user-setup/allow-password-weak boolean true
 d-i passwd/make-user boolean true
-d-i passwd/user-fullname string Engineering_Infra
-d-i passwd/username inngest_infra
+d-i passwd/user-fullname string engineering infrastructure
+d-i passwd/username infra
 d-i passwd/user-password-crypted $6$6C2rNs/iVblJ.PbR$Qu8.kmf0MmdSrSFGAMhThqFpIOoB7UT7M1LwngRo2LRfvUE.5/EYnCYQtWD0.7dea4m7szucDuSUTnVwBuu3K/
 {{end}}
