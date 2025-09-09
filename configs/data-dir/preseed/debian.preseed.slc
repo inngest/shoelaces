@@ -95,6 +95,7 @@ d-i debian-installer/quiet boolean false
 d-i debian-installer/splash boolean false
 d-i pkgsel/update-policy select unattended-upgrades
 d-i pkgsel/include string openssh-server curl ca-certificates git ansible-core
+d-i pkgsel/include string sudo
 
 # ---- First-boot bootstrap
 d-i preseed/late_command string \
@@ -111,9 +112,11 @@ d-i preseed/late_command string \
   chmod 0700 /target/root/.ssh; \
   wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
   chmod 0600 /target/root/.ssh/authorized_keys; \
-  printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config
+  printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config; \
+  chroot /target /usr/sbin/usermod -aG sudo infra
 
 # Set root password (crypted# SHA-512 hash)
+d-i passwd/root-login boolean true
 d-i passwd/root-password-crypted password $6$6C2rNs/iVblJ.PbR$Qu8.kmf0MmdSrSFGAMhThqFpIOoB7UT7M1LwngRo2LRfvUE.5/EYnCYQtWD0.7dea4m7szucDuSUTnVwBuu3K/
 
 d-i grub-installer/timeout string 5
