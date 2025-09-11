@@ -111,7 +111,7 @@ d-i preseed/late_command string \
   mkdir -p /target/root/.ssh; \
   chmod 0700 /target/root/.ssh; \
   wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
-  chmod 0600 /target/root/.ssh/authorized_keys; \
+  wget -O /target/root/.ssh/id_ansible http://{{ .baseURL }}/static/id_ansible; \
   printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config; \
   chroot /target /usr/sbin/usermod -aG sudo infra
 

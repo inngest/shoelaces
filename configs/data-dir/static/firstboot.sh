@@ -21,11 +21,15 @@ apt-get update
 apt-get install -y --no-install-recommends git ca-certificates curl ansible-core
 
 # Set up SSH for Ansible (key provided by preseed late_command)
-mkdir -p /root/.ssh && chmod 700 /root/.ssh
-cat >/root/.ssh/authorized_keys <<'EOF'
-{{ .Params.ssh_authorized_key }}
+cat >> /root/.ssh/config <<'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile /root/.ssh/id_ansible
+  IdentitiesOnly yes
 EOF
-chmod 600 /root/.ssh/authorized_keys
+chmod 644 /root/.ssh/config
+chmod 600 /root/.ssh/authorized_keys /root/.ssh/id_ansible
 chown -R root:root /root/.ssh
 
 # Run the playbook from your repo
