@@ -15,10 +15,46 @@ exec > /var/log/firstboot.log 2>&1
 : "${ANSIBLE_BRANCH:=master}"
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
 : "${EXTRA_VARS:=enable_rollout=false}"
+# ---------------------------------------------------------------------------------------------
+# Configure networking: create a bridge 'br0' using the first detected 'ens*' interface
+PORT=$(ip -o -br link | awk '{print $1}' | sed 's/:$//' | grep -E '^en' | grep -Ev 'v' | head -n1)
+MAC=$(ifconfig ens2f0np0 | awk '/ether/{print $2}')
+
+if [ -z "$PORT" ]; then
+  exit 0
+fi
+
+# Backup existing config
+cp -a /etc/network/interfaces /etc/network/interfaces.bak.$(date +%s) || true
+
+# Write new config for bridge interface
+cat >/etc/network/int-test <<EOF
+# Loopback
+auto lo
+iface lo inet loopback
+
+# Bridge with detected ens* PFs
+auto br0
+iface br0 inet dhcp
+    bridge-ports ${PORT}
+    dns-nameservers 1.1.1.1
+    hwaddress ${MAC}
+
+# Slaves should not get their own IP config
+EOF
+
+# Apply
+ifreload -a || service networking restart
+# ---------------------------------------------------------------------------------------------
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends git ca-certificates curl ansible-core
+apt-get update -y
+apt-get install -y --no-install-recommends python3-pip git ca-certificates curl ansible-core ifupdown2
+
+# Python dep used by netbox.netbox modules
+python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip install pynetbox requests
+ansible-galaxy collection install netbox.netbox
 
 # Set up SSH for Ansible (key provided by preseed late_command)
 cat >> /root/.ssh/config <<'EOF'
