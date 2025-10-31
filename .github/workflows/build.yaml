@@ -125,7 +125,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install python3-pip -y
-          sudo pip install ansible
+          sudo pip install ansible --break-system-packages
 
       - name: Run `packer init`
         id: init
