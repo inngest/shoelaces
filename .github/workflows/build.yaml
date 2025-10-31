@@ -1,0 +1,151 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.export.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # this can fail if tag already exists
+      # happens for rollbacks
+      - name: Set tag
+        continue-on-error: true
+        run: |
+          ./scripts/release_tag
+          git push --tags
+
+      - name: Export tag for downstream use
+        id: export
+        run: |
+          NEW_TAG=$(git describe --tags --abbrev=0)
+          echo $NEW_TAG
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [tag]
+    name: Build ${{ matrix.artifact }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        artifact:
+          - shoelaces
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      REVISION: ${{ needs.tag.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REVISION }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build ${{ matrix.artifact }} binary
+        run: go build ./cmd/${{ matrix.artifact }}
+        env:
+          CGO_ENABLED: "0"
+
+      - name: create compressed package with checksums
+        run: |
+          mkdir artifacts
+
+          tar -cvzf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+          md5sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.md5
+          sha256sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.sha256
+
+          mv ${{ matrix.artifact }}.tar.* artifacts
+
+      - name: Prep credentials
+        run: |
+          echo "AWS_S3_BUCKET=shoelaces-artifacts" >> $GITHUB_ENV
+          echo "AWS_ASSUME_ROLE=arn:aws:iam::836356947314:role/ProdGHActionAccess" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ASSUME_ROLE }}
+          aws-region: us-east-2
+
+      - name: Sync artifacts to S3
+        run: |
+          aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/${{ env.REVISION }}
+          aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/latest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/*
+          retention-days: 7
+
+  base_image_build:
+    needs: [tag]
+    name: Debian base image build
+    runs-on: ovh-debian12-amd64-64g-16c
+    strategy:
+      fail-fast: false
+      matrix:
+        artifact:
+          - shoelaces
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      REVISION: ${{ needs.tag.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup `packer`
+        uses: hashicorp/setup-packer@main
+        id: setup
+        with:
+          version: latest
+
+      - name: Install qemu
+        shell: bash
+        run: |
+          sudo apt update
+          sudo apt install qemu-system-x86 -y
+
+      - name: Install ansible
+        shell: bash
+        run: |
+          sudo apt update
+          sudo apt install python3-pip -y
+          sudo pip install ansible
+
+      - name: Run `packer init`
+        id: init
+        run: "cd base_images/debian-12.11.0 && packer init debian-12.11.0.pkr.hcl"
+
+      - name: Run `packer build`
+        id: build
+        run: "cd base_images/debian-12.11.0 && PACKER_LOG=1 packer build debian-12.11.0.pkr.hcl"
+      
+      - name: Prep credentials
+        run: |
+          echo "AWS_S3_BUCKET=inngest-artifacts" >> $GITHUB_ENV
+          echo "AWS_ASSUME_ROLE=arn:aws:iam::836356947314:role/ProdGHActionAccess" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ASSUME_ROLE }}
+          aws-region: us-east-2
+
+      - name: Sync artifacts to S3
+        run: |
+          aws s3 sync --delete ./base_images/debian-12.11.0/output/debian-12.11.0.qcow2 s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/${{ env.REVISION }}
