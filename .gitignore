@@ -34,3 +34,5 @@ config.yaml
 docs/shoelaces.8
 
 /.direnv/
+
+dist

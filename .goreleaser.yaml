@@ -1,0 +1,41 @@
+version: 2
+
+before:
+  hooks:
+    - go mod download
+    - go generate ./...
+
+builds:
+  - id: shoelaces
+    main: ./main.go
+    binary: bin/shoelaces
+    env:
+    - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath #removes all file system paths from the compiled executable
+    goos:
+      - linux
+    goarch:
+      - amd64
+
+archives:
+  - id: shoelaces
+    ids:
+      - shoelaces
+    formats: ["tar.gz"]
+    files:
+      - README*
+      - LICENSE*
+      - CHANGELOG*
+      - configs
+    name_template: 'shoelaces_x86_64'
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+  ids:
+    - shoelaces
+
+release:
+  draft: false
