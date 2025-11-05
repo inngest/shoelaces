@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.2.1
+          args: --verbose
+
+  # unit:
+  #   name: Unit Test
+  #   runs-on: depot-ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v5
+
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version-file: 'go.mod'
+
+  #     - name: Set GOBIN to a relative path
+  #       run: |
+  #         echo "GOBIN=${{ github.workspace }}/bin" >> $GITHUB_ENV
+  #         echo "PATH=$PATH:${{ github.workspace }}/bin" >> $GITHUB_ENV
+
+  #     - name: Cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           bin/
+  #         key: ${{ runner.os }}-${{ hashFiles('go.sum') }}-go
+
+  #     - name: Setup dependencies
+  #       run: make deps
+
+  #     - name: Test
+  #       run: make test
+
+  #     - name: Upload coverage reports to Codecov
+  #       uses: codecov/codecov-action@v5
+  #       with:
+  #         token: ${{ secrets.CODECOV_TOKEN }}
