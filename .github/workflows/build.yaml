@@ -55,7 +55,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Build ${{ matrix.artifact }} binary
-        run: ls -lhatr && go build -o ${{ matrix.artifact }} ./cmd/${{ matrix.artifact }}/main.go
+        run: ls -lhatr && go build -o ${{ matrix.artifact }} ./main.go
         env:
           CGO_ENABLED: "0"
 
