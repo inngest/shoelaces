@@ -84,6 +84,7 @@ d-i partman/choose_partition select finish
 
 # ---- GRUB (UEFI)
 d-i grub-installer/target string amd64-efi
+d-i grub2/linux_cmdline string consoleblank=0 loglevel=6 sysrq_always_enabled clocksource=tsc tsc=reliable
 
 # ---- Locale/time/pkgs
 d-i user-setup/encrypt-home boolean {{ .encrypt_home }}
