@@ -23,6 +23,8 @@
             gomodifytags
             gore
             gotools
+            goreleaser
+            go-mod-upgrade
 
             # LSPs
             gopls
