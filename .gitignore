@@ -26,7 +26,6 @@ _testmain.go
 *.exe
 *.test
 *.prof
-shoelaces
 config.yaml
 *.deb
 

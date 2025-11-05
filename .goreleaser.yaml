@@ -7,7 +7,7 @@ before:
 
 builds:
   - id: shoelaces
-    main: ./main.go
+    main: ./cmd/shoelaces/main.go
     binary: bin/shoelaces
     env:
     - CGO_ENABLED=0
