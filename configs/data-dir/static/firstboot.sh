@@ -93,7 +93,7 @@ fi
 # install ansible-galaxy collections from the repo requirements file
 mkdir -p /root/.ansible/pull
 DEST=/root/.ansible/pull/ansible
-ansible-pull -U git@github.com:inngest/ansible.git -C main -d "$DEST" --accept-host-key -i localhost, -l localhost --full playbooks/baremetal.yml --check || true
+ansible-pull -U git@github.com:inngest/ansible.git -C "$ANSIBLE_BRANCH" -d "$DEST" --accept-host-key -i localhost, -l localhost --full "$ANSIBLE_PLAYBOOK" --check || true
 # After this ^^, the repo exists at $DEST even if --check fails
 ansible-galaxy collection install -r "$DEST/collections/requirements.yml"
 
@@ -104,7 +104,7 @@ ansible-pull \
   -d "$DEST" \
   --accept-host-key \
   -i localhost, -l localhost \
-  -e "$EXTRA_VARS"
+  -e "$EXTRA_VARS" \
   "$ANSIBLE_PLAYBOOK" || true
 
 # Mark complete and disable the service so it doesn't run again
