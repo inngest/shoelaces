@@ -12,7 +12,7 @@ exec > /var/log/firstboot.log 2>&1
 
 # Sensible defaults if the defaults file is missing/incomplete
 : "${ANSIBLE_REPO_URL:=git@github.com:inngest/ansible.git}"
-: "${ANSIBLE_BRANCH:=master}"
+: "${ANSIBLE_BRANCH:=main}"
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
 : "${EXTRA_VARS:=enable_rollout=false}"
 
@@ -88,12 +88,22 @@ Host github.com
 EOF
 fi
 
-# Run the playbook from your repo
+# install ansible-galaxy collections from the repo requirements file
+mkdir -p /root/.ansible/pull
+DEST=/root/.ansible/pull/ansible
+ansible-pull -U git@github.com:inngest/ansible.git -C main -d "$DEST" --accept-host-key --full --clean --purge playbooks/baremetal.yml --check || true
+# After this ^^, the repo exists at $DEST even if --check fails
+ansible-galaxy collection install -r "$DEST/collections/requirements.yml"
+
+# Run the playbook
 ansible-pull \
   -U "$ANSIBLE_REPO_URL" \
   -C "$ANSIBLE_BRANCH" \
-  "$ANSIBLE_PLAYBOOK" \
-  -e "$EXTRA_VARS" || true
+  -d "$DEST" \
+  --accept-host-key \
+  -i localhost, -l localhost \
+  -e "$EXTRA_VARS"
+  "$ANSIBLE_PLAYBOOK" || true
 
 # Mark complete and disable the service so it doesn't run again
 touch /var/lib/firstboot.done
