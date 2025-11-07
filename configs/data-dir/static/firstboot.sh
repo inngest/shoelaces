@@ -48,6 +48,8 @@ iface br0 inet dhcp
 EOF
   # Apply
   ifreload -a || service networking restart
+  ifdown br0
+  ifup br0
 fi
 # ---------------------------------------------------------------------------------------------
 
@@ -91,7 +93,7 @@ fi
 # install ansible-galaxy collections from the repo requirements file
 mkdir -p /root/.ansible/pull
 DEST=/root/.ansible/pull/ansible
-ansible-pull -U git@github.com:inngest/ansible.git -C main -d "$DEST" --accept-host-key --full --clean --purge playbooks/baremetal.yml --check || true
+ansible-pull -U git@github.com:inngest/ansible.git -C main -d "$DEST" --accept-host-key -i localhost, -l localhost --full playbooks/baremetal.yml --check || true
 # After this ^^, the repo exists at $DEST even if --check fails
 ansible-galaxy collection install -r "$DEST/collections/requirements.yml"
 
