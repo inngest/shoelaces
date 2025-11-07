@@ -29,7 +29,7 @@ if [ -z "$PORT" ]; then
   echo "No active network interface found; skipping bridge setup"
 else
   MAC="$(ip -o -br link | grep UP | grep -v lo | awk '{print $3}')"
-  
+
   # Backup existing config
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%s)" || true
 
@@ -62,6 +62,18 @@ export ANSIBLE_PYTHON_INTERPRETER="$VENV/bin/python"
 # NetBox collection (installed for ansible, OK to do system-wide)
 ansible-galaxy collection install netbox.netbox
 
+# Fixup the ansible key (Strip CRs and ensure a trailing newline)
+tr -d '\r' < /root/.ssh/id_ansible > /root/.ssh/id_ansible.fix
+printf '\n' >> /root/.ssh/id_ansible.fix
+mv /root/.ssh/id_ansible.fix /root/.ssh/id_ansible
+
+# Lock down SSH permissions
+[ -f /root/.ssh/config ] && chmod 644 /root/.ssh/config
+[ -f /root/.ssh/authorized_keys ] && chmod 600 /root/.ssh/authorized_keys || true
+[ -f /root/.ssh/id_ansible ] && chmod 600 /root/.ssh/id_ansible || true
+chmod 700 /root/.ssh
+chown -R root:root /root/.ssh
+
 # Set up SSH for Ansible (key provided by preseed late_command)
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
@@ -75,11 +87,6 @@ Host github.com
   StrictHostKeyChecking accept-new
 EOF
 fi
-
-[ -f /root/.ssh/config ] && chmod 644 /root/.ssh/config
-[ -f /root/.ssh/authorized_keys ] && chmod 600 /root/.ssh/authorized_keys || true
-[ -f /root/.ssh/id_ansible ] && chmod 600 /root/.ssh/id_ansible || true
-chown -R root:root /root/.ssh
 
 # Run the playbook from your repo
 ansible-pull \
