@@ -115,7 +115,7 @@ ansible-pull \
   "$ANSIBLE_PLAYBOOK" || true
 
 # In case the ansible playbook removed these packages, ensure they are installed
-apt install isc-dhcp-client bridge-utils
+apt-get install -y isc-dhcp-client bridge-utils || true
 
 # Mark complete and disable the service so it doesn't run again
 touch /var/lib/firstboot.done
