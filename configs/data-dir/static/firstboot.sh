@@ -35,10 +35,10 @@ else
 
   # Tear down existing bridge if present
   rm -rf /etc/network/interfaces.d/br0* || true
-  ip link set dev br0 down
-  brctl delif br0 eth0
-  ip link set dev eth0 nomaster
-  ip link delete br0 type bridge
+  ip link set dev br0 down || true
+  brctl delif br0 eth0 || true
+  ip link set dev eth0 nomaster || true
+  ip link delete br0 type bridge || true
 
   # Write new config for bridge interface
   cat >/etc/network/interfaces.d/br0 <<EOF
@@ -113,6 +113,9 @@ ansible-pull \
   -i localhost, -l localhost \
   -e "$EXTRA_VARS" \
   "$ANSIBLE_PLAYBOOK" || true
+
+# In case the ansible playbook removed these packages, ensure they are installed
+apt install isc-dhcp-client bridge-utils
 
 # Mark complete and disable the service so it doesn't run again
 touch /var/lib/firstboot.done
