@@ -33,6 +33,13 @@ else
   # Backup existing config
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%s)" || true
 
+  # wipe existing ip address config
+  ip link set br0 down 2>/dev/null || true
+  ip link delete br0 type bridge 2>/dev/null || true
+  ip addr flush dev "$PORT" || true
+  ip link set dev "$PORT" nomaster 2>/dev/null || true
+  ip link set dev "$PORT" down || true
+
   # Write new config for bridge interface
   cat >/etc/network/interfaces.d/br0 <<EOF
 # Loopback
