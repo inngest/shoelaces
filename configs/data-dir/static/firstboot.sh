@@ -19,26 +19,26 @@ exec > /var/log/firstboot.log 2>&1
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
-  python3-pip python3-venv git ca-certificates curl ansible-core ifupdown2
+  python3-pip python3-venv git ca-certificates curl ansible-core ifupdown2 isc-dhcp-client bridge-utils
 
 # ---------------------------------------------------------------------------------------------
 # Configure networking: create a bridge 'br0' using the first detected 'en*' interface
-PORT="$(ip -o -br link | grep UP | grep -v lo | awk '{print $1}')"
+PORT="$(ip -o -br link | grep -v lo | grep UP | awk '{print $1}')"
 
 if [ -z "$PORT" ]; then
   echo "No active network interface found; skipping bridge setup"
 else
-  MAC="$(ip -o -br link | grep UP | grep -v lo | awk '{print $3}')"
+  MAC="$(ip -o -br link | grep -v lo | grep UP | awk '{print $3}')"
 
   # Backup existing config
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%s)" || true
 
-  # wipe existing ip address config
-  ip link set br0 down 2>/dev/null || true
-  ip link delete br0 type bridge 2>/dev/null || true
-  ip addr flush dev "$PORT" || true
-  ip link set dev "$PORT" nomaster 2>/dev/null || true
-  ip link set dev "$PORT" down || true
+  # Tear down existing bridge if present
+  rm -rf /etc/network/interfaces.d/br0* || true
+  ip link set dev br0 down
+  brctl delif br0 eth0
+  ip link set dev eth0 nomaster
+  ip link delete br0 type bridge
 
   # Write new config for bridge interface
   cat >/etc/network/interfaces.d/br0 <<EOF
@@ -50,7 +50,7 @@ iface lo inet loopback
 auto br0
 iface br0 inet dhcp
     bridge-ports ${PORT}
-    dns-nameservers 1.1.1.1
+    dns-nameservers 1.1.1.1 8.8.8.8
     hwaddress ether ${MAC}
 EOF
   # Apply
