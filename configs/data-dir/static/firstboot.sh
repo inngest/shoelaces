@@ -34,17 +34,20 @@ else
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%s)" || true
 
   # Tear down existing bridge if present
-  rm -rf /etc/network/interfaces.d/br0* || true
-  ip link set dev br0 down || true
-  brctl delif br0 eth0 || true
-  ip link set dev eth0 nomaster || true
-  ip link delete br0 type bridge || true
+  ifdown --force br0 || true
+  pkill -f 'dhclient.*-6.*br0' || true
+  pkill -f 'dhclient.*br0' || true
+  ip -6 addr flush dev br0
+  ip -4 addr flush dev br0
+  rm -f /run/dhclient*.br0.pid /var/lib/dhcp/dhclient6.br0.leases || true
+
+  # drop L3 from the slave and the bridge (fresh start)
+  ip addr flush dev $PORT
+  # ensure proper ensla ving order
+  ip link set $PORT down || true
 
   # Write new config for bridge interface
   cat >/etc/network/interfaces.d/br0 <<EOF
-# Loopback
-auto lo
-iface lo inet loopback
 
 # Bridge with detected PF
 auto br0
@@ -55,8 +58,8 @@ iface br0 inet dhcp
 EOF
   # Apply
   ifreload -a || service networking restart
-  ifdown br0
-  ifup br0
+  ifdown br0 || true
+  ifup -v br0 || true
 fi
 # ---------------------------------------------------------------------------------------------
 
