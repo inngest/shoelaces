@@ -37,8 +37,8 @@ else
   ifdown --force br0 || true
   pkill -f 'dhclient.*-6.*br0' || true
   pkill -f 'dhclient.*br0' || true
-  ip -6 addr flush dev br0
-  ip -4 addr flush dev br0
+  ip -6 addr flush dev br0 || true
+  ip -4 addr flush dev br0 || true
   rm -f /run/dhclient*.br0.pid /var/lib/dhcp/dhclient6.br0.leases || true
 
   # drop L3 from the slave and the bridge (fresh start)
@@ -57,7 +57,7 @@ iface br0 inet dhcp
     hwaddress ether ${MAC}
 EOF
   # Apply
-  ifreload -a || service networking restart
+  ifreload -a || service networking restart || true
   ifdown br0 || true
   ifup -v br0 || true
 fi
