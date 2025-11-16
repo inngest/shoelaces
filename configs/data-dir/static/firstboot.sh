@@ -14,7 +14,7 @@ exec > /var/log/firstboot.log 2>&1
 : "${ANSIBLE_REPO_URL:=git@github.com:inngest/ansible.git}"
 : "${ANSIBLE_BRANCH:=main}"
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
-: "${EXTRA_VARS:=enable_rollout=false}"
+: "${EXTRA_VARS:='enable_rollout=false register_in_netbox=true'}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -100,10 +100,15 @@ Host github.com
 EOF
 fi
 
+# Install temporary vault password for ansible-vault
+install -m 600 -o root -g root /dev/stdin /root/.vault_pass <<'PW'
+VvNs0t1wyd7nmBR8gS31eY7K
+PW
+
 # install ansible-galaxy collections from the repo requirements file
 mkdir -p /root/.ansible/pull
 DEST=/root/.ansible/pull/ansible
-ansible-pull -U git@github.com:inngest/ansible.git -C "$ANSIBLE_BRANCH" -d "$DEST" --accept-host-key -i localhost, -l localhost --full "$ANSIBLE_PLAYBOOK" --check || true
+ansible-pull -U git@github.com:inngest/ansible.git -C "$ANSIBLE_BRANCH" -d "$DEST" --accept-host-key -i localhost, -l localhost --vault-password-file /root/.vault_pass --full "$ANSIBLE_PLAYBOOK" --check || true
 # After this ^^, the repo exists at $DEST even if --check fails
 ansible-galaxy collection install -r "$DEST/collections/requirements.yml"
 
@@ -115,7 +120,11 @@ ansible-pull \
   --accept-host-key \
   -i localhost, -l localhost \
   -e "$EXTRA_VARS" \
+  --vault-password-file /root/.vault_pass \
   "$ANSIBLE_PLAYBOOK" || true
+
+# Remove vault password
+rm -f /root/.vault_pass
 
 # In case the ansible playbook removed these packages, ensure they are installed
 apt-get install -y isc-dhcp-client bridge-utils || true
