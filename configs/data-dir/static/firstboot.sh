@@ -101,9 +101,12 @@ EOF
 fi
 
 # Install temporary vault password for ansible-vault
-install -m 600 -o root -g root /dev/stdin /root/.vault_pass <<'PW'
+touch /root/.vault_pass
+chmod 600 /root/.vault_pass
+cat > /root/.vault_pass <<'PW'
 VvNs0t1wyd7nmBR8gS31eY7K
 PW
+printf 'vault pass bytes: %s\n' "$(wc -c </root/.vault_pass)" || true
 
 # install ansible-galaxy collections from the repo requirements file
 mkdir -p /root/.ansible/pull
@@ -124,7 +127,7 @@ ansible-pull \
   "$ANSIBLE_PLAYBOOK" || true
 
 # Remove vault password
-rm -f /root/.vault_pass
+# rm -f /root/.vault_pass
 
 # In case the ansible playbook removed these packages, ensure they are installed
 apt-get install -y isc-dhcp-client bridge-utils || true
