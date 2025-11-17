@@ -113,6 +113,11 @@ mkdir -p /root/.ansible/pull
 DEST=/root/.ansible/pull/ansible
 ansible-pull -U git@github.com:inngest/ansible.git -C "$ANSIBLE_BRANCH" -d "$DEST" --accept-host-key -i localhost, -l localhost --vault-password-file /root/.vault_pass --full "$ANSIBLE_PLAYBOOK" --check || true
 # After this ^^, the repo exists at $DEST even if --check fails
+
+# Use venv Ansible everywhere
+export PATH="/opt/firstboot/.venv/bin:$PATH"
+export ANSIBLE_PYTHON_INTERPRETER="/opt/firstboot/.venv/bin/python"
+
 ansible-galaxy collection install -r "$DEST/collections/requirements.yml"
 
 # Run the playbook
