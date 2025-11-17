@@ -14,7 +14,7 @@ exec > /var/log/firstboot.log 2>&1
 : "${ANSIBLE_REPO_URL:=git@github.com:inngest/ansible.git}"
 : "${ANSIBLE_BRANCH:=main}"
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
-: "${EXTRA_VARS:='enable_rollout=false register_in_netbox=true'}"
+: "${EXTRA_VARS:='"enable_rollout=false register_in_netbox=true"'}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -67,7 +67,10 @@ VENV=/opt/firstboot/.venv
 python3 -m venv "$VENV"
 . "$VENV/bin/activate"
 pip install --upgrade pip setuptools wheel
-pip install pynetbox requests
+pip install "ansible-core==2.14.*" pynetbox requests boto3 botocore
+
+# ensure the venv's ansible is used as controller
+export PATH="/opt/firstboot/.venv/bin:$PATH"
 # Make ansible use the venv python when running modules
 export ANSIBLE_PYTHON_INTERPRETER="$VENV/bin/python"
 
