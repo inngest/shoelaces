@@ -42,11 +42,6 @@ else
   ip -4 addr flush dev br0 || true
   rm -f /run/dhclient*.br0.pid /var/lib/dhcp/dhclient6.br0.leases || true
 
-  # drop L3 from the slave and the bridge (fresh start)
-  ip addr flush dev $PORT
-  # ensure proper ensla ving order
-  ip link set $PORT down || true
-
   # Write new config for bridge interface
   cat >/etc/network/interfaces.d/br0 <<EOF
 
@@ -60,7 +55,7 @@ iface br0 inet dhcp
 iface br0 inet6 dhcp
     # v6 DNS; gateway comes from RA
     dns-nameservers 2606:4700:4700::1111 2001:4860:4860::8888
-    pre-up /sbin/sysctl -w net.ipv6.conf.$IFACE.accept_ra=2 
+    pre-up /sbin/sysctl -w net.ipv6.conf.br0.accept_ra=2 || true
 EOF
   # Apply
   ifreload -a || service networking restart || true
