@@ -16,6 +16,7 @@ exec > /var/log/firstboot.log 2>&1
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
 : "${EXTRA_VARS:='"enable_rollout=false register_in_netbox=true"'}"
 
+# Install required packages
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
@@ -55,13 +56,59 @@ iface br0 inet dhcp
     bridge-ports ${PORT}
     dns-nameservers 1.1.1.1 8.8.8.8
     hwaddress ether ${MAC}
+
+iface br0 inet6 dhcp
+    # v6 DNS; gateway comes from RA
+    dns-nameservers 2606:4700:4700::1111 2001:4860:4860::8888
+    pre-up /sbin/sysctl -w net.ipv6.conf.$IFACE.accept_ra=2 
 EOF
   # Apply
   ifreload -a || service networking restart || true
   ifdown br0 || true
   ifup -v br0 || true
 fi
-# ---------------------------------------------------------------------------------------------
+
+# print network interface br0 status and addresses
+echo "=== Network interface br0 status ==="
+ip addr show dev br0 || true
+echo "\n=== DHCP leases for br0 ==="
+cat /var/lib/dhcp/dhclient*.br0.leases || true
+echo "=== Network interface $PORT status ==="
+ip addr show dev "$PORT" || true
+echo "\n=== DHCP leases for $PORT ==="
+cat /var/lib/dhcp/dhclient*."$PORT".leases || true
+
+# ------ Permanently set hostname to hyphen-delimited IP of br0 -----------------------------
+# Prefer IPv4; fall back to non-link-local IPv6
+IP4="$(ip -4 -o addr show dev br0 scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
+IP6="$(ip -6 -o addr show dev br0 scope global 2>/dev/null | awk '!/ fe80:/{print $4}' | cut -d/ -f1 | head -n1 || true)"
+
+if [ -n "$IP4" ]; then
+  NEW_HOSTNAME="${IP4//./-}"
+elif [ -n "$IP6" ]; then
+  # Replace colons with hyphens; squeeze repeats; lowercase
+  NEW_HOSTNAME="$(echo "$IP6" | tr ':' '-' | tr -s '-' | tr 'A-Z' 'a-z')"
+else
+  # Fallback: random suffix so the script never blocks
+  NEW_HOSTNAME="unknown-$(tr -dc a-z0-9 </dev/urandom | head -c6)"
+fi
+
+# Hostname rules: lowercase; keep it to 63 chars (single-label DNS limit)
+NEW_HOSTNAME="$(echo "$NEW_HOSTNAME" | tr 'A-Z' 'a-z' | cut -c1-63)"
+
+CURRENT_HOSTNAME="$(hostnamectl --static 2>/dev/null || true)"
+if [ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ] && [ -n "$NEW_HOSTNAME" ]; then
+  echo "$NEW_HOSTNAME" > /etc/hostname
+  hostnamectl set-hostname "$NEW_HOSTNAME"
+
+  # Ensure 127.0.1.1 maps to the new hostname (Debian convention)
+  if grep -qE '^127\.0\.1\.1\b' /etc/hosts; then
+    sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
+  else
+    printf "127.0.1.1\t%s\n" "$NEW_HOSTNAME" >> /etc/hosts
+  fi
+fi
+# ------ end hostname section ----------------------------------------------------------------
 
 VENV=/opt/firstboot/.venv
 python3 -m venv "$VENV"
