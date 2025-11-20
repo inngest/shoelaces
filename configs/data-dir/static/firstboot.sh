@@ -58,7 +58,6 @@ iface br0 inet6 dhcp
     pre-up /sbin/sysctl -w net.ipv6.conf.br0.accept_ra=2 || true
 EOF
   # Apply
-  ifreload -a || service networking restart || true
   ifdown br0 || true
   ifup -v br0 || true
 fi
