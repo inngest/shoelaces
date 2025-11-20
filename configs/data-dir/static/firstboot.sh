@@ -77,17 +77,17 @@ IP4="$(ip -4 -o addr show dev br0 scope global 2>/dev/null | awk '{print $4}' | 
 IP6="$(ip -6 -o addr show dev br0 scope global 2>/dev/null | awk '!/ fe80:/{print $4}' | cut -d/ -f1 | head -n1 || true)"
 
 if [ -n "$IP4" ]; then
-  NEW_HOSTNAME="${IP4//./-}"
+  NEW_HOSTNAME="$(echo "$IP4" | tr '.' '-')" || true
 elif [ -n "$IP6" ]; then
   # Replace colons with hyphens; squeeze repeats; lowercase
-  NEW_HOSTNAME="$(echo "$IP6" | tr ':' '-' | tr -s '-' | tr 'A-Z' 'a-z')"
+  NEW_HOSTNAME="$(echo "$IP6" | tr ':' '-' | tr -s '-' | tr 'A-Z' 'a-z')" || true
 else
   # Fallback: random suffix so the script never blocks
-  NEW_HOSTNAME="unknown-$(tr -dc a-z0-9 </dev/urandom | head -c6)"
+  NEW_HOSTNAME="unknown-$(tr -dc a-z0-9 </dev/urandom | head -c6)" || true
 fi
 
 # Hostname rules: lowercase; keep it to 63 chars (single-label DNS limit)
-NEW_HOSTNAME="$(echo "$NEW_HOSTNAME" | tr 'A-Z' 'a-z' | cut -c1-63)"
+NEW_HOSTNAME="$(echo "$NEW_HOSTNAME" | tr 'A-Z' 'a-z' | cut -c1-63)" || true
 
 CURRENT_HOSTNAME="$(hostnamectl --static 2>/dev/null || true)"
 if [ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ] && [ -n "$NEW_HOSTNAME" ]; then
