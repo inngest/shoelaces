@@ -52,7 +52,7 @@ iface br0 inet dhcp
     dns-nameservers 1.1.1.1 8.8.8.8
     hwaddress ether ${MAC}
 
-iface br0 inet6 dhcp
+iface br0 inet6 auto
     # v6 DNS; gateway comes from RA
     dns-nameservers 2606:4700:4700::1111 2001:4860:4860::8888
     pre-up /sbin/sysctl -w net.ipv6.conf.br0.accept_ra=2 || true
