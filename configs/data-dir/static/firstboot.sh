@@ -175,7 +175,7 @@ ansible-pull \
   -e "register_in_netbox=true" \
   -e "target_hostname=$NEW_HOSTNAME" \
   --vault-password-file /root/.vault_pass \
-  "$ANSIBLE_PLAYBOOK" -vv || true
+  "$ANSIBLE_PLAYBOOK" || true
 
 # Remove vault password
 # rm -f /root/.vault_pass
