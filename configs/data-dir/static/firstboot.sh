@@ -14,7 +14,6 @@ exec > /var/log/firstboot.log 2>&1
 : "${ANSIBLE_REPO_URL:=git@github.com:inngest/ansible.git}"
 : "${ANSIBLE_BRANCH:=main}"
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
-: "${EXTRA_VARS:='"enable_rollout=false register_in_netbox=true"'}"
 
 # Install required packages
 export DEBIAN_FRONTEND=noninteractive
@@ -101,6 +100,8 @@ if [ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ] && [ -n "$NEW_HOSTNAME" ]; then
     printf "127.0.1.1\t%s\n" "$NEW_HOSTNAME" >> /etc/hosts
   fi
 fi
+unset HOSTNAME
+export HOSTNAME="$(hostname -s)"
 # ------ end hostname section ----------------------------------------------------------------
 
 VENV=/opt/firstboot/.venv
@@ -170,9 +171,11 @@ ansible-pull \
   -d "$DEST" \
   --accept-host-key \
   -i localhost, -l localhost \
-  -e "$EXTRA_VARS" \
+  -e "enable_rollout=false" \
+  -e "register_in_netbox=true" \
+  -e "target_hostname=$NEW_HOSTNAME" \
   --vault-password-file /root/.vault_pass \
-  "$ANSIBLE_PLAYBOOK" || true
+  "$ANSIBLE_PLAYBOOK" -vv || true
 
 # Remove vault password
 # rm -f /root/.vault_pass
