@@ -171,18 +171,15 @@ ansible-pull \
   -e "enable_rollout=false" \
   -e "register_in_netbox=true" \
   -e "target_hostname=$NEW_HOSTNAME" \
+  -e "br0_slave_ports=$PORT" \
   --vault-password-file /root/.vault_pass \
   "$ANSIBLE_PLAYBOOK" -vv --diff || true
 
 # Remove vault password
-# rm -f /root/.vault_pass
+rm -f /root/.vault_pass
 
 # In case the ansible playbook removed these packages, ensure they are installed
 apt-get install -y isc-dhcp-client bridge-utils || true
-
-# One last network interface bounce to ensure everything is fresh
-ifdown --force br0 || true
-ifup -v br0 || true
 
 # Mark complete and disable the service so it doesn't run again
 touch /var/lib/firstboot.done
