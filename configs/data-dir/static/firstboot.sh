@@ -23,23 +23,20 @@ apt-get install -y --no-install-recommends \
 
 # ---------------------------------------------------------------------------------------------
 # Configure networking: create a bridge 'br0' using the first detected 'en*' interface
-PORT="$(ip -o -br link | grep -v lo | grep UP | awk '{print $1}')"
+PORT="$(ip -o -br link | grep -v lo | grep UP | awk '{print $1}')" || true
 
 if [ -z "$PORT" ]; then
   echo "No active network interface found; skipping bridge setup"
 else
-  MAC="$(ip -o -br link | grep -v lo | grep UP | awk '{print $3}')"
+  MAC="$(ip -o -br link | grep -v lo | grep UP | awk '{print $3}')" || true
 
   # Backup existing config
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%s)" || true
 
   # Tear down existing bridge if present
   ifdown --force br0 || true
-  pkill -f 'dhclient.*-6.*br0' || true
-  pkill -f 'dhclient.*br0' || true
   ip -6 addr flush dev br0 || true
   ip -4 addr flush dev br0 || true
-  rm -f /run/dhclient*.br0.pid /var/lib/dhcp/dhclient6.br0.leases || true
 
   # Write new config for bridge interface
   cat >/etc/network/interfaces.d/br0 <<EOF
@@ -56,7 +53,7 @@ iface br0 inet6 dhcp
     dns-nameservers 2606:4700:4700::1111 2001:4860:4860::8888
 EOF
   # Apply
-  ifdown br0 || true
+  ifdown --force br0 || true
   ifup -v br0 || true
 fi
 
