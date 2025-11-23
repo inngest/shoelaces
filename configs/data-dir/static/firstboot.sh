@@ -175,6 +175,10 @@ ansible-pull \
   --vault-password-file /root/.vault_pass \
   "$ANSIBLE_PLAYBOOK" -vv --diff || true
 
+# Bounce the interface since ansible may have changed it
+ifdown --force br0 || true
+ifup -v br0 || true
+
 # Remove vault password
 rm -f /root/.vault_pass
 
