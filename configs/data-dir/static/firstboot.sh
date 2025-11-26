@@ -52,12 +52,15 @@ iface ${PORT} inet manual
     up ip link set dev $PORT up
     up dhclient -4 -v $PORT || true
     down dhclient -4 -x $PORT || true
+    down ip -6 addr flush dev $PORT || true
+
 
 # IPv6 autoconfig from Router Advertisements
 iface ${PORT} inet6 auto
     dns-nameservers 2606:4700:4700::1111 2001:4860:4860::8888
     # If the host forwards IPv6, accept_ra must be 2; otherwise 1
     pre-up sysctl -qw net.ipv6.conf.$PORT.accept_ra=$(sysctl -n net.ipv6.conf.all.forwarding | awk '{print ($1=="1")?2:1}')
+    down ip -4 addr flush dev $PORT || true
 EOF
   # Apply
   ifdown --force $PORT || true
@@ -178,7 +181,9 @@ ansible-pull \
   --vault-password-file /root/.vault_pass \
   "$ANSIBLE_PLAYBOOK" -vv --diff || true
 
-# Bounce the interface since ansible may have changed it
+# Bounce the interfaces since ansible may have changed it
+ifdown --force "$PORT" || true
+ifup -v "$PORT" || true
 ifdown --force br0 || true
 ifup -v br0 || true
 
