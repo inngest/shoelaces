@@ -22,7 +22,7 @@ apt-get install -y --no-install-recommends \
   python3-pip python3-venv git ca-certificates curl ansible-core ifupdown2 isc-dhcp-client bridge-utils
 
 # ---------------------------------------------------------------------------------------------
-# Configure networking: create a bridge 'br0' using the first detected 'en*' interface
+# Configure networking - set up primary interface
 PORT="$(ip -o -br link | grep -v lo | grep UP | awk '{print $1}')" || true
 
 if [ -z "$PORT" ]; then
@@ -33,44 +33,47 @@ else
   # Backup existing config
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%s)" || true
 
-  # Tear down existing bridge if present
-  ifdown --force br0 || true
-  ip -6 addr flush dev br0 || true
-  ip -4 addr flush dev br0 || true
+  # Write new config for primary interface
+  cat >/etc/network/interfaces <<EOF
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
 
-  # Write new config for bridge interface
-  cat >/etc/network/interfaces.d/br0 <<EOF
+source /etc/network/interfaces.d/*
 
-# Bridge with detected PF
-auto br0
-iface br0 inet dhcp
-    bridge-ports ${PORT}
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+allow-hotplug ${PORT}
+
+iface ${PORT} inet manual
     dns-nameservers 1.1.1.1 8.8.8.8
-    hwaddress ether ${MAC}
+    up ip link set dev $PORT up
+    up dhclient -4 -v $PORT || true
+    down dhclient -4 -x $PORT || true
 
-iface br0 inet6 dhcp
-    # v6 DNS; gateway comes from RA
+# IPv6 autoconfig from Router Advertisements
+iface ${PORT} inet6 auto
     dns-nameservers 2606:4700:4700::1111 2001:4860:4860::8888
+    # If the host forwards IPv6, accept_ra must be 2; otherwise 1
+    pre-up sysctl -qw net.ipv6.conf.$PORT.accept_ra=$(sysctl -n net.ipv6.conf.all.forwarding | awk '{print ($1=="1")?2:1}')
 EOF
   # Apply
-  ifdown --force br0 || true
-  ifup -v br0 || true
+  ifdown --force $PORT || true
+  ifup -v $PORT || true
 fi
 
-# print network interface br0 status and addresses
-echo "=== Network interface br0 status ==="
-ip addr show dev br0 || true
-echo "\n=== DHCP leases for br0 ==="
-cat /var/lib/dhcp/dhclient*.br0.leases || true
+# print network interface status and addresses
 echo "=== Network interface $PORT status ==="
 ip addr show dev "$PORT" || true
 echo "\n=== DHCP leases for $PORT ==="
 cat /var/lib/dhcp/dhclient*."$PORT".leases || true
 
-# ------ Permanently set hostname to hyphen-delimited IP of br0 -----------------------------
+# ------ Permanently set hostname to hyphen-delimited IP -----------------------------
 # Prefer IPv4; fall back to non-link-local IPv6
-IP4="$(ip -4 -o addr show dev br0 scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
-IP6="$(ip -6 -o addr show dev br0 scope global 2>/dev/null | awk '!/ fe80:/{print $4}' | cut -d/ -f1 | head -n1 || true)"
+IP4="$(ip -4 -o addr show dev $PORT scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
+IP6="$(ip -6 -o addr show dev $PORT scope global 2>/dev/null | awk '!/ fe80:/{print $4}' | cut -d/ -f1 | head -n1 || true)"
 
 if [ -n "$IP4" ]; then
   NEW_HOSTNAME="$(echo "$IP4" | tr '.' '-')" || true
