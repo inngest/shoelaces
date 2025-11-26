@@ -188,7 +188,7 @@ ifdown --force br0 || true
 ifup -v br0 || true
 
 # Remove vault password
-rm -f /root/.vault_pass
+# rm -f /root/.vault_pass
 
 # In case the ansible playbook removed these packages, ensure they are installed
 apt-get install -y isc-dhcp-client bridge-utils || true
