@@ -15,7 +15,7 @@ exec > /var/log/firstboot.log 2>&1
 : "${ANSIBLE_BRANCH:=main}"
 : "${ANSIBLE_PLAYBOOK:=baremetal.yml}"
 
-# Install required packages
+# Install required packages 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
@@ -150,9 +150,7 @@ fi
 # Install temporary vault password for ansible-vault
 touch /root/.vault_pass
 chmod 600 /root/.vault_pass
-cat > /root/.vault_pass <<'PW'
-VvNs0t1wyd7nmBR8gS31eY7K
-PW
+echo "SnQ0akNjR3YwYnorNjdDTFNFQTlaWG9XcnJqSHcrNTgK" | base64 -d > /root/.vault_pass
 printf 'vault pass bytes: %s\n' "$(wc -c </root/.vault_pass)" || true
 
 # install ansible-galaxy collections from the repo requirements file
