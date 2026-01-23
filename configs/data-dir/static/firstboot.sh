@@ -184,6 +184,8 @@ ifdown --force "$PORT" || true
 ifup -v "$PORT" || true
 ifdown --force br0 || true
 ifup -v br0 || true
+ifdown --force bond0 || true
+ifup -v bond0 || true
 
 # Remove vault password
 # rm -f /root/.vault_pass
