@@ -125,6 +125,10 @@ export ANSIBLE_COLLECTIONS_PATHS="/root/.ansible/collections:$DEST/vendor/collec
 # NetBox collection (installed for ansible, OK to do system-wide)
 ansible-galaxy collection install netbox.netbox
 
+# Set up SSH for Ansible (key provided by preseed late_command)
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+
 # Fixup the ansible key (Strip CRs and ensure a trailing newline)
 tr -d '\r' < /root/.ssh/id_ansible > /root/.ssh/id_ansible.fix
 printf '\n' >> /root/.ssh/id_ansible.fix
@@ -134,12 +138,8 @@ mv /root/.ssh/id_ansible.fix /root/.ssh/id_ansible
 [ -f /root/.ssh/config ] && chmod 644 /root/.ssh/config
 [ -f /root/.ssh/authorized_keys ] && chmod 600 /root/.ssh/authorized_keys || true
 [ -f /root/.ssh/id_ansible ] && chmod 600 /root/.ssh/id_ansible || true
-chmod 700 /root/.ssh
 chown -R root:root /root/.ssh
 
-# Set up SSH for Ansible (key provided by preseed late_command)
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
 if [ ! -f /root/.ssh/config ]; then
   cat >> /root/.ssh/config <<'EOF'
 Host github.com
