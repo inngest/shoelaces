@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eux
+export HOME=/root
 
 # Log everything for postmortem
 exec > /var/log/firstboot.log 2>&1
@@ -117,6 +118,8 @@ pip install "ansible-core==2.14.*" pynetbox requests boto3 botocore
 export PATH="/opt/firstboot/.venv/bin:$PATH"
 # Make ansible use the venv python when running modules
 export ANSIBLE_PYTHON_INTERPRETER="$VENV/bin/python"
+# fix ansible collections path to include both the venv and system paths
+export ANSIBLE_COLLECTIONS_PATHS="/root/.ansible/collections:$DEST/vendor/collections:/usr/share/ansible/collections"
 
 # NetBox collection (installed for ansible, OK to do system-wide)
 ansible-galaxy collection install netbox.netbox
