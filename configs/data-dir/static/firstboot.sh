@@ -108,6 +108,7 @@ unset HOSTNAME
 export HOSTNAME="$(hostname -s)"
 # ------ end hostname section ----------------------------------------------------------------
 
+DEST=/root/.ansible/pull/ansible
 VENV=/opt/firstboot/.venv
 python3 -m venv "$VENV"
 . "$VENV/bin/activate"
@@ -158,7 +159,6 @@ printf 'vault pass bytes: %s\n' "$(wc -c </root/.vault_pass)" || true
 
 # install ansible-galaxy collections from the repo requirements file
 mkdir -p /root/.ansible/pull
-DEST=/root/.ansible/pull/ansible
 ansible-pull -U git@github.com:inngest/ansible.git -C "$ANSIBLE_BRANCH" -d "$DEST" --accept-host-key -i localhost, -l localhost --vault-password-file /root/.vault_pass --full "$ANSIBLE_PLAYBOOK" --check || true
 # After this ^^, the repo exists at $DEST even if --check fails
 
