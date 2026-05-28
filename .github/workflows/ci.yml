@@ -2,10 +2,25 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
   pull_request:
 
 jobs:
+  build:
+    name: Build
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build binary
+        run: go build -o shoelaces ./main.go
+        env:
+          CGO_ENABLED: "0"
+
   lint:
     name: Lint
     runs-on: depot-ubuntu-22.04
