@@ -96,10 +96,10 @@ func IsValidMAC(mac string) bool {
 
 // MacColonToDash receives a mac address and replace its colons by dashes
 func MacColonToDash(mac string) string {
-	return strings.Replace(mac, ":", "-", -1)
+	return strings.ReplaceAll(mac, ":", "-")
 }
 
 // MacDashToColon receives a mac address and replace its dashes by colons
 func MacDashToColon(mac string) string {
-	return strings.Replace(mac, "-", ":", -1)
+	return strings.ReplaceAll(mac, "-", ":")
 }

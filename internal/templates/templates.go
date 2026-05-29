@@ -71,7 +71,7 @@ func (s *ShoelacesTemplates) parseTemplateInfo(logger log.Logger, path string) s
 		os.Exit(1)
 	}
 
-	defer fh.Close()
+	defer func() { _ = fh.Close() }()
 
 	templateVars := make([]string, 0)
 	scanner := bufio.NewScanner(fh)

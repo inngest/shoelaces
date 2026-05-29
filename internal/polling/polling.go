@@ -95,7 +95,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 	scriptName string, envName string, params map[string]interface{}) (inputErr bool, err error) {
 
 	if !utils.IsValidMAC(srv.Mac) {
-		return true, errors.New("Invalid MAC")
+		return true, errors.New("invalid MAC")
 	}
 	// Test the template with user inputs
 	setHostName(params, srv.Mac)
@@ -114,7 +114,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 		return true, errors.New("MAC is not in the booting state")
 	}
 
-	hostname := servers[srv.Mac].Server.Hostname
+	hostname := servers[srv.Mac].Hostname
 	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", scriptName, "environment", envName, "hostname", hostname, "params", params)
 	eventLog.AddEvent(event.UserSelection, srv, "", scriptName, nil)
 	servers[srv.Mac].Target = scriptName

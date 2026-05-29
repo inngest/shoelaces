@@ -16,7 +16,6 @@ package handlers
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -79,17 +78,35 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	fileList := make(map[string]os.FileInfo)
 
 	if errUpper == nil && infoUpper.IsDir() {
-		files, _ := ioutil.ReadDir(upper)
+		files, err := os.ReadDir(upper)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		for _, f := range files {
-			fileList[f.Name()] = f
+			info, err := f.Info()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			fileList[f.Name()] = info
 		}
 		isDir = true
 	}
 	if errLower == nil && infoLower.IsDir() {
-		files, _ := ioutil.ReadDir(lower)
+		files, err := os.ReadDir(lower)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		for _, f := range files {
 			if _, ok := fileList[f.Name()]; !ok {
-				fileList[f.Name()] = f
+				info, err := f.Info()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				fileList[f.Name()] = info
 			}
 		}
 		isDir = true
@@ -102,7 +119,7 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 			fileListIndex = append(fileListIndex, i)
 		}
 		sort.Strings(fileListIndex)
-		w.Write([]byte("<pre>\n"))
+		_, _ = w.Write([]byte("<pre>\n"))
 		for _, i := range fileListIndex {
 			f := fileList[i]
 			name := f.Name()
@@ -110,9 +127,9 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 				name = name + "/"
 			}
 			l := fmt.Sprintf("<a href=\"%s\">%s</a>\n", name, name)
-			w.Write([]byte(l))
+			_, _ = w.Write([]byte(l))
 		}
-		w.Write([]byte("</pre>\n"))
+		_, _ = w.Write([]byte("</pre>\n"))
 		return
 	}
 

@@ -30,7 +30,7 @@ func ListEvents(w http.ResponseWriter, r *http.Request) {
 		os.Exit(1)
 	}
 
-	//Write the EventLog and send the HTTP response
+	// Write the EventLog and send the HTTP response.
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(eventList)
+	_, _ = w.Write(eventList)
 }

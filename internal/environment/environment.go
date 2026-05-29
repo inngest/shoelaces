@@ -17,13 +17,11 @@ package environment
 import (
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"sync"
 
 	"github.com/thousandeyes/shoelaces/internal/event"
 	"github.com/thousandeyes/shoelaces/internal/log"
@@ -98,7 +96,7 @@ func defaultEnvironment() *Environment {
 	env := &Environment{}
 	env.NetworkMaps = make([]mappings.NetworkMap, 0)
 	env.HostnameMaps = make([]mappings.HostnameMap, 0)
-	env.ServerStates = &server.States{sync.RWMutex{}, make(map[string]*server.State)}
+	env.ServerStates = &server.States{Servers: make(map[string]*server.State)}
 	env.ParamsBlacklist = []string{"baseURL"}
 	env.Templates = templates.New()
 	env.Environments = make([]string, 0)
@@ -131,7 +129,7 @@ func (env *Environment) initStaticTemplates() {
 func (env *Environment) initEnvOverrides() []string {
 	var environments = make([]string, 0)
 	envPath := filepath.Join(env.DataDir, env.EnvDir)
-	files, err := ioutil.ReadDir(envPath)
+	files, err := os.ReadDir(envPath)
 	if err == nil {
 		for _, f := range files {
 			if f.IsDir() {
