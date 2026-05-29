@@ -1,10 +1,11 @@
-FROM golang:1.15-alpine AS build
+FROM golang:1.24-alpine AS build
 
 WORKDIR /shoelaces
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-s -w -extldflags "-static"' -o /tmp/shoelaces . && \
-printf "---\nnetworkMaps:\n" > /tmp/mappings.yaml
+printf "---\nnetworkMaps:\n" > /tmp/mappings.yaml && \
+mkdir -p /tmp/tftp
 
 # Final container has basically nothing in it but the executable
 FROM scratch
@@ -15,7 +16,7 @@ COPY --from=build /tmp/mappings.yaml mappings.yaml
 COPY --from=build /shoelaces/web /web
 
 # TFTP files will be served from /data/tftp; mount or bake them in
-RUN mkdir -p /data/tftp
+COPY --from=build /tmp/tftp /data/tftp
 EXPOSE 8081/tcp 69/udp
 
 ENV BIND_ADDR=0.0.0.0:8081
