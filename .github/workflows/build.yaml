@@ -4,6 +4,25 @@ on:
   push:
     branches:
       - release
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional tag to create/use for a manual GitHub release test"
+        required: false
+        type: string
+      publish_github_release:
+        description: "Publish artifacts to a GitHub release"
+        required: true
+        default: true
+        type: boolean
+      publish_s3:
+        description: "Publish artifacts to S3 release/latest prefixes"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   tag:
@@ -15,20 +34,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      # this can fail if tag already exists
-      # happens for rollbacks
       - name: Set tag
-        continue-on-error: true
-        run: |
-          ./scripts/release_tag
-          git push --tags
-
-      - name: Export tag for downstream use
         id: export
         run: |
-          NEW_TAG=$(git describe --tags --abbrev=0)
-          echo $NEW_TAG
-          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.release_tag }}"
+            if [[ -z "$TAG" ]]; then
+              TAG="test-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+            fi
+          else
+            ./scripts/release_tag
+            TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists locally"
+          else
+            git tag "${TAG}"
+          fi
+
+          git push origin "refs/tags/${TAG}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: [tag]
@@ -41,7 +69,7 @@ jobs:
           - shoelaces
     permissions:
       id-token: write
-      contents: read
+      contents: write
     env:
       REVISION: ${{ needs.tag.outputs.value }}
     steps:
@@ -58,29 +86,56 @@ jobs:
         run: go build -o ${{ matrix.artifact }} ./main.go
         env:
           CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
 
-      - name: create compressed package with checksums
+      - name: Create compressed package with checksums
         run: |
+          set -euo pipefail
           mkdir artifacts
 
           tar -cvzf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
           md5sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.md5
           sha256sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.sha256
+          tar -tzf ${{ matrix.artifact }}.tar.gz | grep -Fx ${{ matrix.artifact }}
 
           mv ${{ matrix.artifact }}.tar.* artifacts
 
+      - name: Publish GitHub release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_github_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prerelease_flag=""
+          if [[ "$REVISION" == test-* ]]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          if gh release view "$REVISION" >/dev/null 2>&1; then
+            gh release upload "$REVISION" artifacts/* --clobber
+          else
+            gh release create "$REVISION" artifacts/* \
+              $prerelease_flag \
+              --title "$REVISION" \
+              --notes "Shoelaces release workflow test for ${GITHUB_SHA}."
+          fi
+
       - name: Prep credentials
+        if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
         run: |
           echo "AWS_S3_BUCKET=inngest-artifacts" >> $GITHUB_ENV
           echo "AWS_ASSUME_ROLE=arn:aws:iam::836356947314:role/ProdGHActionAccess" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
+        if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ASSUME_ROLE }}
           aws-region: us-east-2
 
       - name: Sync artifacts to S3
+        if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
         run: |
           aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/${{ env.REVISION }}
           aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/latest

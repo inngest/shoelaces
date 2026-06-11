@@ -4,7 +4,24 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
+  test:
+    name: Unit Test
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run unit tests
+        run: go test -race ./...
+
   build:
     name: Build
     runs-on: depot-ubuntu-22.04
@@ -16,10 +33,81 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Build binary
+      - name: Build Linux amd64 binary
         run: go build -o shoelaces ./main.go
         env:
           CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+
+  release-package:
+    name: Release Package Dry Run
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build release binary
+        run: go build -o shoelaces ./main.go
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+
+      - name: Create compressed package with checksums
+        run: |
+          set -euo pipefail
+          mkdir artifacts
+
+          tar -cvzf shoelaces.tar.gz shoelaces
+          md5sum shoelaces.tar.gz > shoelaces.tar.gz.md5
+          sha256sum shoelaces.tar.gz > shoelaces.tar.gz.sha256
+          tar -tzf shoelaces.tar.gz | grep -Fx shoelaces
+
+          mv shoelaces.tar.* artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shoelaces-release-dry-run
+          path: artifacts/*
+          retention-days: 7
+
+  binary-invariance:
+    name: Binary Invariance
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Compare runtime build with and without test/CI files
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -buildvcs=false -o /tmp/shoelaces.with-tests ./main.go
+
+          cp -a . "$tmpdir/src"
+          find "$tmpdir/src" -name '*_test.go' -delete
+          rm -rf "$tmpdir/src/.github"
+
+          (
+            cd "$tmpdir/src"
+            GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+              go build -trimpath -buildvcs=false -o /tmp/shoelaces.without-tests ./main.go
+          )
+
+          sha256sum /tmp/shoelaces.with-tests /tmp/shoelaces.without-tests
+          cmp /tmp/shoelaces.with-tests /tmp/shoelaces.without-tests
 
   lint:
     name: Lint
@@ -38,36 +126,3 @@ jobs:
           version: v2.2.1
           args: --verbose
 
-  # unit:
-  #   name: Unit Test
-  #   runs-on: depot-ubuntu-22.04
-  #   steps:
-  #     - uses: actions/checkout@v5
-
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version-file: 'go.mod'
-
-  #     - name: Set GOBIN to a relative path
-  #       run: |
-  #         echo "GOBIN=${{ github.workspace }}/bin" >> $GITHUB_ENV
-  #         echo "PATH=$PATH:${{ github.workspace }}/bin" >> $GITHUB_ENV
-
-  #     - name: Cache
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: |
-  #           bin/
-  #         key: ${{ runner.os }}-${{ hashFiles('go.sum') }}-go
-
-  #     - name: Setup dependencies
-  #       run: make deps
-
-  #     - name: Test
-  #       run: make test
-
-  #     - name: Upload coverage reports to Codecov
-  #       uses: codecov/codecov-action@v5
-  #       with:
-  #         token: ${{ secrets.CODECOV_TOKEN }}
