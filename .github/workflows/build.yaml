@@ -58,23 +58,19 @@ jobs:
           git push origin "refs/tags/${TAG}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-  build:
+  release:
     needs: [tag]
-    name: Build ${{ matrix.artifact }}
+    name: GoReleaser
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        artifact:
-          - shoelaces
     permissions:
-      id-token: write
       contents: write
+      id-token: write
     env:
       REVISION: ${{ needs.tag.outputs.value }}
     steps:
       - uses: actions/checkout@v5
         with:
+          fetch-depth: 0
           ref: ${{ env.REVISION }}
 
       - name: Set up Go
@@ -82,44 +78,36 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Build ${{ matrix.artifact }} binary
-        run: go build -o ${{ matrix.artifact }} ./main.go
+      - name: Run GoReleaser
+        if: ${{ github.event_name == 'push' || inputs.publish_github_release }}
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
         env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
+          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Create compressed package with checksums
+      - name: Run GoReleaser snapshot
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish_github_release }}
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Prepare S3-compatible artifact set
         run: |
           set -euo pipefail
-          mkdir artifacts
+          mkdir s3-artifacts
 
-          tar -cvzf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
-          md5sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.md5
-          sha256sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.sha256
-          tar -tzf ${{ matrix.artifact }}.tar.gz | grep -Fx ${{ matrix.artifact }}
-
-          mv ${{ matrix.artifact }}.tar.* artifacts
-
-      - name: Publish GitHub release
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_github_release }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          prerelease_flag=""
-          if [[ "$REVISION" == test-* ]]; then
-            prerelease_flag="--prerelease"
-          fi
-
-          if gh release view "$REVISION" >/dev/null 2>&1; then
-            gh release upload "$REVISION" artifacts/* --clobber
-          else
-            gh release create "$REVISION" artifacts/* \
-              $prerelease_flag \
-              --title "$REVISION" \
-              --notes "Shoelaces release workflow test for ${GITHUB_SHA}."
-          fi
+          test -f dist/shoelaces.tar.gz
+          cp dist/shoelaces.tar.gz s3-artifacts/shoelaces.tar.gz
+          md5sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.md5
+          sha256sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.sha256
+          tar -tzf s3-artifacts/shoelaces.tar.gz | grep -Fx shoelaces
 
       - name: Prep credentials
         if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
@@ -137,11 +125,13 @@ jobs:
       - name: Sync artifacts to S3
         if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
         run: |
-          aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/${{ env.REVISION }}
-          aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/latest
+          aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/${{ env.REVISION }}
+          aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/latest
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: artifacts/*
+          name: shoelaces
+          path: |
+            dist/*
+            s3-artifacts/*
           retention-days: 7

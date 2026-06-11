@@ -41,39 +41,44 @@ jobs:
           GOARCH: amd64
 
   release-package:
-    name: Release Package Dry Run
+    name: GoReleaser Dry Run
     runs-on: depot-ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
-      - name: Build release binary
-        run: go build -o shoelaces ./main.go
+      - name: Run GoReleaser snapshot
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish
         env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
+          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Create compressed package with checksums
+      - name: Verify S3-compatible artifact shape
         run: |
           set -euo pipefail
-          mkdir artifacts
+          mkdir s3-artifacts
 
-          tar -cvzf shoelaces.tar.gz shoelaces
-          md5sum shoelaces.tar.gz > shoelaces.tar.gz.md5
-          sha256sum shoelaces.tar.gz > shoelaces.tar.gz.sha256
-          tar -tzf shoelaces.tar.gz | grep -Fx shoelaces
-
-          mv shoelaces.tar.* artifacts
+          test -f dist/shoelaces.tar.gz
+          cp dist/shoelaces.tar.gz s3-artifacts/shoelaces.tar.gz
+          md5sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.md5
+          sha256sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.sha256
+          tar -tzf s3-artifacts/shoelaces.tar.gz | grep -Fx shoelaces
 
       - uses: actions/upload-artifact@v4
         with:
           name: shoelaces-release-dry-run
-          path: artifacts/*
+          path: |
+            dist/*
+            s3-artifacts/*
           retention-days: 7
 
   binary-invariance:
