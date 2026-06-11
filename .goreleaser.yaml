@@ -27,6 +27,8 @@ archives:
     formats:
       - tar.gz
     name_template: shoelaces
+    files:
+      - none*
 
 checksum:
   name_template: checksums.txt
