@@ -18,6 +18,7 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o shoelaces ./main.go
 ./shoelaces -version
 ```
 
+The `-version` flag prints the release version, commit, build date, and builder metadata embedded by GoReleaser, which is useful for verifying the exact binary installed on a Shoelaces host.
 The `make unit` target runs formatted Go unit tests.
 The `make test` target runs `make unit` and then the historical Python integration test at `test/integ-test/integ_test.py`; that integration path may require local Python dependencies that are not installed by the Go toolchain.
 
