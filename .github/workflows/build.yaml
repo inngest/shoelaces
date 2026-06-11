@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - release
+      - master
   workflow_dispatch:
     inputs:
       release_tag:
@@ -110,20 +110,20 @@ jobs:
           tar -tzf s3-artifacts/shoelaces.tar.gz | grep -Fx shoelaces
 
       - name: Prep credentials
-        if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
         run: |
           echo "AWS_S3_BUCKET=inngest-artifacts" >> $GITHUB_ENV
           echo "AWS_ASSUME_ROLE=arn:aws:iam::836356947314:role/ProdGHActionAccess" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
-        if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ASSUME_ROLE }}
           aws-region: us-east-2
 
       - name: Sync artifacts to S3
-        if: ${{ github.event_name == 'push' || inputs.publish_s3 }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
         run: |
           aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/${{ env.REVISION }}
           aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/latest

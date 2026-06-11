@@ -15,6 +15,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -26,8 +27,20 @@ import (
 	"github.com/thousandeyes/shoelaces/internal/tftpserver"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
+
 func main() {
 	env := environment.New()
+	if env.Version {
+		fmt.Print(versionString())
+		return
+	}
+
 	app := handlers.MiddlewareChain(env).Then(router.ShoelacesRouter(env))
 
 	// start embedded TFTP server if enabled (values come from environment package:
@@ -52,4 +65,8 @@ func main() {
 	env.Logger.Info("component", "main", "transport", "http", "addr", env.BindAddr, "msg", "listening")
 	env.Logger.Error("component", "main", "err", http.ListenAndServe(env.BindAddr, app))
 	os.Exit(1)
+}
+
+func versionString() string {
+	return fmt.Sprintf("shoelaces %s\ncommit: %s\ndate: %s\nbuilt by: %s\n", version, commit, date, builtBy)
 }

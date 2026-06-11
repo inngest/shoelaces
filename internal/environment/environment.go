@@ -52,6 +52,7 @@ type Environment struct {
 	TemplateExtension string
 	MappingsFile      string
 	Debug             bool
+	Version           bool
 }
 
 // New returns an initialized environment structure
@@ -59,6 +60,10 @@ func New() *Environment {
 	env := defaultEnvironment()
 	env.setFlags()
 	env.validateFlags()
+
+	if env.Version {
+		return env
+	}
 
 	env.TFTP = tftpFromFlags()
 

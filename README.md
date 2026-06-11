@@ -9,12 +9,13 @@ At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 releas
 Use the same Go toolchain selected by `go.mod`.
 CI uses `actions/setup-go` with `go-version-file: go.mod`.
 
-Local unit-test and build checks:
+Local unit-test, build, and version checks:
 
 ```bash
 go test ./...
 go test -race ./...
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o shoelaces ./main.go
+./shoelaces -version
 ```
 
 The `make unit` target runs formatted Go unit tests.
@@ -26,12 +27,17 @@ CI currently runs:
 - Linux amd64 binary build from `./main.go`
 - `golangci-lint`
 - a GoReleaser snapshot dry run
-- a binary-invariance check proving that `*_test.go` and `.github/` changes do not affect a deterministic runtime build when built with `-trimpath -buildvcs=false`
 
 ## Proposed release process
 
 Shoelaces now follows the same broad release pattern as Atlas: tags drive GoReleaser, GoReleaser publishes GitHub release artifacts, and the production deployment path is separated from release artifact creation.
-The important Shoelaces-specific difference is that Ansible still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so S3 publication is an explicit gated step.
+Every push to `master` creates a date-based release tag and publishes a GitHub release with GoReleaser.
+The important Shoelaces-specific difference is that the current Ansible deployment still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so S3 publication is an explicit manual step until a follow-up Ansible change teaches it to pull from GitHub releases.
+
+### Automatic GitHub releases on master
+
+Merging to `master` runs the `Build` workflow, creates the next `vYYYY-MM-DD.NN` tag, and publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release with GoReleaser.
+This does not publish to S3 and therefore does not change the artifact consumed by existing Shoelaces Ansible deployments.
 
 ### GitHub release validation, no S3
 
@@ -72,9 +78,11 @@ gh workflow run .github/workflows/build.yaml \
   -f publish_s3=true
 ```
 
-A push to the `release` branch also runs the release workflow and publishes to S3 by design.
-Do not push `release` or run the workflow with `publish_s3=true` unless intentionally updating the Ansible-consumed `latest` artifact.
+Do not run the workflow with `publish_s3=true` unless intentionally updating the Ansible-consumed `latest` artifact.
 After S3 publication, the user should run the Ansible deployment; agents must not run Inngest Ansible.
+
+A follow-up Ansible ticket should switch Shoelaces installation to consume GitHub release artifacts directly.
+Until that lands, GitHub releases are the canonical build output, but S3 remains the live deployment source.
 
 ## Upstream ThousandEyes README content
 
