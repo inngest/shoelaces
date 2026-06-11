@@ -1,43 +1,23 @@
-# Changelog
-All notable changes to this project will be documented in this file.
+## [2025-11-02.01] - 2025-11-02
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+### 🚀 Features
 
-## [1.2.0] - 2021-01-13
-### Added
-- Use Go Modules instead of Go Dep.
-- Add docker build.
-- Add parameter `-base-url`.
+- Add human-friendly entry point
+- Support custom parameters in integ_test
 
-### Changed
-- Changing parameters `-port` and `-domain` in favor of `-bind-addr`.
+### 💼 Other
 
-## [1.1.0] - 2020-04-01
-### Added
-- Build production binaries.
-- Support config subdirectories.
+- Add docker build
+- Update dependencies
+- Use go 1.19 and tidy up deps
+- How client and server interact during poll
 
-## [1.0.2] - 2019-01-09
-### Added
-- Add scdoc manpage.
+### 🎨 Styling
 
-### Changed
-- Rename example-templates-configs to data-dir.
-- Move screenshots to docs/screenshots.
+- Add clarifying comments in polling iPXE scripts
 
-## [1.0.1] - 2018-12-04
-### Added
-- Added dnsmasq example.
+### 🧪 Testing
 
-### Fixed
-- Fixes in ipxe for Debian and CentOS.
-
-## [1.0.0] - 2018-08-03
-### Added
-- First release.
-
-[1.2.0]: https://github.com/thousandeyes/shoelaces/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/thousandeyes/shoelaces/compare/v1.0.2...v1.1.0
-[1.0.2]: https://github.com/thousandeyes/shoelaces/compare/v1.0.1...v1.0.2
-[1.0.1]: https://github.com/thousandeyes/shoelaces/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/thousandeyes/shoelaces/tree/v1.0.0
+- Ensures compatibility with Python 3
+- Fix test for behavior modified in 3233a856
+- Add test for /start endpoint (#23)
