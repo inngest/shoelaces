@@ -3,7 +3,7 @@ FROM golang:1.24-alpine AS build
 WORKDIR /shoelaces
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-s -w -extldflags "-static"' -o /tmp/shoelaces . && \
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-s -w -extldflags "-static"' -o /tmp/shoelaces ./cmd/shoelaces && \
 printf "---\nnetworkMaps:\n" > /tmp/mappings.yaml && \
 mkdir -p /tmp/tftp
 

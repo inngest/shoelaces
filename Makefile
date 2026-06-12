@@ -2,13 +2,13 @@ GO = go
 SCDOC = scdoc
 LDFLAGS = "-s -w"
 
-pkgs = $(shell $(GO) list ./... | grep -v /vendor/)
+pkgs = ./...
 
 all:
-	$(GO) build
+	$(GO) build ./cmd/shoelaces
 
 fmt:
-	$(GO) fmt
+	$(GO) fmt ./...
 
 clean:
 	rm -f shoelaces docs/shoelaces.8
@@ -19,7 +19,7 @@ shoelaces.8:
 docs: shoelaces.8
 
 unit: fmt
-	$(GO) test -v $(pkgs)
+	$(GO) test -v -count=1 $(pkgs)
 
 test: unit
 	./test/integ-test/integ_test.py -vv
@@ -28,6 +28,21 @@ test: unit
 
 binaries: linux windows
 linux:
-		GOOS=linux ${GO} build -o bin/shoelaces -ldflags ${LDFLAGS}
+		GOOS=linux ${GO} build -o bin/shoelaces -ldflags ${LDFLAGS} ./cmd/shoelaces
 windows:
-		GOOS=windows ${GO} build -o bin/shoelaces.exe -ldflags ${LDFLAGS}
+		GOOS=windows ${GO} build -o bin/shoelaces.exe -ldflags ${LDFLAGS} ./cmd/shoelaces
+
+.PHONY: goreleaser-check
+goreleaser-check:
+	goreleaser check
+
+.PHONY: goreleaser-snapshot
+goreleaser-snapshot:
+	goreleaser release --snapshot --clean
+
+.PHONY: release-notes
+release-notes:
+ifndef RELEASE_TAG
+	$(error RELEASE_TAG is required, e.g. make release-notes RELEASE_TAG=v2026-05-07.01)
+endif
+	scripts/export-release-notes.sh "$(RELEASE_TAG)"

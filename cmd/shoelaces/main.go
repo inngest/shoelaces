@@ -22,8 +22,6 @@ import (
 	"github.com/thousandeyes/shoelaces/internal/environment"
 	"github.com/thousandeyes/shoelaces/internal/handlers"
 	"github.com/thousandeyes/shoelaces/internal/router"
-
-	// embedded TFTP server module
 	"github.com/thousandeyes/shoelaces/internal/tftpserver"
 )
 
@@ -43,8 +41,6 @@ func main() {
 
 	app := handlers.MiddlewareChain(env).Then(router.ShoelacesRouter(env))
 
-	// start embedded TFTP server if enabled (values come from environment package:
-	// config file, env vars, or CLI flags defined there).
 	if env.TFTP != nil && env.TFTP.Enabled {
 		tf := tftpserver.New(env.TFTP.Addr, env.TFTP.Root, env.TFTP.Readonly, env.TFTP.Timeout)
 		go func() {
