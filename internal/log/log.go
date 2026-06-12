@@ -17,19 +17,19 @@ package log
 import (
 	"io"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 )
 
 // Logger struct holds a log.Logger plus functions required for logging
 // with different levels. They functions are syntactic sugar to avoid
-// having to import "github.com/go-kit/kit/log/level" in every package that
+// having to import "github.com/go-kit/log/level" in every package that
 // has to cast a log.
 type Logger struct {
 	Raw   log.Logger
-	Info  func(...interface{}) error
-	Debug func(...interface{}) error
-	Error func(...interface{}) error
+	Info  func(...interface{})
+	Debug func(...interface{})
+	Error func(...interface{})
 }
 
 const callerLevel int = 6
@@ -42,9 +42,9 @@ func MakeLogger(w io.Writer) Logger {
 
 	return Logger{
 		Raw:   raw,
-		Info:  level.Info(filtered).Log,
-		Debug: level.Debug(filtered).Log,
-		Error: level.Error(filtered).Log,
+		Info:  discardError(level.Info(filtered).Log),
+		Debug: discardError(level.Debug(filtered).Log),
+		Error: discardError(level.Error(filtered).Log),
 	}
 }
 
@@ -54,8 +54,14 @@ func AllowDebug(l Logger) Logger {
 
 	return Logger{
 		Raw:   l.Raw,
-		Info:  level.Info(filtered).Log,
-		Debug: level.Debug(filtered).Log,
-		Error: level.Error(filtered).Log,
+		Info:  discardError(level.Info(filtered).Log),
+		Debug: discardError(level.Debug(filtered).Log),
+		Error: discardError(level.Error(filtered).Log),
+	}
+}
+
+func discardError(logFn func(...interface{}) error) func(...interface{}) {
+	return func(keyvals ...interface{}) {
+		_ = logFn(keyvals...)
 	}
 }

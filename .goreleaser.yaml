@@ -1,19 +1,20 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
+
+project_name: shoelaces
 
 before:
   hooks:
     - go mod download
-    - go generate ./...
 
 builds:
   - id: shoelaces
-    main: ./cmd/shoelaces/main.go
-    binary: bin/shoelaces
+    main: ./main.go
+    binary: shoelaces
     env:
-    - CGO_ENABLED=0
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    flags:
-      - -trimpath #removes all file system paths from the compiled executable
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser
     goos:
       - linux
     goarch:
@@ -23,19 +24,30 @@ archives:
   - id: shoelaces
     ids:
       - shoelaces
-    formats: ["tar.gz"]
+    formats:
+      - tar.gz
+    name_template: shoelaces
     files:
-      - README*
-      - LICENSE*
-      - CHANGELOG*
-      - configs
-    name_template: 'shoelaces_x86_64'
+      - none*
 
 checksum:
-  name_template: 'checksums.txt'
-  algorithm: sha256
-  ids:
-    - shoelaces
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^chore\\(release\\):"
+      - "^docs:"
+      - "^test:"
 
 release:
-  draft: false
+  mode: replace
+  footer: |
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

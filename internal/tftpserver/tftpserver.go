@@ -33,7 +33,7 @@ func New(addr, root string, readonly bool, timeout time.Duration) *Server {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		// Advertise transfer size if known (helps some PXE ROMs).
 		if fi, err := f.Stat(); err == nil {
@@ -57,7 +57,7 @@ func New(addr, root string, readonly bool, timeout time.Duration) *Server {
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			_, err = wt.WriteTo(f)
 			return err
 		}

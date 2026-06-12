@@ -3,7 +3,26 @@ name: Build
 on:
   push:
     branches:
-      - release
+      - master
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional tag to create/use for a manual GitHub release test"
+        required: false
+        type: string
+      publish_github_release:
+        description: "Publish artifacts to a GitHub release"
+        required: true
+        default: true
+        type: boolean
+      publish_s3:
+        description: "Publish artifacts to S3 release/latest prefixes"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   tag:
@@ -15,38 +34,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      # this can fail if tag already exists
-      # happens for rollbacks
       - name: Set tag
-        continue-on-error: true
-        run: |
-          ./scripts/release_tag
-          git push --tags
-
-      - name: Export tag for downstream use
         id: export
         run: |
-          NEW_TAG=$(git describe --tags --abbrev=0)
-          echo $NEW_TAG
-          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
 
-  build:
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.release_tag }}"
+            if [[ -z "$TAG" ]]; then
+              TAG="test-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+            fi
+          else
+            ./scripts/release_tag
+            TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists locally"
+          else
+            git tag "${TAG}"
+          fi
+
+          git push origin "refs/tags/${TAG}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  release:
     needs: [tag]
-    name: Build ${{ matrix.artifact }}
+    name: GoReleaser
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        artifact:
-          - shoelaces
     permissions:
+      contents: write
       id-token: write
-      contents: read
     env:
       REVISION: ${{ needs.tag.outputs.value }}
     steps:
       - uses: actions/checkout@v5
         with:
+          fetch-depth: 0
           ref: ${{ env.REVISION }}
 
       - name: Set up Go
@@ -54,39 +78,60 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Build ${{ matrix.artifact }} binary
-        run: go build -o ${{ matrix.artifact }} ./main.go
+      - name: Run GoReleaser
+        if: ${{ github.event_name == 'push' || inputs.publish_github_release }}
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --skip=validate
         env:
-          CGO_ENABLED: "0"
+          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: create compressed package with checksums
+      - name: Run GoReleaser snapshot
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish_github_release }}
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Prepare S3-compatible artifact set
         run: |
-          mkdir artifacts
+          set -euo pipefail
+          mkdir s3-artifacts
 
-          tar -cvzf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
-          md5sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.md5
-          sha256sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.sha256
-
-          mv ${{ matrix.artifact }}.tar.* artifacts
+          test -f dist/shoelaces.tar.gz
+          cp dist/shoelaces.tar.gz s3-artifacts/shoelaces.tar.gz
+          md5sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.md5
+          sha256sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.sha256
+          tar -tzf s3-artifacts/shoelaces.tar.gz | grep -Fx shoelaces
 
       - name: Prep credentials
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
         run: |
           echo "AWS_S3_BUCKET=inngest-artifacts" >> $GITHUB_ENV
           echo "AWS_ASSUME_ROLE=arn:aws:iam::836356947314:role/ProdGHActionAccess" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ASSUME_ROLE }}
           aws-region: us-east-2
 
       - name: Sync artifacts to S3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
         run: |
-          aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/${{ env.REVISION }}
-          aws s3 sync --delete ./artifacts s3://${{ env.AWS_S3_BUCKET }}/${{ matrix.artifact }}/releases/latest
+          aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/${{ env.REVISION }}
+          aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/latest
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: artifacts/*
+          name: shoelaces
+          path: |
+            dist/*
+            s3-artifacts/*
           retention-days: 7

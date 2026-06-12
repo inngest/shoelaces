@@ -49,7 +49,7 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	} else {
-		io.WriteString(w, configString)
+		_, _ = io.WriteString(w, configString)
 	}
 }
 
@@ -87,5 +87,5 @@ func GetTemplateParams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(marshaled)
+	_, _ = w.Write(marshaled)
 }

@@ -1,4 +1,96 @@
-# **Shoelaces:** lightweight and painless server bootstrapping
+# Shoelaces at Inngest
+
+This repository is Inngest's maintained fork of [ThousandEyes Shoelaces](https://github.com/thousandeyes/shoelaces).
+Shoelaces serves iPXE, configuration, and static firstboot assets for bare-metal provisioning.
+At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 release artifacts, while GitHub releases are safe to create for validation because no production automation consumes them yet.
+
+## Building and testing
+
+Use the same Go toolchain selected by `go.mod`.
+CI uses `actions/setup-go` with `go-version-file: go.mod`.
+
+Local unit-test, build, and version checks:
+
+```bash
+go test ./...
+go test -race ./...
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o shoelaces ./main.go
+./shoelaces -version
+```
+
+The `-version` flag prints the release version, commit, build date, and builder metadata embedded by GoReleaser, which is useful for verifying the exact binary installed on a Shoelaces host.
+The `make unit` target runs formatted Go unit tests.
+The `make test` target runs `make unit` and then the historical Python integration test at `test/integ-test/integ_test.py`; that integration path may require local Python dependencies that are not installed by the Go toolchain.
+
+CI currently runs:
+
+- `go test -race ./...`
+- Linux amd64 binary build from `./main.go`
+- `golangci-lint`
+- a GoReleaser snapshot dry run
+
+## Proposed release process
+
+Shoelaces now follows the same broad release pattern as Atlas: tags drive GoReleaser, GoReleaser publishes GitHub release artifacts, and the production deployment path is separated from release artifact creation.
+Every push to `master` creates a date-based release tag and publishes a GitHub release with GoReleaser.
+The important Shoelaces-specific difference is that the current Ansible deployment still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so S3 publication is an explicit manual step until a follow-up Ansible change teaches it to pull from GitHub releases.
+
+### Automatic GitHub releases on master
+
+Merging to `master` runs the `Build` workflow, creates the next `vYYYY-MM-DD.NN` tag, and publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release with GoReleaser.
+This does not publish to S3 and therefore does not change the artifact consumed by existing Shoelaces Ansible deployments.
+
+### GitHub release validation, no S3
+
+Use the `Build` workflow with `workflow_dispatch` to test the release path and publish a GitHub release without touching S3:
+
+```bash
+gh workflow run .github/workflows/build.yaml \
+  --ref <branch-or-tag> \
+  -f release_tag=test-<descriptive-name> \
+  -f publish_github_release=true \
+  -f publish_s3=false
+```
+
+This creates or reuses the requested tag, runs GoReleaser, publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release, prepares the S3-compatible artifact set internally, and skips AWS credentials plus S3 sync.
+GitHub test releases and test tags are safe to delete later because no live deployment depends on them.
+
+### Explicit S3 release, after approval and merge
+
+Only publish to S3 after the code has been reviewed, approved, and merged into the intended release path.
+S3 publication writes both an immutable version prefix and the mutable `latest` prefix consumed by Ansible:
+
+```text
+s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz
+s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz.md5
+s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz.sha256
+s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz
+s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz.md5
+s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz.sha256
+```
+
+The guarded manual path is:
+
+```bash
+gh workflow run .github/workflows/build.yaml \
+  --ref <approved-release-tag-or-branch> \
+  -f release_tag=<vYYYY-MM-DD.NN> \
+  -f publish_github_release=true \
+  -f publish_s3=true
+```
+
+Do not run the workflow with `publish_s3=true` unless intentionally updating the Ansible-consumed `latest` artifact.
+After S3 publication, the user should run the Ansible deployment; agents must not run Inngest Ansible.
+
+A follow-up Ansible ticket should switch Shoelaces installation to consume GitHub release artifacts directly.
+Until that lands, GitHub releases are the canonical build output, but S3 remains the live deployment source.
+
+## Upstream ThousandEyes README content
+
+The following project overview and usage material is adapted from the upstream [ThousandEyes Shoelaces README](https://github.com/thousandeyes/shoelaces).
+Some examples in this fork have diverged for Inngest's current data directory, DHCP, and release workflow.
+
+## **Shoelaces:** lightweight and painless server bootstrapping
 
 **Shoelaces** serves [iPXE](https://ipxe.org/) boot scripts,
 [cloud-init](http://cloud-init.org/) configuration, and any other configuration
@@ -16,7 +108,7 @@ a few other things to make it easier to manage your server deployments:
   time **showing them in the UI** allowing the user to select a specific boot
   configuration.
 
-## How it works
+### How it works
 
 As soon as Shoelaces starts, the service will be patiently waiting for servers
 to boot. If no servers are detected, you'll simply see a spinner in the web UI,
@@ -64,9 +156,9 @@ A couple of things can be said about this screenshot:
   If the DNS query is successful, the resolved hostname will be shown in the web
   UI. If no hostname was resolved, Shoelaces will show just the MAC and the IP.
 
-## Setting up
+### Setting up
 
-### Building Shoelaces
+#### Building Shoelaces
 
 At the moment a binary package is not provided. The only way of running
 Shoelaces is to compile it from source. Refer to the Go Programming
@@ -80,7 +172,7 @@ running:
     $ cd $GOPATH/src/github.com/thousandeyes/shoelaces
     $ go build
 
-### Running Shoelaces
+#### Running Shoelaces
 
 You can quickly try Shoelaces after compiling it by using the example configuration file:
 
@@ -88,7 +180,7 @@ You can quickly try Shoelaces after compiling it by using the example configurat
 
 Head to [localhost:8081](http://localhost:8081) to checkout Shoelaces' frontend.
 
-### Shoelaces configuration file
+#### Shoelaces configuration file
 
 Shoelaces accepts several parameters:
 
@@ -108,7 +200,7 @@ variables or, of course, as parameters when running the Shoelaces binary.
 
 Refer to the [example config file](configs/shoelaces.conf) for more information.
 
-### Extra requirements
+#### Extra requirements
 
 Along with your **Shoelaces** installation, you will need a LAN segment with
 working [TFTP](https://en.wikipedia.org/wiki/Trivial_File_Transfer_Protocol) and
@@ -121,7 +213,7 @@ The server you are going to bootstrap needs to be capable of booting over the
 network using
 [PXE](https://en.wikipedia.org/wiki/Preboot_Execution_Environment).
 
-#### TFTP
+##### TFTP
 
 The TFTP server is only used to chainload the iPXE boot loader, so setting it up
 in `read-only` mode is sufficient. The loader we use (`undionly.kpxe`) can be
@@ -132,7 +224,7 @@ booting of your servers. For example, it's useful to [add your own SSL
 certificates](http://ipxe.org/crypto#trusted_root_certificates) in case you want
 to boot using HTTPS.
 
-#### DHCP
+##### DHCP
 
 Drop this config in your **ISC DHCP** server, replacing the relevant sections
 with your TFTP and Shoelaces server addresses.
@@ -163,7 +255,7 @@ host. iPXE will be in charge of replacing that string for the actual value.
 flexibility for configuring it, you can always re-compile the iPXE executable for
 [breaking the loop](https://ipxe.org/howto/chainloading#breaking_the_loop_with_an_embedded_script).
 
-## Script discoverability
+### Script discoverability
 
 The purpose of Shoelaces is automation. The less input it receives from the
 user, the better. When a server boots, Shoelaces needs the user to select the
@@ -180,7 +272,7 @@ Shoelaces will read these mappings from a YAML file that can be passed as a
 program parameter. Refer to the [example mappings
 file](configs/data-dir/mappings.yaml) for more information.
 
-## Environments
+### Environments
 
 Shoelaces supports the notion of environments a.k.a. *env overrides*.
 Consider the following `data-dir` directory structure:
@@ -221,7 +313,7 @@ means /ipxemenu will only present default and non-default **iPXE** entry points,
 and if you have a template that's included later in the boot process as an
 override you won't be able to select it.
 
-## Contributing
+### Contributing
 
 Contributions to Shoelaces are very welcome! Take into account the following
 guidelines:

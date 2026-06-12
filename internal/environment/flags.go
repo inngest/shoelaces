@@ -31,12 +31,17 @@ func (env *Environment) setFlags() {
 	flag.StringVar(&env.TemplateExtension, "template-extension", ".slc", "Shoelaces template extension")
 	flag.StringVar(&env.MappingsFile, "mappings-file", "mappings.yaml", "My mappings YAML file")
 	flag.BoolVar(&env.Debug, "debug", false, "Debug mode")
+	flag.BoolVar(&env.Version, "version", false, "Print version information and exit")
 
 	flag.Parse()
 }
 
 func (env *Environment) validateFlags() {
 	error := false
+
+	if env.Version {
+		return
+	}
 
 	if env.DataDir == "" {
 		fmt.Println("[*] You must specify the data-dir parameter")

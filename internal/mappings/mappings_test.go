@@ -70,15 +70,15 @@ func TestScript(t *testing.T) {
 func TestFindScriptForHostname(t *testing.T) {
 	maps := []HostnameMap{mockHostNameMap1, mockHostNameMap2}
 	script, success := FindScriptForHostname(maps, "mock_host1")
-	if !(script.Name == "mock_script1" && success) {
+	if script.Name != "mock_script1" || !success {
 		t.Error("Hostname should have matched")
 	}
 	script, success = FindScriptForHostname(maps, "mock_host2")
-	if !(script.Name == "mock_script2" && success) {
+	if script.Name != "mock_script2" || !success {
 		t.Error("Hostname should have matched")
 	}
 	script, success = FindScriptForHostname(maps, "mock_host_bad")
-	if !(script == nil && !success) {
+	if script != nil || success {
 		t.Error("Hostname should have not matched")
 	}
 }
@@ -86,15 +86,15 @@ func TestFindScriptForHostname(t *testing.T) {
 func TestScriptForNetwork(t *testing.T) {
 	maps := []NetworkMap{mockNetworkMap1, mockNetworkMap2}
 	script, success := FindScriptForNetwork(maps, "10.0.0.1")
-	if !(script.Name == "mock_script1" && success) {
+	if script.Name != "mock_script1" || !success {
 		t.Error("IP should have matched the network map")
 	}
 	script, success = FindScriptForNetwork(maps, "192.168.0.1")
-	if !(script.Name == "mock_script2" && success) {
+	if script.Name != "mock_script2" || !success {
 		t.Error("IP should have matched the network map")
 	}
 	script, success = FindScriptForNetwork(maps, "8.8.8.8")
-	if !(script == nil && !success) {
+	if script != nil || success {
 		t.Error("IP shouildn't have matched the network map")
 	}
 }

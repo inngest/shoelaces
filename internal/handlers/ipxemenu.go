@@ -44,10 +44,10 @@ func IPXEMenu(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var bootItemsBuffer bytes.Buffer
-	//Creates the top portion of the iPXE menu
+	// Creates the top portion of the iPXE menu.
 	bootItemsBuffer.WriteString(menuHeader)
 	for _, s := range scripts {
-		//Formats the bootable scripts separated by newlines into a single string
+		// Formats the bootable scripts separated by newlines into a single string.
 		var desc string
 		if len(s.Env) > 0 {
 			desc = fmt.Sprintf("%s [%s]", s.Name, s.Env)
@@ -57,7 +57,7 @@ func IPXEMenu(w http.ResponseWriter, r *http.Request) {
 		bootItem := fmt.Sprintf("item %s%s %s\n", s.Path, s.Name, desc)
 		bootItemsBuffer.WriteString(bootItem)
 	}
-	//Creates the bottom portion of the iPXE menu
+	// Creates the bottom portion of the iPXE menu.
 	bootItemsBuffer.WriteString(fmt.Sprintf(menuFooter, env.BaseURL))
-	w.Write(bootItemsBuffer.Bytes())
+	_, _ = w.Write(bootItemsBuffer.Bytes())
 }

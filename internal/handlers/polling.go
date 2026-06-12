@@ -16,7 +16,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -32,11 +32,10 @@ import (
 func StartPollingHandler(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 
-	script := polling.GenStartScript(env.Logger,  env.BaseURL)
+	script := polling.GenStartScript(env.Logger, env.BaseURL)
 
-	w.Write([]byte(script))
+	_, _ = w.Write([]byte(script))
 }
-
 
 // PollHandler is called by iPXE boot agents. It returns the boot script
 // specified on the configuration or, if the host is unknown, it makes it
@@ -74,7 +73,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte(script))
+	_, _ = w.Write([]byte(script))
 }
 
 // ServerListHandler provides a list of the servers that tried to boot
@@ -89,7 +88,7 @@ func ServerListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(servers)
+	_, _ = w.Write(servers)
 }
 
 // UpdateTargetHandler is a POST endpoint that receives parameters for
@@ -132,13 +131,14 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 func parsePostForm(form map[string][]string) (mac, scriptName, environment string, params map[string]interface{}) {
 	params = make(map[string]interface{})
 	for k, v := range form {
-		if k == "mac" {
+		switch k {
+		case "mac":
 			mac = utils.MacDashToColon(v[0])
-		} else if k == "target" {
+		case "target":
 			scriptName = v[0]
-		} else if k == "environment" {
+		case "environment":
 			environment = v[0]
-		} else {
+		default:
 			params[k] = v[0]
 		}
 	}
@@ -148,12 +148,12 @@ func parsePostForm(form map[string][]string) (mac, scriptName, environment strin
 func validateMACAndIP(logger log.Logger, mac string, ip string) (err error) {
 	if !utils.IsValidMAC(mac) {
 		logger.Error("component", "polling", "msg", "Invalid MAC", "mac", mac)
-		return fmt.Errorf("%s", "Invalid MAC")
+		return errors.New("invalid MAC")
 	}
 
 	if !utils.IsValidIP(ip) {
 		logger.Error("component", "polling", "msg", "Invalid IP", "ip", ip)
-		return fmt.Errorf("%s", "Invalid IP")
+		return errors.New("invalid IP")
 	}
 
 	logger.Debug("component", "polling", "msg", "MAC and IP validated", "mac", mac, "ip", ip)

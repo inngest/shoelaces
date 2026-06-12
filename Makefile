@@ -18,11 +18,13 @@ shoelaces.8:
 
 docs: shoelaces.8
 
-test: fmt
-		$(GO) test -v $(pkgs) && \
-			./test/integ-test/integ_test.py -vv
+unit: fmt
+	$(GO) test -v $(pkgs)
 
-.PHONY: all clean docs
+test: unit
+	./test/integ-test/integ_test.py -vv
+
+.PHONY: all clean docs unit test
 
 binaries: linux windows
 linux:
