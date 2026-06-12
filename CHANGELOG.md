@@ -1,8 +1,14 @@
+## 2026-06-12.05
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Publish per-platform Shoelaces artifacts (#26)
 ## 2026-06-12.04
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Split out the release and tag operations due to aws credentials (#24)
+- *(release)* V2026-06-12.04 (#25)
 ## 2026-06-12.03
 
 ### ⚙️ Miscellaneous Tasks
