@@ -9,10 +9,12 @@ before:
 
 builds:
   - id: shoelaces
-    main: ./main.go
+    main: ./cmd/shoelaces/main.go
     binary: shoelaces
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser
     goos:
