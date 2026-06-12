@@ -47,6 +47,10 @@ jobs:
 
   release-package:
     name: GoReleaser Dry Run
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.head_ref == 'release/next' &&
+      startsWith(github.event.pull_request.title, 'chore(release): v')
     runs-on: depot-ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
