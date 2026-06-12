@@ -14,7 +14,7 @@ Local unit-test, build, and version checks:
 ```bash
 go test ./...
 go test -race ./...
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o shoelaces ./main.go
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o shoelaces ./cmd/shoelaces
 ./shoelaces -version
 ```
 
@@ -25,19 +25,22 @@ The `make test` target runs `make unit` and then the historical Python integrati
 CI currently runs:
 
 - `go test -race ./...`
-- Linux amd64 binary build from `./main.go`
+- Linux amd64 binary build from `./cmd/shoelaces`
 - `golangci-lint`
 - a GoReleaser snapshot dry run
 
 ## Proposed release process
 
 Shoelaces now follows the same broad release pattern as Atlas: tags drive GoReleaser, GoReleaser publishes GitHub release artifacts, and the production deployment path is separated from release artifact creation.
-Every push to `master` creates a date-based release tag and publishes a GitHub release with GoReleaser.
+Every push to `master` creates or updates a `release/next` PR with a date-based release tag in the PR title.
+Merging that release PR creates the tag and publishes a GitHub release with GoReleaser.
 The important Shoelaces-specific difference is that the current Ansible deployment still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so S3 publication is an explicit manual step until a follow-up Ansible change teaches it to pull from GitHub releases.
 
-### Automatic GitHub releases on master
+### Automatic GitHub releases
 
-Merging to `master` runs the `Build` workflow, creates the next `vYYYY-MM-DD.NN` tag, and publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release with GoReleaser.
+Merging ordinary changes to `master` runs the auto-release PR workflow.
+It computes the next `vYYYY-MM-DD.NN` tag, updates `CHANGELOG.md`, and opens or updates `release/next`.
+When `release/next` is merged, the release tag workflow creates the tag from the release PR title and publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release with GoReleaser.
 This does not publish to S3 and therefore does not change the artifact consumed by existing Shoelaces Ansible deployments.
 
 ### GitHub release validation, no S3
