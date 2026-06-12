@@ -1,3 +1,8 @@
+## 2026-06-12.03
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Fix workflow permissions (#22)
 ## 2026-06-12.02
 
 ### 💼 Other
@@ -8,6 +13,7 @@
 
 - *(release)* Automate shoelaces release flow (#19)
 - Consolidate shoelaces release publishing (#21)
+- *(release)* V2026-06-12.02 (#20)
 ## 2025-11-02.01
 
 ### 🚀 Features
