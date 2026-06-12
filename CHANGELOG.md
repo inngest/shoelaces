@@ -1,4 +1,14 @@
-## [2025-11-02.01] - 2025-11-02
+## 2026-06-12.02
+
+### 💼 Other
+
+- *(dep)* Bump golang.org/x/net from 0.23.0 to 0.38.0 (#2)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Automate shoelaces release flow (#19)
+- Consolidate shoelaces release publishing (#21)
+## 2025-11-02.01
 
 ### 🚀 Features
 
