@@ -2,7 +2,7 @@
 
 This repository is Inngest's maintained fork of [ThousandEyes Shoelaces](https://github.com/thousandeyes/shoelaces).
 Shoelaces serves iPXE, configuration, and static firstboot assets for bare-metal provisioning.
-At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 release artifacts, while GitHub releases are safe to create for validation because no production automation consumes them yet.
+At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 release artifacts, so the release workflow publishes both GitHub release artifacts and the S3 compatibility path.
 
 ## Building and testing
 
@@ -31,38 +31,18 @@ CI currently runs:
 
 ## Proposed release process
 
-Shoelaces now follows the same broad release pattern as Atlas: tags drive GoReleaser, GoReleaser publishes GitHub release artifacts, and the production deployment path is separated from release artifact creation.
+Shoelaces now follows the same broad release pattern as Atlas: release PRs drive tags, and tags drive GoReleaser.
 Every push to `master` creates or updates a `release/next` PR with a date-based release tag in the PR title.
-Merging that release PR creates the tag and publishes a GitHub release with GoReleaser.
-The important Shoelaces-specific difference is that the current Ansible deployment still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so S3 publication is an explicit manual step until a follow-up Ansible change teaches it to pull from GitHub releases.
+Merging that release PR creates the tag and publishes GitHub release plus S3 artifacts with GoReleaser.
+The important Shoelaces-specific difference is that the current Ansible deployment still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so the release workflow also publishes that compatibility path.
 
-### Automatic GitHub releases
+### Automatic releases
 
 Merging ordinary changes to `master` runs the auto-release PR workflow.
 It computes the next `vYYYY-MM-DD.NN` tag, updates `CHANGELOG.md`, and opens or updates `release/next`.
 When `release/next` is merged, the release tag workflow creates the tag from the release PR title and publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release with GoReleaser.
-This does not publish to S3 and therefore does not change the artifact consumed by existing Shoelaces Ansible deployments.
-
-### GitHub release validation, no S3
-
-Use the `Build` workflow with `workflow_dispatch` to test the release path and publish a GitHub release without touching S3:
-
-```bash
-gh workflow run .github/workflows/build.yaml \
-  --ref <branch-or-tag> \
-  -f release_tag=test-<descriptive-name> \
-  -f publish_github_release=true \
-  -f publish_s3=false
-```
-
-This creates or reuses the requested tag, runs GoReleaser, publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release, and skips GoReleaser's S3 blob publisher.
-GitHub test releases and test tags are safe to delete later because no live deployment depends on them.
-
-### Explicit S3 release, after approval and merge
-
-Only publish to S3 after the code has been reviewed, approved, and merged into the intended release path.
-S3 publication is handled by GoReleaser's S3 blob publisher.
-It writes both an immutable version prefix and the mutable `latest` prefix consumed by Ansible:
+It also publishes the same archive and checksum file to S3 using GoReleaser's S3 blob publisher.
+S3 publication writes both an immutable version prefix and the mutable `latest` prefix consumed by Ansible:
 
 ```text
 s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz
@@ -71,17 +51,6 @@ s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz
 s3://inngest-artifacts/shoelaces/releases/latest/checksums.txt
 ```
 
-The guarded manual path is:
-
-```bash
-gh workflow run .github/workflows/build.yaml \
-  --ref <approved-release-tag-or-branch> \
-  -f release_tag=<vYYYY-MM-DD.NN> \
-  -f publish_github_release=true \
-  -f publish_s3=true
-```
-
-Do not run the workflow with `publish_s3=true` unless intentionally updating the Ansible-consumed `latest` artifact.
 After S3 publication, the user should run the Ansible deployment; agents must not run Inngest Ansible.
 
 A follow-up Ansible ticket should switch Shoelaces installation to consume GitHub release artifacts directly.

@@ -81,6 +81,13 @@ jobs:
         if: steps.release.outputs.skip == 'false'
         run: scripts/export-release-notes.sh "${{ steps.release.outputs.tag_name }}" RELEASE_NOTES.md
 
+      - name: Configure AWS credentials
+        if: steps.release.outputs.skip == 'false'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::836356947314:role/ProdGHActionAccess
+          aws-region: us-east-2
+
       - name: Run GoReleaser
         if: steps.release.outputs.skip == 'false'
         uses: goreleaser/goreleaser-action@v7
@@ -90,3 +97,4 @@ jobs:
           args: release --clean --skip=validate --release-notes RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
+          PUBLISH_S3: "true"
