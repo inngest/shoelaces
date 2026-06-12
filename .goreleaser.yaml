@@ -19,16 +19,21 @@ builds:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser
     goos:
       - linux
+      - windows
+      - darwin
     goarch:
       - amd64
+      - arm64
 
 archives:
-  - id: shoelaces-archive
+  - id: shoelaces-archives
     ids:
       - shoelaces
-    formats:
-      - tar.gz
-    name_template: shoelaces
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
     files:
       - none*
 
@@ -41,7 +46,7 @@ blobs:
     bucket: inngest-artifacts
     directory: "shoelaces/releases/{{ .Tag }}"
     ids:
-      - shoelaces-archive
+      - shoelaces-archives
     extra_files:
       - glob: ./dist/checksums.txt
     disable: '{{ ne .Env.PUBLISH_S3 "true" }}'
@@ -50,7 +55,7 @@ blobs:
     bucket: inngest-artifacts
     directory: "shoelaces/releases/latest"
     ids:
-      - shoelaces-archive
+      - shoelaces-archives
     extra_files:
       - glob: ./dist/checksums.txt
     disable: '{{ ne .Env.PUBLISH_S3 "true" }}'
