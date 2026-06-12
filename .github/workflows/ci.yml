@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - master
   pull_request:
 
 permissions:
@@ -34,7 +36,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Build Linux amd64 binary
-        run: go build -o shoelaces ./main.go
+        run: go build -o shoelaces ./cmd/shoelaces
         env:
           CGO_ENABLED: "0"
           GOOS: linux
@@ -100,4 +102,3 @@ jobs:
         with:
           version: v2.2.1
           args: --verbose
-
