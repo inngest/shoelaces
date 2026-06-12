@@ -5,10 +5,10 @@ LDFLAGS = "-s -w"
 pkgs = $(shell $(GO) list ./... | grep -v /vendor/)
 
 all:
-	$(GO) build
+	$(GO) build ./cmd/shoelaces
 
 fmt:
-	$(GO) fmt
+	$(GO) fmt ./...
 
 clean:
 	rm -f shoelaces docs/shoelaces.8
@@ -28,6 +28,6 @@ test: unit
 
 binaries: linux windows
 linux:
-		GOOS=linux ${GO} build -o bin/shoelaces -ldflags ${LDFLAGS}
+		GOOS=linux ${GO} build -o bin/shoelaces -ldflags ${LDFLAGS} ./cmd/shoelaces
 windows:
-		GOOS=windows ${GO} build -o bin/shoelaces.exe -ldflags ${LDFLAGS}
+		GOOS=windows ${GO} build -o bin/shoelaces.exe -ldflags ${LDFLAGS} ./cmd/shoelaces
