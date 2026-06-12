@@ -52,7 +52,7 @@ jobs:
           tag_name="$(printf '%s\n' "${PR_TITLE}" | sed -E 's/^chore\(release\): (v[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{2})$/\1/')"
           changelog_version="${tag_name#v}"
 
-          if ! grep -Fq "## [${changelog_version}]" CHANGELOG.md; then
+          if ! grep -Eq "^## (${changelog_version}|\[${changelog_version}\])([[:space:]]|$)" CHANGELOG.md; then
             echo "CHANGELOG.md does not contain an entry for ${changelog_version}"
             exit 1
           fi
@@ -81,6 +81,13 @@ jobs:
         if: steps.release.outputs.skip == 'false'
         run: scripts/export-release-notes.sh "${{ steps.release.outputs.tag_name }}" RELEASE_NOTES.md
 
+      - name: Configure AWS credentials
+        if: steps.release.outputs.skip == 'false'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::836356947314:role/ProdGHActionAccess
+          aws-region: us-east-2
+
       - name: Run GoReleaser
         if: steps.release.outputs.skip == 'false'
         uses: goreleaser/goreleaser-action@v7
@@ -90,3 +97,4 @@ jobs:
           args: release --clean --skip=validate --release-notes RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
+          PUBLISH_S3: "true"

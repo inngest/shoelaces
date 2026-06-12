@@ -23,7 +23,7 @@ builds:
       - amd64
 
 archives:
-  - id: shoelaces
+  - id: shoelaces-archive
     ids:
       - shoelaces
     formats:
@@ -34,6 +34,26 @@ archives:
 
 checksum:
   name_template: checksums.txt
+
+blobs:
+  - provider: s3
+    region: us-east-2
+    bucket: inngest-artifacts
+    directory: "shoelaces/releases/{{ .Tag }}"
+    ids:
+      - shoelaces-archive
+    extra_files:
+      - glob: ./dist/checksums.txt
+    disable: '{{ ne .Env.PUBLISH_S3 "true" }}'
+  - provider: s3
+    region: us-east-2
+    bucket: inngest-artifacts
+    directory: "shoelaces/releases/latest"
+    ids:
+      - shoelaces-archive
+    extra_files:
+      - glob: ./dist/checksums.txt
+    disable: '{{ ne .Env.PUBLISH_S3 "true" }}'
 
 snapshot:
   version_template: "{{ .Tag }}-next"

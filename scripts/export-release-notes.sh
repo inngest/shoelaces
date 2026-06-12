@@ -24,17 +24,19 @@ if [ ! -f "${changelog_file}" ]; then
   exit 1
 fi
 
-changelog_heading="## [${release_tag#v}]"
+changelog_version="${release_tag#v}"
+current_heading="## ${changelog_version}"
+legacy_heading="## [${changelog_version}]"
 
 notes="$(
-  awk -v heading="${changelog_heading}" '
-    index($0, heading) == 1 {
+  awk -v current_heading="${current_heading}" -v legacy_heading="${legacy_heading}" '
+    $0 == current_heading || index($0, legacy_heading) == 1 {
       in_release = 1
       print
       next
     }
 
-    in_release && /^## \[/ {
+    in_release && /^## / {
       exit
     }
 
