@@ -1,8 +1,14 @@
+## 2026-06-12.04
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Split out the release and tag operations due to aws credentials (#24)
 ## 2026-06-12.03
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Fix workflow permissions (#22)
+- *(release)* V2026-06-12.03 (#23)
 ## 2026-06-12.02
 
 ### 💼 Other
