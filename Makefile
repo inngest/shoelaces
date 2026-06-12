@@ -2,7 +2,7 @@ GO = go
 SCDOC = scdoc
 LDFLAGS = "-s -w"
 
-pkgs = $(shell $(GO) list ./... | grep -v /vendor/)
+pkgs = ./...
 
 all:
 	$(GO) build ./cmd/shoelaces
@@ -19,7 +19,7 @@ shoelaces.8:
 docs: shoelaces.8
 
 unit: fmt
-	$(GO) test -v $(pkgs)
+	$(GO) test -v -count=1 $(pkgs)
 
 test: unit
 	./test/integ-test/integ_test.py -vv
