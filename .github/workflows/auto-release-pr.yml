@@ -14,6 +14,10 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  # Use the release bot token so release/next pushes and PR updates trigger normal workflow fanout.
+  GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
 concurrency:
   group: release-pr-master
   cancel-in-progress: true
@@ -23,10 +27,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate release token
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error title=Missing RELEASE_TOKEN::Configure the release bot token as the RELEASE_TOKEN repository secret."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ env.GH_TOKEN }}
 
       - name: Skip release commits
         id: skip
@@ -144,8 +156,6 @@ jobs:
       - name: Find existing release PR
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         id: existing-pr
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           pr_number="$(gh pr list \
             --base "${{ github.event.repository.default_branch }}" \
@@ -159,7 +169,6 @@ jobs:
       - name: Create release PR
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0' && steps.existing-pr.outputs.pr_number == ''
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.next-version.outputs.tag }}
         run: |
           gh pr create \
@@ -171,7 +180,6 @@ jobs:
       - name: Update existing release PR
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0' && steps.existing-pr.outputs.pr_number != ''
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.next-version.outputs.tag }}
         run: |
           gh pr edit "${{ steps.existing-pr.outputs.pr_number }}" \

@@ -9,6 +9,10 @@ permissions:
   actions: write
   contents: write
 
+env:
+  # Use the release bot token so tag/release pushes trigger normal workflow fanout.
+  RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
 concurrency:
   group: release-tag-${{ github.event.pull_request.number }}
   cancel-in-progress: false
@@ -19,11 +23,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate release token
+        run: |
+          if [ -z "${RELEASE_TOKEN}" ]; then
+            echo "::error title=Missing RELEASE_TOKEN::Configure the release bot token as the RELEASE_TOKEN repository secret."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ env.RELEASE_TOKEN }}
 
       - name: Determine release tag
         id: release
@@ -77,4 +89,4 @@ jobs:
           version: "~> v2"
           args: release --clean --skip=validate --release-notes RELEASE_NOTES.md
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
