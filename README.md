@@ -40,14 +40,16 @@ The important Shoelaces-specific difference is that the current Ansible deployme
 
 Merging ordinary changes to `master` runs the auto-release PR workflow.
 It computes the next `vYYYY-MM-DD.NN` tag, updates `CHANGELOG.md`, and opens or updates `release/next`.
-When `release/next` is merged, the release tag workflow creates the tag from the release PR title and publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release with GoReleaser.
-It also publishes the same archive and checksum file to S3 using GoReleaser's S3 blob publisher.
-S3 publication writes both an immutable version prefix and the mutable `latest` prefix consumed by Ansible:
+When `release/next` is merged, the release tag workflow creates the tag from the release PR title and publishes per-platform archives plus `checksums.txt` to the GitHub release with GoReleaser.
+It also publishes the same archives and checksum file to S3 using GoReleaser's S3 blob publisher.
+S3 publication writes both an immutable version prefix and the mutable `latest` prefix:
 
 ```text
-s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz
+s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces_<version>_<os>_<arch>.tar.gz
+s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces_<version>_windows_<arch>.zip
 s3://inngest-artifacts/shoelaces/releases/<release_tag>/checksums.txt
-s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz
+s3://inngest-artifacts/shoelaces/releases/latest/shoelaces_<version>_<os>_<arch>.tar.gz
+s3://inngest-artifacts/shoelaces/releases/latest/shoelaces_<version>_windows_<arch>.zip
 s3://inngest-artifacts/shoelaces/releases/latest/checksums.txt
 ```
 

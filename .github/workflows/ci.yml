@@ -71,10 +71,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          test -f dist/shoelaces.tar.gz
           test -f dist/checksums.txt
-          tar -tzf dist/shoelaces.tar.gz | grep -Fx shoelaces
-          grep -F "shoelaces.tar.gz" dist/checksums.txt
+
+          for target in \
+            darwin_amd64.tar.gz \
+            darwin_arm64.tar.gz \
+            linux_amd64.tar.gz \
+            linux_arm64.tar.gz \
+            windows_amd64.zip \
+            windows_arm64.zip
+          do
+            matches=(dist/shoelaces_*_"${target}")
+            test "${#matches[@]}" -eq 1
+            grep -F "$(basename "${matches[0]}")" dist/checksums.txt
+          done
+
+          linux_amd64_archive=(dist/shoelaces_*_linux_amd64.tar.gz)
+          tar -tzf "${linux_amd64_archive[0]}" | grep -Fx shoelaces
 
       - uses: actions/upload-artifact@v4
         with:
