@@ -67,23 +67,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Verify S3-compatible artifact shape
+      - name: Verify release artifact shape
         run: |
           set -euo pipefail
-          mkdir s3-artifacts
 
           test -f dist/shoelaces.tar.gz
-          cp dist/shoelaces.tar.gz s3-artifacts/shoelaces.tar.gz
-          md5sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.md5
-          sha256sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.sha256
-          tar -tzf s3-artifacts/shoelaces.tar.gz | grep -Fx shoelaces
+          test -f dist/checksums.txt
+          tar -tzf dist/shoelaces.tar.gz | grep -Fx shoelaces
+          grep -F "shoelaces.tar.gz" dist/checksums.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: shoelaces-release-dry-run
           path: |
             dist/*
-            s3-artifacts/*
           retention-days: 7
 
   lint:

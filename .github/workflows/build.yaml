@@ -59,6 +59,7 @@ jobs:
       id-token: write
     env:
       REVISION: ${{ needs.tag.outputs.value }}
+      PUBLISH_S3: ${{ inputs.publish_s3 }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -70,6 +71,19 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Validate inputs
+        if: ${{ inputs.publish_s3 && !inputs.publish_github_release }}
+        run: |
+          echo "::error title=Invalid release options::publish_s3=true requires publish_github_release=true so GoReleaser publishes artifacts."
+          exit 1
+
+      - name: Configure AWS credentials
+        if: ${{ inputs.publish_s3 }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::836356947314:role/ProdGHActionAccess
+          aws-region: us-east-2
+
       - name: Run GoReleaser
         if: ${{ inputs.publish_github_release }}
         uses: goreleaser/goreleaser-action@v7
@@ -79,6 +93,7 @@ jobs:
           args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PUBLISH_S3: ${{ env.PUBLISH_S3 }}
 
       - name: Run GoReleaser snapshot
         if: ${{ !inputs.publish_github_release }}
@@ -90,40 +105,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Prepare S3-compatible artifact set
-        run: |
-          set -euo pipefail
-          mkdir s3-artifacts
-
-          test -f dist/shoelaces.tar.gz
-          cp dist/shoelaces.tar.gz s3-artifacts/shoelaces.tar.gz
-          md5sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.md5
-          sha256sum s3-artifacts/shoelaces.tar.gz > s3-artifacts/shoelaces.tar.gz.sha256
-          tar -tzf s3-artifacts/shoelaces.tar.gz | grep -Fx shoelaces
-
-      - name: Prep credentials
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
-        run: |
-          echo "AWS_S3_BUCKET=inngest-artifacts" >> $GITHUB_ENV
-          echo "AWS_ASSUME_ROLE=arn:aws:iam::836356947314:role/ProdGHActionAccess" >> $GITHUB_ENV
-
-      - name: Configure AWS credentials
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ASSUME_ROLE }}
-          aws-region: us-east-2
-
-      - name: Sync artifacts to S3
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_s3 }}
-        run: |
-          aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/${{ env.REVISION }}
-          aws s3 sync --delete ./s3-artifacts s3://${{ env.AWS_S3_BUCKET }}/shoelaces/releases/latest
-
       - uses: actions/upload-artifact@v4
         with:
           name: shoelaces
           path: |
             dist/*
-            s3-artifacts/*
           retention-days: 7

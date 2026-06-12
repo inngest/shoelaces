@@ -55,21 +55,20 @@ gh workflow run .github/workflows/build.yaml \
   -f publish_s3=false
 ```
 
-This creates or reuses the requested tag, runs GoReleaser, publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release, prepares the S3-compatible artifact set internally, and skips AWS credentials plus S3 sync.
+This creates or reuses the requested tag, runs GoReleaser, publishes `shoelaces.tar.gz` plus `checksums.txt` to the GitHub release, and skips GoReleaser's S3 blob publisher.
 GitHub test releases and test tags are safe to delete later because no live deployment depends on them.
 
 ### Explicit S3 release, after approval and merge
 
 Only publish to S3 after the code has been reviewed, approved, and merged into the intended release path.
-S3 publication writes both an immutable version prefix and the mutable `latest` prefix consumed by Ansible:
+S3 publication is handled by GoReleaser's S3 blob publisher.
+It writes both an immutable version prefix and the mutable `latest` prefix consumed by Ansible:
 
 ```text
 s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz
-s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz.md5
-s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces.tar.gz.sha256
+s3://inngest-artifacts/shoelaces/releases/<release_tag>/checksums.txt
 s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz
-s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz.md5
-s3://inngest-artifacts/shoelaces/releases/latest/shoelaces.tar.gz.sha256
+s3://inngest-artifacts/shoelaces/releases/latest/checksums.txt
 ```
 
 The guarded manual path is:
