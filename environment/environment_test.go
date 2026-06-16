@@ -37,15 +37,25 @@ func TestDefaultEnvironment(t *testing.T) {
 }
 
 func TestInitScript(t *testing.T) {
-	params := make(map[string]string)
-	params["one"] = "one_value"
-	configScript := mappings.YamlScript{Name: "testscript", Environment: "testing", Params: params}
-	mappingScript := initScript(configScript)
+	configMappings := &mappings.Mappings{
+		Defaults: mappings.DefaultsMap{Params: map[string]any{"one": "default", "shared": "default"}},
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script:      "testscript",
+				Environment: "testing",
+				Params:      map[string]any{"one": "target", "two": "target"},
+			},
+		},
+	}
+
+	mappingScript, err := initScriptForTarget(configMappings, "debian12", map[string]any{"two": "mapping"})
+
+	require.NoError(t, err)
 	assert.Equal(t, "testscript", mappingScript.Name)
 	assert.Equal(t, "testing", mappingScript.Environment)
-	val, ok := mappingScript.Params["one"]
-	require.True(t, ok)
-	assert.Equal(t, "one_value", val)
+	assert.Equal(t, "target", mappingScript.Params["one"])
+	assert.Equal(t, "mapping", mappingScript.Params["two"])
+	assert.Equal(t, "default", mappingScript.Params["shared"])
 }
 
 func TestInitEnvOverridesReturnsOnlyDirectories(t *testing.T) {
@@ -101,26 +111,48 @@ func TestInitMappingsLoadsNetworkAndHostnameMaps(t *testing.T) {
 	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
 networkMaps:
   - network: 192.0.2.0/24
-    script:
-      name: network.ipxe
-      environment: testing
-      params:
-        role: network
+    defaultTarget: debian12
+    targets:
+      - debian12
+    params:
+      role: network
+  - network: 2001:db8::/64
+    defaultTarget: debian13
+    targets:
+      - debian13
+    params:
+      role: ipv6-network
 hostnameMaps:
   - hostname: '^host-\d+$'
-    script:
-      name: host.ipxe
-      params:
-        role: host
+    defaultTarget: ubuntu2404
+    targets:
+      - ubuntu2404
+    params:
+      role: host
+targets:
+  debian12:
+    script: network.ipxe
+    environment: testing
+    params:
+      release: bookworm
+  debian13:
+    script: network.ipxe
+    params:
+      release: trixie
+  ubuntu2404:
+    script: host.ipxe
 `), 0o644))
 
 	require.NoError(t, env.initMappings(mappingsPath))
 
-	require.Len(t, env.NetworkMaps, 1)
+	require.Len(t, env.NetworkMaps, 2)
 	assert.True(t, env.NetworkMaps[0].Network.Contains(mustParseIP(t, "192.0.2.10")))
 	assert.Equal(t, "network.ipxe", env.NetworkMaps[0].Script.Name)
 	assert.Equal(t, "testing", env.NetworkMaps[0].Script.Environment)
 	assert.Equal(t, "network", env.NetworkMaps[0].Script.Params["role"])
+	assert.Equal(t, "bookworm", env.NetworkMaps[0].Script.Params["release"])
+	assert.True(t, env.NetworkMaps[1].Network.Contains(mustParseIP(t, "2001:db8::1")))
+	assert.Equal(t, "trixie", env.NetworkMaps[1].Script.Params["release"])
 
 	require.Len(t, env.HostnameMaps, 1)
 	assert.True(t, env.HostnameMaps[0].Hostname.MatchString("host-123"))
@@ -135,8 +167,12 @@ func TestInitMappingsReturnsInvalidCIDRError(t *testing.T) {
 	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
 networkMaps:
   - network: invalid-cidr
-    script:
-      name: network.ipxe
+    defaultTarget: debian12
+    targets:
+      - debian12
+targets:
+  debian12:
+    script: network.ipxe
 `), 0o644))
 
 	assert.Error(t, env.initMappings(mappingsPath))
@@ -149,8 +185,12 @@ func TestInitMappingsReturnsInvalidHostnameRegexError(t *testing.T) {
 	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
 hostnameMaps:
   - hostname: '['
-    script:
-      name: host.ipxe
+    defaultTarget: debian12
+    targets:
+      - debian12
+targets:
+  debian12:
+    script: host.ipxe
 `), 0o644))
 
 	assert.Error(t, env.initMappings(mappingsPath))

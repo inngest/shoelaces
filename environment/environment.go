@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"fmt"
 	"html/template"
 	"net"
 	"os"
@@ -151,7 +152,10 @@ func (env *Environment) initEnvOverrides() []string {
 }
 
 func (env *Environment) initMappings(mappingsPath string) error {
-	configMappings := mappings.ParseYamlMappings(env.Logger, mappingsPath)
+	configMappings, err := mappings.ParseMappings(env.Logger, mappingsPath)
+	if err != nil {
+		return err
+	}
 
 	for _, configNetMap := range configMappings.NetworkMaps {
 		_, ipnet, err := net.ParseCIDR(configNetMap.Network)
@@ -159,7 +163,14 @@ func (env *Environment) initMappings(mappingsPath string) error {
 			return err
 		}
 
-		netMap := mappings.NetworkMap{Network: ipnet, Script: initScript(configNetMap.Script)}
+		script, err := initScriptForTarget(configMappings, configNetMap.DefaultTarget, configNetMap.Params)
+		if err != nil {
+			return err
+		}
+		if script == nil {
+			continue
+		}
+		netMap := mappings.NetworkMap{Network: ipnet, Script: script}
 		env.NetworkMaps = append(env.NetworkMaps, netMap)
 	}
 
@@ -169,22 +180,47 @@ func (env *Environment) initMappings(mappingsPath string) error {
 			return err
 		}
 
-		hostMap := mappings.HostnameMap{Hostname: regex, Script: initScript(configHostMap.Script)}
+		script, err := initScriptForTarget(configMappings, configHostMap.DefaultTarget, configHostMap.Params)
+		if err != nil {
+			return err
+		}
+		if script == nil {
+			continue
+		}
+		hostMap := mappings.HostnameMap{Hostname: regex, Script: script}
 		env.HostnameMaps = append(env.HostnameMaps, hostMap)
 	}
 
 	return nil
 }
 
-func initScript(configScript mappings.YamlScript) *mappings.Script {
-	mappingScript := &mappings.Script{
-		Name:        configScript.Name,
-		Environment: configScript.Environment,
-		Params:      make(map[string]interface{}),
-	}
-	for key := range configScript.Params {
-		mappingScript.Params[key] = configScript.Params[key]
+// initScriptForTarget adapts the new named-target mapping model to the current
+// polling runtime. Phase 2 replaces this default-target-only bridge with a
+// resolver that can expose multiple allowed targets for manual selection.
+func initScriptForTarget(configMappings *mappings.Mappings, targetName string, mappingParams map[string]any) (*mappings.Script, error) {
+	if targetName == "" {
+		return nil, nil
 	}
 
-	return mappingScript
+	target, ok := configMappings.Targets[targetName]
+	if !ok {
+		return nil, fmt.Errorf("default target %q not found", targetName)
+	}
+
+	mappingScript := &mappings.Script{
+		Name:        target.Script,
+		Environment: target.Environment,
+		Params:      make(map[string]interface{}),
+	}
+	for key, value := range configMappings.Defaults.Params {
+		mappingScript.Params[key] = value
+	}
+	for key, value := range target.Params {
+		mappingScript.Params[key] = value
+	}
+	for key, value := range mappingParams {
+		mappingScript.Params[key] = value
+	}
+
+	return mappingScript, nil
 }
