@@ -1,6 +1,6 @@
 #+title: Embed Web UI Assets
 #+author: Darwin D. Wu
-#+status: Active
+#+status: Done
 #+date: <2026-06-15 Mon>
 
 * Embed Web UI Assets
@@ -128,20 +128,20 @@ through =/configs/static/*=.
 
 *** Phase 6: Final Verification
 
-- [ ] Run =go test ./...=.
-- [ ] Build and smoke test a binary with a valid =-data-dir= and no local =web/=
+- [X] Run =go test ./...=.
+- [X] Build and smoke test a binary with a valid =-data-dir= and no local =web/=
   directory.
 
 ** Acceptance Criteria
 
-- [ ] =go test ./...= passes.
-- [ ] Built binary runs with a valid =-data-dir= and no local =web/= directory.
-- [ ] UI routes render successfully for =/=, =/events=, and =/mappings=.
-- [ ] =/static/*= serves embedded UI assets.
-- [ ] =/configs/static/*= continues serving files from =data-dir/static=.
-- [ ] UI static loading and provisioning static loading remain separate; neither
+- [X] =go test ./...= passes.
+- [X] Built binary runs with a valid =-data-dir= and no local =web/= directory.
+- [X] UI routes render successfully for =/=, =/events=, and =/mappings=.
+- [X] =/static/*= serves embedded UI assets.
+- [X] =/configs/static/*= continues serving files from =data-dir/static=.
+- [X] UI static loading and provisioning static loading remain separate; neither
   handler falls back to the other's filesystem.
-- [ ] Release archives do not need to include =web/=.
+- [X] Release archives do not need to include =web/=.
 
 ** Notes And Risks
 
