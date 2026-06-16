@@ -1,6 +1,6 @@
 #+title: Provisioning Config Model
 #+author: Darwin D. Wu
-#+status: Draft
+#+status: Active
 #+date: <2026-06-16 Tue>
 
 * Provisioning Config Model
@@ -88,20 +88,20 @@ macMaps:
 
 *** Phase 1: New Schema And Parser Foundation
 
-- [ ] Convert mapping parsing from direct =yaml.Unmarshal= to a Koanf-backed
+- [X] Convert mapping parsing from direct =yaml.Unmarshal= to a Koanf-backed
   loader.
-- [ ] Change mapping parsing to return errors instead of calling =os.Exit= so
+- [X] Change mapping parsing to return errors instead of calling =os.Exit= so
   callers and tests can report parse/load failures cleanly.
-- [ ] Define typed structs for the new mapping schema only: =defaults=,
+- [X] Define typed structs for the new mapping schema only: =defaults=,
   =targets=, =networkMaps=, =hostnameMaps=, =macMaps=, and =ipMaps=.
-- [ ] Add strict top-level key validation for known mapping sections:
+- [X] Add strict top-level key validation for known mapping sections:
   =defaults=, =targets=, =networkMaps=, =hostnameMaps=, =macMaps=, and
   =ipMaps=.
-- [ ] Add validation that mappings reference existing named =targets= and that
+- [X] Add validation that mappings reference existing named =targets= and that
   =defaultTarget=, when set, is included in the mapping's allowed =targets=.
-- [ ] Add tests proving the new example =mappings.yaml= parses.
-- [ ] Add tests proving IPv4 and IPv6 CIDR network mappings parse and match.
-- [ ] Add tests proving parser errors are returned for missing files, invalid
+- [X] Add tests proving the new example =mappings.yaml= parses.
+- [X] Add tests proving IPv4 and IPv6 CIDR network mappings parse and match.
+- [X] Add tests proving parser errors are returned for missing files, invalid
   YAML, unknown top-level keys, invalid target references, invalid CIDRs, and
   invalid hostname regexes.
 
