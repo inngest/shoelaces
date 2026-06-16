@@ -47,7 +47,7 @@ Use standard conventional commit formatting such as
 
 ### Running Shoelaces
 
-- `./shoelaces --config configs/shoelaces.conf` runs with the example config.
+- `./shoelaces --config configs/shoelaces.toml` runs with the example config.
 - The default web UI is available at `localhost:8081`.
 
 ## Project Architecture

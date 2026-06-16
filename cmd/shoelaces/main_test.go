@@ -16,43 +16,82 @@ import (
 func TestConfigPathFromArgs(t *testing.T) {
 	lookupEnv := func(key string) (string, bool) {
 		if key == "CONFIG" {
-			return "env.conf", true
+			return "env.toml", true
 		}
 		return "", false
 	}
 
-	assert.Equal(t, "flag.conf", configPathFromArgs([]string{"shoelaces", "-config", "flag.conf"}, lookupEnv))
-	assert.Equal(t, "flag.conf", configPathFromArgs([]string{"shoelaces", "--config=flag.conf"}, lookupEnv))
-	assert.Equal(t, "env.conf", configPathFromArgs([]string{"shoelaces"}, lookupEnv))
-	assert.Equal(t, "env.conf", configPathFromArgs([]string{"shoelaces", "--", "--config=ignored.conf"}, lookupEnv))
+	assert.Equal(t, "flag.toml", configPathFromArgs([]string{"shoelaces", "-config", "flag.toml"}, lookupEnv))
+	assert.Equal(t, "flag.toml", configPathFromArgs([]string{"shoelaces", "--config=flag.toml"}, lookupEnv))
+	assert.Equal(t, "env.toml", configPathFromArgs([]string{"shoelaces"}, lookupEnv))
+	assert.Equal(t, "env.toml", configPathFromArgs([]string{"shoelaces", "--", "--config=ignored.toml"}, lookupEnv))
 }
 
-func TestReadConfigSupportsFlatAndLegacyTFTPSections(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "shoelaces.conf")
-	require.NoError(t, os.WriteFile(configPath, []byte(`
-bind-addr=localhost:8081
-data-dir configs/data-dir/
-debug
+func TestReadConfigSupportsStructuredFormats(t *testing.T) {
+	tests := map[string]string{
+		"shoelaces.toml": `
+bind-addr = "localhost:8081"
+data-dir = "configs/data-dir/"
+debug = true
 
 [tftp]
 enabled = true
 address = ":69"
 root = "/var/lib/shoelaces/tftp"
 readonly = true
-timeout_seconds = 5
-`), 0o644))
+timeout = "5s"
+`,
+		"shoelaces.yaml": `
+bind-addr: localhost:8081
+data-dir: configs/data-dir/
+debug: true
+tftp:
+  enabled: true
+  address: ":69"
+  root: /var/lib/shoelaces/tftp
+  readonly: true
+  timeout: 5s
+`,
+		"shoelaces.json": `{
+  "bind-addr": "localhost:8081",
+  "data-dir": "configs/data-dir/",
+  "debug": true,
+  "tftp": {
+    "enabled": true,
+    "address": ":69",
+    "root": "/var/lib/shoelaces/tftp",
+    "readonly": true,
+    "timeout": "5s"
+  }
+}`,
+	}
 
-	values, err := readConfig(configPath)
-	require.NoError(t, err)
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), name)
+			require.NoError(t, os.WriteFile(configPath, []byte(body), 0o644))
 
-	assert.Equal(t, "localhost:8081", values["bind-addr"])
-	assert.Equal(t, "configs/data-dir/", values["data-dir"])
-	assert.Equal(t, "true", values["debug"])
-	assert.Equal(t, "true", values["tftp-enabled"])
-	assert.Equal(t, ":69", values["tftp-addr"])
-	assert.Equal(t, "/var/lib/shoelaces/tftp", values["tftp-root"])
-	assert.Equal(t, "true", values["tftp-readonly"])
-	assert.Equal(t, "5s", values["tftp-timeout"])
+			values, err := readConfig(configPath)
+			require.NoError(t, err)
+
+			assert.Equal(t, "localhost:8081", values["bind-addr"])
+			assert.Equal(t, "configs/data-dir/", values["data-dir"])
+			assert.Equal(t, true, values["debug"])
+			assert.Equal(t, true, values["tftp-enabled"])
+			assert.Equal(t, ":69", values["tftp-addr"])
+			assert.Equal(t, "/var/lib/shoelaces/tftp", values["tftp-root"])
+			assert.Equal(t, true, values["tftp-readonly"])
+			assert.Equal(t, "5s", values["tftp-timeout"])
+		})
+	}
+}
+
+func TestReadConfigRejectsUnsupportedFormat(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "shoelaces.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte("data-dir=configs/data-dir/"), 0o644))
+
+	_, err := readConfig(configPath)
+	assert.ErrorContains(t, err, "unsupported config file extension")
 }
 
 func TestCommandAppliesCLIEnvConfigPrecedence(t *testing.T) {

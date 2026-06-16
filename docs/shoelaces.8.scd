@@ -96,25 +96,29 @@ environment variables, then config file values, then defaults. Environment
 variable names are uppercase flag names with hyphens converted to underscores,
 such as *DATA_DIR*, *BIND_ADDR*, and *TFTP_ENABLED*.
 
-Config files accept flat "key=value" or "key value" entries. The embedded TFTP
-settings also accept the existing "[tftp]" section form.
+Config files can be TOML, YAML, or JSON. The parser is selected from the file
+extension: ".toml", ".yaml", ".yml", or ".json". Nested TFTP settings use a
+"tftp" object/table and map to the "tftp-*" CLI flags.
 
-Here is example config file:
+Here is an example TOML config file:
 
 ```
-bind-addr=localhost:8081
-data-dir=/etc/shoelaces/data-dir/
-template-extension=.slc
-mappings-file=mappings.yaml
-debug=true
+bind-addr = "localhost:8081"
+data-dir = "/etc/shoelaces/data-dir/"
+template-extension = ".slc"
+mappings-file = "mappings.yaml"
+debug = true
 
 [tftp]
-enabled=true
-address=":69"
-root="/var/lib/shoelaces/tftp"
-readonly=true
-timeout_seconds=5
+enabled = true
+address = ":69"
+root = "/var/lib/shoelaces/tftp"
+readonly = true
+timeout = "5s"
 ```
+
+Equivalent examples are kept in *configs/shoelaces.toml*,
+*configs/shoelaces.yaml*, and *configs/shoelaces.json*.
 
 *dhcpd*(8) can be hooked with Shoelaces by adding the following snippet in
 *dhcpd.conf*(5):

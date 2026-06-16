@@ -276,13 +276,15 @@ func readConfig(path string) (map[any]any, error) {
 		return values, nil
 	}
 
-	k := koanf.New(".")
-	if err := k.Load(file.Provider(path), shoelacesConfigParser{path: path}); err != nil {
+	parser, err := parserForConfig(path)
+	if err != nil {
 		return nil, err
 	}
 
-	for key, value := range k.All() {
-		values[key] = value
+	k := koanf.New(".")
+	if err := k.Load(file.Provider(path), parser); err != nil {
+		return nil, err
 	}
-	return values, nil
+
+	return configValuesFromKoanf(k)
 }
