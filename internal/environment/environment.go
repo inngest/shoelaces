@@ -15,7 +15,6 @@
 package environment
 
 import (
-	"fmt"
 	"html/template"
 	"net"
 	"os"
@@ -23,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	shoelaces "github.com/thousandeyes/shoelaces"
 	"github.com/thousandeyes/shoelaces/internal/event"
 	"github.com/thousandeyes/shoelaces/internal/log"
 	"github.com/thousandeyes/shoelaces/internal/mappings"
@@ -103,23 +103,14 @@ func defaultEnvironment() *Environment {
 
 func (env *Environment) initStaticTemplates() {
 	staticTemplates := []string{
-		path.Join(env.StaticDir, "templates/html/header.html"),
-		path.Join(env.StaticDir, "templates/html/index.html"),
-		path.Join(env.StaticDir, "templates/html/events.html"),
-		path.Join(env.StaticDir, "templates/html/mappings.html"),
-		path.Join(env.StaticDir, "templates/html/footer.html"),
+		"header.html",
+		"index.html",
+		"events.html",
+		"mappings.html",
+		"footer.html",
 	}
 
-	fmt.Println(env.StaticDir)
-
-	for _, t := range staticTemplates {
-		if _, err := os.Stat(t); err != nil {
-			env.Logger.Error("component", "environment", "msg", "Template does not exists!", "environment", t)
-			os.Exit(1)
-		}
-	}
-
-	env.StaticTemplates = template.Must(template.ParseFiles(staticTemplates...))
+	env.StaticTemplates = template.Must(template.ParseFS(shoelaces.TemplateFS(), staticTemplates...))
 }
 
 func (env *Environment) initEnvOverrides() []string {

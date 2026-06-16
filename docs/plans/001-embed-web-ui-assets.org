@@ -58,15 +58,15 @@ through =/configs/static/*=.
 
 *** Phase 2: Template Loading
 
-- [ ] Parse default UI templates from the embedded filesystem in
+- [X] Parse default UI templates from the embedded filesystem in
   =Environment.initStaticTemplates()=.
-- [ ] Preserve template names used by =handlers.RenderDefaultTemplate("index")=,
+- [X] Preserve template names used by =handlers.RenderDefaultTemplate("index")=,
   =events=, and =mappings=.
-- [ ] Remove the startup hard failure caused by missing disk UI template files
+- [X] Remove the startup hard failure caused by missing disk UI template files
   when embedded defaults are being used.
-- [ ] Add or update unit tests for environment startup/template initialization
+- [X] Add or update unit tests for environment startup/template initialization
   without a disk =web= directory.
-- [ ] Add or update router or integration coverage for =GET /=, =GET /events=,
+- [X] Add or update router or integration coverage for =GET /=, =GET /events=,
   and =GET /mappings=.
 
 *** Phase 3: Static Asset Serving

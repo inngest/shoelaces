@@ -69,6 +69,17 @@ func TestInitEnvOverridesReturnsEmptyWhenDirectoryIsMissing(t *testing.T) {
 	assert.Empty(t, env.initEnvOverrides())
 }
 
+func TestInitStaticTemplatesUsesEmbeddedTemplates(t *testing.T) {
+	env := defaultEnvironment()
+	env.StaticDir = filepath.Join(t.TempDir(), "missing-web")
+
+	env.initStaticTemplates()
+
+	for _, name := range []string{"header", "index", "events", "mappings", "footer"} {
+		assert.NotNil(t, env.StaticTemplates.Lookup(name), "template %q should be parsed", name)
+	}
+}
+
 func TestInitMappingsLoadsNetworkAndHostnameMaps(t *testing.T) {
 	env := defaultEnvironment()
 	env.Logger = log.MakeLogger(io.Discard)
