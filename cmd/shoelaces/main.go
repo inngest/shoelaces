@@ -21,12 +21,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/inngest/shoelaces/environment"
+	"github.com/inngest/shoelaces/handlers"
+	"github.com/inngest/shoelaces/router"
+	"github.com/inngest/shoelaces/tftpserver"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	"github.com/thousandeyes/shoelaces/environment"
-	"github.com/thousandeyes/shoelaces/handlers"
-	"github.com/thousandeyes/shoelaces/router"
-	"github.com/thousandeyes/shoelaces/tftpserver"
 	cli "github.com/urfave/cli/v3"
 )
 

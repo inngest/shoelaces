@@ -1,4 +1,4 @@
-module github.com/thousandeyes/shoelaces
+module github.com/inngest/shoelaces
 
 go 1.24
 

@@ -25,8 +25,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/thousandeyes/shoelaces/log"
-	"github.com/thousandeyes/shoelaces/utils"
+	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/utils"
 )
 
 const defaultEnvironment = "default"

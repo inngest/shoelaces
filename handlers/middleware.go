@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/thousandeyes/shoelaces/environment"
+	"github.com/inngest/shoelaces/environment"
 )
 
 // ShoelacesCtxID Shoelaces Specific Request Context ID.

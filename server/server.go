@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/thousandeyes/shoelaces/log"
+	"github.com/inngest/shoelaces/log"
 )
 
 const (
