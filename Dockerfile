@@ -4,7 +4,7 @@ WORKDIR /shoelaces
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-s -w -extldflags "-static"' -o /tmp/shoelaces ./cmd/shoelaces && \
-printf "---\nnetworkMaps:\n" > /tmp/mappings.yaml && \
+printf "---\ntargets: {}\n" > /tmp/mappings.yaml && \
 mkdir -p /tmp/tftp
 
 # Final container has basically nothing in it but the executable

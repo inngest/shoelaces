@@ -1,17 +1,44 @@
+defaults:
+  params:
+    encrypt_home: "false"
+    ansible_repo_url: git@github.com:inngest/ansible.git
+    ansible_branch: main
+    ansible_playbook: baremetal.yml
+
+targets:
+  debian12:
+    script: debian.ipxe
+    label: Debian 12 Bookworm
+    params:
+      release: bookworm
+
+  debian13:
+    script: debian.ipxe
+    label: Debian 13 Trixie
+    params:
+      release: trixie
+
+  ubuntu1404:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 14.04 Trusty
+    params:
+      release: trusty
+
 networkMaps:
   - network: 104.225.9.96/27
-    script:
-      name: debian.ipxe
-      params:
-        release: bookworm
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
+
   - network: 198.51.100.0/24
-    script:
-      name: debian.ipxe
-      params:
-        release: trixie
+    defaultTarget: debian13
+    targets:
+      - debian12
+      - debian13
+
 hostnameMaps:
   - hostname: msc1.example.com
-    script:
-      name: ubuntu-minimal.ipxe
-      params:
-        release: trusty
+    defaultTarget: ubuntu1404
+    targets:
+      - ubuntu1404
