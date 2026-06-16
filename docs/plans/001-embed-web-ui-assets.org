@@ -77,6 +77,9 @@ through =/configs/static/*=.
 
 - [X] Replace the default =/static/*= file server with a server backed by the
   embedded UI static filesystem.
+- [X] Keep UI static asset loading separate from provisioning static file
+  loading: =/static/*= must use only the UI asset filesystem, while
+  =/configs/static/*= must use only the provisioning static handler.
 - [X] Preserve URL paths beneath =/static/= so existing HTML references such as
   =/static/js/jquery.min.js= and =/static/css/bootstrap.min.css= continue to
   resolve.
@@ -87,32 +90,41 @@ through =/configs/static/*=.
 - [X] Add or update coverage proving =/configs/static/*= still serves from
   =data-dir/static=.
 
-*** Phase 4: =-static-dir= Compatibility
+*** Phase 4: =ui-dir= Compatibility
 
-- [ ] Keep =-static-dir= as an optional UI-only disk override for local
+- [ ] Replace the UI override config surface with =ui-dir= so the option is
+  explicitly about UI templates/assets rather than provisioning static files.
+- [ ] Keep =ui-dir= as an optional UI-only disk override for local
   development/custom UI assets.
-- [ ] Adjust flag defaults and validation so =-static-dir= is no longer required
+- [ ] Treat legacy =static-dir= as a deprecated compatibility alias for
+  =ui-dir=, or remove it with deliberate test/doc updates if compatibility is
+  intentionally broken.
+- [ ] Adjust flag defaults and validation so =ui-dir= is no longer required
   for normal operation.
 - [ ] If disk override support is kept, route both UI template parsing and
-  =/static/*= serving to the override directory only when =-static-dir= is
+  =/static/*= serving to the override directory only when =ui-dir= is
   explicitly configured.
 - [ ] Use current =urfave/cli= and Koanf-backed config behavior to distinguish an
-  explicitly configured =static-dir= from the embedded default path.
+  explicitly configured =ui-dir= from the embedded default path.
 - [ ] Update integration test setup so normal test startup does not depend on
-  passing the repository =web= directory as =static-dir=.
+  passing the repository =web= directory as =ui-dir=.
 
 *** Phase 5: Packaging And Documentation
 
 - [ ] Update Docker packaging to stop copying =/shoelaces/web= into the final
   image.
-- [ ] Update the Docker entrypoint to stop passing =-static-dir /web= unless an
-  intentional override path is retained for image customization.
+- [ ] Update the Docker entrypoint to stop passing a UI override directory unless
+  an intentional override path is retained for image customization.
 - [ ] Review =.goreleaser.yaml=; if it excludes archive files with
   =archives.files: none*=, leave that behavior in place because embedded assets
   remove the need to ship =web/=.
 - [ ] Update README and =docs/shoelaces.8.scd= to document embedded UI assets,
-  the optional/deprecated role of =-static-dir=, and the separate
+  the optional role of =ui-dir=, the deprecated legacy =static-dir= alias if it
+  remains, and the separate
   =/configs/static/*= provisioning static behavior.
+- [ ] Update config examples to avoid implying =static-dir= is where
+  provisioning files belong; use =ui-dir= only for UI overrides, and document
+  provisioning static files as =data-dir/static= served at =/configs/static/*=.
 
 *** Phase 6: Final Verification
 
@@ -127,6 +139,8 @@ through =/configs/static/*=.
 - [ ] UI routes render successfully for =/=, =/events=, and =/mappings=.
 - [ ] =/static/*= serves embedded UI assets.
 - [ ] =/configs/static/*= continues serving files from =data-dir/static=.
+- [ ] UI static loading and provisioning static loading remain separate; neither
+  handler falls back to the other's filesystem.
 - [ ] Release archives do not need to include =web/=.
 
 ** Notes And Risks
@@ -138,7 +152,7 @@ through =/configs/static/*=.
 - Go's =http.FileServer(http.FS(...))= behavior differs slightly from
   =http.Dir=; tests should cover the exact asset paths used by existing HTML
   templates instead of only checking a directory listing.
-- If =-static-dir= remains as a disk override, use =cmd.IsSet("static-dir")= or
+- If =ui-dir= remains as a disk override, use =cmd.IsSet("ui-dir")= or
   equivalent =urfave/cli= state so the default embedded path is distinguishable
   from a CLI, environment, or config-file override.
 - The old provisioning references to =/static/firstboot.sh=,
