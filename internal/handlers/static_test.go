@@ -21,44 +21,66 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestOverlayFileServerServesUpperLayerBeforeLowerLayer(t *testing.T) {
-	upper := t.TempDir()
-	lower := t.TempDir()
-
-	writeTestFile(t, filepath.Join(lower, "shared.txt"), "from lower")
-	writeTestFile(t, filepath.Join(upper, "shared.txt"), "from upper")
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/shared.txt", nil)
-
-	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+func TestOverlayFileServerServesFiles(t *testing.T) {
+	tests := []struct {
+		name      string
+		path      string
+		setup     func(t *testing.T, upper, lower string)
+		wantBody  string
+		wantCode  int
+		wantFound bool
+	}{
+		{
+			name: "upper layer wins over lower layer",
+			path: "/shared.txt",
+			setup: func(t *testing.T, upper, lower string) {
+				writeTestFile(t, filepath.Join(lower, "shared.txt"), "from lower")
+				writeTestFile(t, filepath.Join(upper, "shared.txt"), "from upper")
+			},
+			wantBody:  "from upper",
+			wantCode:  http.StatusOK,
+			wantFound: true,
+		},
+		{
+			name: "lower layer serves fallback file",
+			path: "/lower-only.txt",
+			setup: func(t *testing.T, upper, lower string) {
+				writeTestFile(t, filepath.Join(lower, "lower-only.txt"), "from lower")
+			},
+			wantBody:  "from lower",
+			wantCode:  http.StatusOK,
+			wantFound: true,
+		},
+		{
+			name:      "missing file returns not found",
+			path:      "/missing.txt",
+			setup:     func(t *testing.T, upper, lower string) {},
+			wantCode:  http.StatusNotFound,
+			wantFound: false,
+		},
 	}
-	if !strings.HasPrefix(rr.Body.String(), "from upper") {
-		t.Fatalf("expected upper-layer content, got %q", rr.Body.String())
-	}
-}
 
-func TestOverlayFileServerFallsBackToLowerLayer(t *testing.T) {
-	upper := t.TempDir()
-	lower := t.TempDir()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upper := t.TempDir()
+			lower := t.TempDir()
+			tt.setup(t, upper, lower)
 
-	writeTestFile(t, filepath.Join(lower, "lower-only.txt"), "from lower")
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/lower-only.txt", nil)
+			OverlayFileServer(upper, lower).ServeHTTP(rr, req)
 
-	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
-	if !strings.HasPrefix(rr.Body.String(), "from lower") {
-		t.Fatalf("expected lower-layer content, got %q", rr.Body.String())
+			require.Equal(t, tt.wantCode, rr.Code)
+			if tt.wantFound {
+				assert.True(t, strings.HasPrefix(rr.Body.String(), tt.wantBody), "expected %q prefix, got %q", tt.wantBody, rr.Body.String())
+			}
+		})
 	}
 }
 
@@ -75,24 +97,32 @@ func TestOverlayFileServerMergesDirectoryIndex(t *testing.T) {
 
 	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
-	if !strings.Contains(body, `<a href="a.txt">a.txt</a>`) {
-		t.Fatalf("directory index missing upper file: %s", body)
-	}
-	if strings.Count(body, `<a href="b.txt">b.txt</a>`) != 1 {
-		t.Fatalf("directory index should de-duplicate overlaid names: %s", body)
-	}
-	if strings.Index(body, "a.txt") > strings.Index(body, "b.txt") {
-		t.Fatalf("directory index should be sorted: %s", body)
-	}
+	assert.Contains(t, body, `<a href="a.txt">a.txt</a>`)
+	assert.Equal(t, 1, strings.Count(body, `<a href="b.txt">b.txt</a>`))
+	assert.Less(t, strings.Index(body, "a.txt"), strings.Index(body, "b.txt"))
+}
+
+func TestOverlayFileServerIncludesLowerLayerDirectoryEntries(t *testing.T) {
+	upper := t.TempDir()
+	lower := t.TempDir()
+
+	require.NoError(t, os.Mkdir(filepath.Join(lower, "lower-dir"), 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(upper, "upper-dir"), 0o755))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, `<a href="lower-dir/">lower-dir/</a>`)
+	assert.Contains(t, body, `<a href="upper-dir/">upper-dir/</a>`)
 }
 
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }

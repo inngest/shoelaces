@@ -15,47 +15,126 @@
 package environment
 
 import (
+	"io"
+	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/thousandeyes/shoelaces/internal/log"
 	"github.com/thousandeyes/shoelaces/internal/mappings"
 )
 
 func TestDefaultEnvironment(t *testing.T) {
 	env := defaultEnvironment()
-	if env.BaseURL != "" {
-		t.Error("BaseURL should be empty string if instantiated directly.")
-	}
-	if len(env.HostnameMaps) != 0 {
-		t.Error("Hostname mappings should be empty")
-	}
-	if len(env.NetworkMaps) != 0 {
-		t.Error("Network mappings should be empty")
-	}
-	if len(env.ParamsBlacklist) != 1 &&
-		env.ParamsBlacklist[0] != "baseURL" {
-		t.Error("ParamsBlacklist should have only baseURL")
-	}
+	assert.Empty(t, env.BaseURL)
+	assert.Empty(t, env.HostnameMaps)
+	assert.Empty(t, env.NetworkMaps)
+	assert.Equal(t, []string{"baseURL"}, env.ParamsBlacklist)
 }
 
 func TestInitScript(t *testing.T) {
 	params := make(map[string]string)
 	params["one"] = "one_value"
-	configScript := mappings.YamlScript{Name: "testscript", Params: params}
+	configScript := mappings.YamlScript{Name: "testscript", Environment: "testing", Params: params}
 	mappingScript := initScript(configScript)
-	if mappingScript.Name != "testscript" {
-		t.Errorf("Expected: %s\nGot: %s\n", "testscript", mappingScript.Name)
-	}
+	assert.Equal(t, "testscript", mappingScript.Name)
+	assert.Equal(t, "testing", mappingScript.Environment)
 	val, ok := mappingScript.Params["one"]
-	if !ok {
-		t.Error("Missing param")
-	} else {
-		v, ok := val.(string)
-		if !ok {
-			t.Error("Bad value type")
-		} else {
-			if v != "one_value" {
-				t.Error("Bad value")
-			}
-		}
-	}
+	require.True(t, ok)
+	assert.Equal(t, "one_value", val)
+}
+
+func TestInitEnvOverridesReturnsOnlyDirectories(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "env_overrides", "testing"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "env_overrides", "staging"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "env_overrides", "README"), []byte("ignored"), 0o644))
+	env := defaultEnvironment()
+	env.DataDir = dataDir
+	env.EnvDir = "env_overrides"
+
+	envs := env.initEnvOverrides()
+
+	assert.ElementsMatch(t, []string{"testing", "staging"}, envs)
+}
+
+func TestInitEnvOverridesReturnsEmptyWhenDirectoryIsMissing(t *testing.T) {
+	env := defaultEnvironment()
+	env.DataDir = t.TempDir()
+	env.EnvDir = "env_overrides"
+
+	assert.Empty(t, env.initEnvOverrides())
+}
+
+func TestInitMappingsLoadsNetworkAndHostnameMaps(t *testing.T) {
+	env := defaultEnvironment()
+	env.Logger = log.MakeLogger(io.Discard)
+	mappingsPath := filepath.Join(t.TempDir(), "mappings.yaml")
+	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
+networkMaps:
+  - network: 192.0.2.0/24
+    script:
+      name: network.ipxe
+      environment: testing
+      params:
+        role: network
+hostnameMaps:
+  - hostname: '^host-\d+$'
+    script:
+      name: host.ipxe
+      params:
+        role: host
+`), 0o644))
+
+	require.NoError(t, env.initMappings(mappingsPath))
+
+	require.Len(t, env.NetworkMaps, 1)
+	assert.True(t, env.NetworkMaps[0].Network.Contains(mustParseIP(t, "192.0.2.10")))
+	assert.Equal(t, "network.ipxe", env.NetworkMaps[0].Script.Name)
+	assert.Equal(t, "testing", env.NetworkMaps[0].Script.Environment)
+	assert.Equal(t, "network", env.NetworkMaps[0].Script.Params["role"])
+
+	require.Len(t, env.HostnameMaps, 1)
+	assert.True(t, env.HostnameMaps[0].Hostname.MatchString("host-123"))
+	assert.Equal(t, "host.ipxe", env.HostnameMaps[0].Script.Name)
+	assert.Equal(t, "host", env.HostnameMaps[0].Script.Params["role"])
+}
+
+func TestInitMappingsReturnsInvalidCIDRError(t *testing.T) {
+	env := defaultEnvironment()
+	env.Logger = log.MakeLogger(io.Discard)
+	mappingsPath := filepath.Join(t.TempDir(), "mappings.yaml")
+	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
+networkMaps:
+  - network: invalid-cidr
+    script:
+      name: network.ipxe
+`), 0o644))
+
+	assert.Error(t, env.initMappings(mappingsPath))
+}
+
+func TestInitMappingsReturnsInvalidHostnameRegexError(t *testing.T) {
+	env := defaultEnvironment()
+	env.Logger = log.MakeLogger(io.Discard)
+	mappingsPath := filepath.Join(t.TempDir(), "mappings.yaml")
+	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
+hostnameMaps:
+  - hostname: '['
+    script:
+      name: host.ipxe
+`), 0o644))
+
+	assert.Error(t, env.initMappings(mappingsPath))
+}
+
+func mustParseIP(t *testing.T, ip string) net.IP {
+	t.Helper()
+
+	parsed := net.ParseIP(ip)
+	require.NotNil(t, parsed)
+	return parsed
 }

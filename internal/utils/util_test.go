@@ -16,24 +16,76 @@ package utils
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMacColonToDash(t *testing.T) {
-	testNormMac := func(givenMac, expectedMac string) {
-		if MacColonToDash(givenMac) != expectedMac {
-			t.Errorf("Expected: %s\nGot: %s", expectedMac, givenMac)
-		}
+	tests := []struct {
+		name string
+		mac  string
+		want string
+	}{
+		{
+			name: "colon separated mac",
+			mac:  "ff:ff:ff:ff:ff:ff",
+			want: "ff-ff-ff-ff-ff-ff",
+		},
+		{
+			name: "already dash separated mac",
+			mac:  "ff-ff-ff-ff-ff-ff",
+			want: "ff-ff-ff-ff-ff-ff",
+		},
+		{
+			name: "dot separated mac is unchanged",
+			mac:  "ff.ff.ff.ff.ff.ff",
+			want: "ff.ff.ff.ff.ff.ff",
+		},
+		{
+			name: "empty mac is unchanged",
+			mac:  "",
+			want: "",
+		},
 	}
-	testNormMac("ff:ff:ff:ff:ff:ff", "ff-ff-ff-ff-ff-ff")
-	testNormMac("ff-ff-ff-ff-ff-ff", "ff-ff-ff-ff-ff-ff")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, MacColonToDash(tt.mac))
+		})
+	}
 }
 
 func TestMacDashToColon(t *testing.T) {
-	testNormMac := func(givenMac, expectedMac string) {
-		if MacDashToColon(givenMac) != expectedMac {
-			t.Errorf("Expected: %s\nGot: %s", expectedMac, givenMac)
-		}
+	tests := []struct {
+		name string
+		mac  string
+		want string
+	}{
+		{
+			name: "dash separated mac",
+			mac:  "ff-ff-ff-ff-ff-ff",
+			want: "ff:ff:ff:ff:ff:ff",
+		},
+		{
+			name: "already colon separated mac",
+			mac:  "ff:ff:ff:ff:ff:ff",
+			want: "ff:ff:ff:ff:ff:ff",
+		},
+		{
+			name: "dot separated mac is unchanged",
+			mac:  "ff.ff.ff.ff.ff.ff",
+			want: "ff.ff.ff.ff.ff.ff",
+		},
+		{
+			name: "empty mac is unchanged",
+			mac:  "",
+			want: "",
+		},
 	}
-	testNormMac("ff-ff-ff-ff-ff-ff", "ff:ff:ff:ff:ff:ff")
-	testNormMac("ff.ff.ff.ff.ff.ff", "ff.ff.ff.ff.ff.ff")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, MacDashToColon(tt.mac))
+		})
+	}
 }

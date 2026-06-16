@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/thousandeyes/shoelaces/internal/server"
 )
 
@@ -26,28 +28,71 @@ const expectedEvent = `{"eventType":0,"date":"1970-01-01T00:00:00Z","server":{"M
 
 func TestNew(t *testing.T) {
 	event := New(HostPoll, server.Server{Mac: "", IP: "", Hostname: "test_host"}, PtrMatchBoot, "msdos.ipxe", map[string]interface{}{"test": "testParam"})
-	if event.Type != HostPoll {
-		t.Errorf("Expected: \"%d\"\nGot: \"%d\"", HostPoll, event.Type)
-	}
-	if event.Server.Hostname != "test_host" {
-		t.Errorf("Expected: \"test_host\"\nGot: \"%s\"", event.Server.Hostname)
-	}
-	if event.BootType != PtrMatchBoot {
-		t.Errorf("Expected: \"%s\"\nGot: \"%s\"", PtrMatchBoot, event.Server.Hostname)
-	}
-	if event.Script != "msdos.ipxe" {
-		t.Errorf("Expected: \"msdos.ipxe\"\nGot: \"%s\"", event.Server.Hostname)
-	}
-	if len(event.Params) != 1 {
-		t.Error("Expected one parameter")
-	}
-	if event.Params["test"] != "testParam" {
-		t.Error("Expected parameter test: testParam")
-	}
+	assert.Equal(t, HostPoll, event.Type)
+	assert.Equal(t, "test_host", event.Server.Hostname)
+	assert.Equal(t, PtrMatchBoot, event.BootType)
+	assert.Equal(t, "msdos.ipxe", event.Script)
+	require.Len(t, event.Params, 1)
+	assert.Equal(t, "testParam", event.Params["test"])
+
 	now := time.Now()
-	if event.Date.After(now) {
-		t.Errorf("Expected %s to be after %s", event.Date, now)
+	assert.False(t, event.Date.After(now))
+}
+
+func TestNewSetsMessage(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventType  Type
+		bootType   string
+		script     string
+		params     map[string]interface{}
+		wantSubstr string
+	}{
+		{
+			name:       "host poll",
+			eventType:  HostPoll,
+			wantSubstr: "Host test_host polled for a script.",
+		},
+		{
+			name:       "user selection",
+			eventType:  UserSelection,
+			script:     "freebsd.ipxe",
+			wantSubstr: "A user selected freebsd.ipxe for the host test_host.",
+		},
+		{
+			name:       "host boot",
+			eventType:  HostBoot,
+			bootType:   ManualBoot,
+			params:     map[string]interface{}{"hostname": "test_host"},
+			wantSubstr: "Host test_host booted using Manual method",
+		},
+		{
+			name:       "host timeout",
+			eventType:  HostTimeout,
+			wantSubstr: "Host test_host timed out.",
+		},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := New(tt.eventType, server.Server{Hostname: "test_host"}, tt.bootType, tt.script, tt.params)
+
+			assert.Contains(t, event.Message, tt.wantSubstr)
+		})
+	}
+}
+
+func TestLogAddEventInitializesAndAppendsEvents(t *testing.T) {
+	log := &Log{}
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "test_host")
+
+	log.AddEvent(HostPoll, srv, "", "", nil)
+	log.AddEvent(UserSelection, srv, "", "freebsd.ipxe", nil)
+
+	require.Len(t, log.Events[srv.Mac], 2)
+	assert.Equal(t, HostPoll, log.Events[srv.Mac][0].Type)
+	assert.Equal(t, UserSelection, log.Events[srv.Mac][1].Type)
+	assert.Equal(t, "freebsd.ipxe", log.Events[srv.Mac][1].Script)
 }
 
 func TestEventMarshalJSON(t *testing.T) {
@@ -65,8 +110,7 @@ func TestEventMarshalJSON(t *testing.T) {
 			"version":     "12345",
 		},
 	}
-	marshaled, _ := json.Marshal(event)
-	if string(marshaled) != expectedEvent {
-		t.Errorf("Expected %s\nGot: %s\n", expectedEvent, marshaled)
-	}
+	marshaled, err := json.Marshal(event)
+	require.NoError(t, err)
+	assert.Equal(t, expectedEvent, string(marshaled))
 }

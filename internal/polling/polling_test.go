@@ -15,11 +15,18 @@
 package polling
 
 import (
+	"net"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/thousandeyes/shoelaces/internal/event"
 	"github.com/thousandeyes/shoelaces/internal/log"
+	"github.com/thousandeyes/shoelaces/internal/mappings"
 	"github.com/thousandeyes/shoelaces/internal/server"
 	"github.com/thousandeyes/shoelaces/internal/templates"
 )
@@ -27,12 +34,8 @@ import (
 func TestGenStartScriptUsesBaseURL(t *testing.T) {
 	script := GenStartScript(log.MakeLogger(testLogWriter{}), "127.0.0.1:8081")
 
-	if !strings.Contains(script, "http://127.0.0.1:8081/poll/1/${netX/mac:hexhyp}") {
-		t.Fatalf("start script does not chain to the configured base URL:\n%s", script)
-	}
-	if !strings.HasPrefix(script, "#!ipxe\n") {
-		t.Fatalf("start script should be an iPXE script, got:\n%s", script)
-	}
+	assert.Contains(t, script, "http://127.0.0.1:8081/poll/1/${netX/mac:hexhyp}")
+	assert.True(t, strings.HasPrefix(script, "#!ipxe\n"), "start script should be an iPXE script, got:\n%s", script)
 }
 
 func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
@@ -50,18 +53,10 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 		"127.0.0.1:8081",
 		srv,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(script, "chain -ar http://127.0.0.1:8081/poll/1/06-66-de-ad-be-ef") {
-		t.Fatalf("first poll should return retry script, got:\n%s", script)
-	}
-	if states.Servers[srv.Mac] == nil {
-		t.Fatal("unknown server was not added to retry state")
-	}
-	if got := len(events.Events[srv.Mac]); got != 1 {
-		t.Fatalf("expected one poll event, got %d", got)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, script, "chain -ar http://127.0.0.1:8081/poll/1/06-66-de-ad-be-ef")
+	require.NotNil(t, states.Servers[srv.Mac])
+	assert.Len(t, events.Events[srv.Mac], 1)
 
 	for i := 0; i <= maxRetry; i++ {
 		script, err = Poll(
@@ -74,17 +69,125 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 			"127.0.0.1:8081",
 			srv,
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
-	if script != timeoutScript {
-		t.Fatalf("expected timeout script after max retries, got:\n%s", script)
+	assert.Equal(t, timeoutScript, script)
+	assert.Nil(t, states.Servers[srv.Mac])
+}
+
+func TestPollBootsAutomaticMatches(t *testing.T) {
+	tests := []struct {
+		name         string
+		srv          server.Server
+		hostnameMaps []mappings.HostnameMap
+		networkMaps  []mappings.NetworkMap
+		wantBootType string
+		wantHostname string
+		wantRendered string
+		wantParams   map[string]interface{}
+	}{
+		{
+			name: "hostname match",
+			srv:  server.New("06:66:de:ad:be:ef", "192.0.2.10", "matched-host"),
+			hostnameMaps: []mappings.HostnameMap{{
+				Hostname: regexp.MustCompile(`^matched-host$`),
+				Script: &mappings.Script{
+					Name:   "test.ipxe",
+					Params: map[string]interface{}{"role": "web"},
+				},
+			}},
+			wantBootType: event.PtrMatchBoot,
+			wantHostname: "matched-host",
+			wantRendered: "boot matched-host",
+			wantParams: map[string]interface{}{
+				"baseURL":  "127.0.0.1:8081",
+				"hostname": "matched-host",
+				"role":     "web",
+			},
+		},
+		{
+			name: "network match with hostname prefix",
+			srv:  server.New("06:66:de:ad:be:ef", "192.0.2.10", ""),
+			networkMaps: []mappings.NetworkMap{{
+				Network: mustCIDR(t, "192.0.2.0/24"),
+				Script: &mappings.Script{
+					Name: "test.ipxe",
+					Params: map[string]interface{}{
+						"hostnamePrefix": "rack-",
+						"role":           "db",
+					},
+				},
+			}},
+			wantBootType: event.SubnetMatchBoot,
+			wantHostname: "rack-06-66-de-ad-be-ef",
+			wantRendered: "boot rack-06-66-de-ad-be-ef",
+			wantParams: map[string]interface{}{
+				"baseURL":        "127.0.0.1:8081",
+				"hostname":       "rack-06-66-de-ad-be-ef",
+				"hostnamePrefix": "rack-",
+				"role":           "db",
+			},
+		},
 	}
-	if states.Servers[srv.Mac] != nil {
-		t.Fatal("timed-out server should be removed from retry state")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := &event.Log{}
+			rendered, err := Poll(
+				log.MakeLogger(testLogWriter{}),
+				&server.States{Servers: make(map[string]*server.State)},
+				tt.hostnameMaps,
+				tt.networkMaps,
+				events,
+				newTestTemplates(t),
+				"127.0.0.1:8081",
+				tt.srv,
+			)
+
+			require.NoError(t, err)
+			assert.Contains(t, rendered, tt.wantRendered)
+			assert.Contains(t, rendered, "base 127.0.0.1:8081")
+			require.Len(t, events.Events[tt.srv.Mac], 1)
+			got := events.Events[tt.srv.Mac][0]
+			assert.Equal(t, event.HostBoot, got.Type)
+			assert.Equal(t, tt.wantBootType, got.BootType)
+			assert.Equal(t, "test.ipxe", got.Script)
+			assert.Equal(t, tt.wantHostname, got.Server.Hostname)
+			assert.Equal(t, tt.wantParams, got.Params)
+		})
 	}
+}
+
+func TestUpdateTargetStoresManualSelection(t *testing.T) {
+	states := &server.States{Servers: make(map[string]*server.State)}
+	events := &event.Log{}
+	templateRenderer := newTestTemplates(t)
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "manual-host")
+	states.AddServer(srv)
+	params := map[string]interface{}{"role": "manual"}
+
+	inputErr, err := UpdateTarget(
+		log.MakeLogger(testLogWriter{}),
+		states,
+		templateRenderer,
+		events,
+		"127.0.0.1:8081",
+		srv,
+		"test.ipxe",
+		"",
+		params,
+	)
+
+	require.NoError(t, err)
+	assert.False(t, inputErr)
+	require.NotNil(t, states.Servers[srv.Mac])
+	assert.Equal(t, "test.ipxe", states.Servers[srv.Mac].Target)
+	assert.Equal(t, "06-66-de-ad-be-ef", states.Servers[srv.Mac].Params["hostname"])
+	assert.Equal(t, "127.0.0.1:8081", states.Servers[srv.Mac].Params["baseURL"])
+	require.Len(t, events.Events[srv.Mac], 1)
+	assert.Equal(t, event.UserSelection, events.Events[srv.Mac][0].Type)
+	assert.Equal(t, "test.ipxe", events.Events[srv.Mac][0].Script)
 }
 
 func TestListServersReturnsOnlyWaitingServersSortedByMAC(t *testing.T) {
@@ -104,16 +207,41 @@ func TestListServersReturnsOnlyWaitingServersSortedByMAC(t *testing.T) {
 	}}
 
 	servers := ListServers(states)
-	if len(servers) != 2 {
-		t.Fatalf("expected 2 waiting servers, got %d", len(servers))
-	}
-	if servers[0].Mac != "00:00:00:00:00:01" || servers[1].Mac != "ff:ff:ff:ff:ff:ff" {
-		t.Fatalf("servers were not filtered and sorted by MAC: %#v", servers)
-	}
+	require.Len(t, servers, 2)
+	assert.Equal(t, "00:00:00:00:00:01", servers[0].Mac)
+	assert.Equal(t, "ff:ff:ff:ff:ff:ff", servers[1].Mac)
 }
 
 type testLogWriter struct{}
 
 func (testLogWriter) Write(p []byte) (int, error) {
 	return len(p), nil
+}
+
+func newTestTemplates(t *testing.T) *templates.ShoelacesTemplates {
+	t.Helper()
+
+	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dataDir, "test.ipxe.slc"),
+		[]byte(`{{define "test.ipxe"}}#!ipxe
+boot {{.hostname}}
+base {{.baseURL}}
+role {{.role}}
+{{end}}
+`),
+		0o644,
+	))
+
+	templateRenderer := templates.New()
+	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", nil, ".slc")
+	return templateRenderer
+}
+
+func mustCIDR(t *testing.T, cidr string) *net.IPNet {
+	t.Helper()
+
+	_, network, err := net.ParseCIDR(cidr)
+	require.NoError(t, err)
+	return network
 }
