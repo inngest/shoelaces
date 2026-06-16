@@ -107,18 +107,18 @@ macMaps:
 
 *** Phase 2: Targets And Multiple Choices
 
-- [ ] Add named =targets= with labels, script names, optional environment, and
+- [X] Add named =targets= with labels, script names, optional environment, and
   params.
-- [ ] Add mapping-level =targets= and =defaultTarget=.
-- [ ] Add =macMaps= and =ipMaps= alongside existing hostname and network maps.
-- [ ] Introduce a mapping resolver layer that returns an immutable boot
+- [X] Add mapping-level =targets= and =defaultTarget=.
+- [X] Add =macMaps= and =ipMaps= alongside existing hostname and network maps.
+- [X] Introduce a mapping resolver layer that returns an immutable boot
   candidate/target result instead of exposing mutable map-owned =Script=
   pointers directly to polling.
-- [ ] Add tests proving exact IP mappings work for both IPv4 and IPv6
+- [X] Add tests proving exact IP mappings work for both IPv4 and IPv6
   addresses.
-- [ ] Define deterministic match precedence: manual selection, MAC, IP,
+- [X] Define deterministic match precedence: manual selection, MAC, IP,
   hostname, network, then unmatched/manual queue.
-- [ ] Add tests for multiple targets, default target selection, and no-default
+- [X] Add tests for multiple targets, default target selection, and no-default
   manual selection behavior.
 
 *** Phase 3: Parameter Resolution
