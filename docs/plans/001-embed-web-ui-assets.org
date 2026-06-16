@@ -1,0 +1,139 @@
+#+title: Embed Web UI Assets
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-15 Mon>
+
+* Embed Web UI Assets
+
+** Goal
+
+Embed the Shoelaces =web/= UI templates and assets into the Go binary so release
+artifacts no longer need to ship a runtime =web= directory.
+
+The embedded assets are only the Shoelaces UI assets currently under this
+repository's =web/= directory. Netboot, firstboot, and provisioning static files
+must remain outside the binary and continue to be served from =data-dir/static=
+through =/configs/static/*=.
+
+** Current State
+
+- =Environment.initStaticTemplates()= reads UI templates from
+  =env.StaticDir/templates/html/*.html=, stats each path, and exits when a file
+  is missing.
+- =-static-dir= defaults to =web= and is currently validated as required.
+- =/static/*= serves =http.FileServer(http.Dir(env.StaticDir))=.
+- =/configs/static/*= serves =handlers.StaticConfigFileServer()=, which is tied
+  to the configured =data-dir/static= behavior and should not change.
+- Docker packaging copies =/shoelaces/web= into the final image and passes
+  =-static-dir /web=.
+- Integration tests currently pass a disk =static-dir= in the generated config
+  and compare =/static/= against an expected fixture.
+
+** Desired Behavior
+
+- Default operation uses embedded UI templates and embedded =/static/*= assets.
+- A built binary can start with a valid =-data-dir= even when no local =web/=
+  directory exists.
+- Existing UI routes continue to render:
+  - =/=
+  - =/events=
+  - =/mappings=
+- Existing static references continue to resolve, for example:
+  - =/static/js/jquery.min.js=
+  - =/static/css/bootstrap.min.css=
+- =/configs/static/*= remains backed by =data-dir/static=.
+- Release archives and Docker images do not need to include a runtime =web/=
+  directory.
+
+** Phased Implementation Plan
+
+*** Phase 1: Embed Foundation
+
+- [ ] Add an embedded UI filesystem package or helper using Go =embed=,
+  preferably embedding the full =web= tree with =//go:embed web=.
+- [ ] Expose focused helpers for the template subtree and static asset subtree
+  using =fs.Sub=, so callers do not need to know the embedded root layout.
+- [ ] Add a narrow unit test or compile-time check that the expected embedded
+  files exist, including =templates/html/index.html= and =js/jquery.min.js=.
+
+*** Phase 2: Template Loading
+
+- [ ] Parse default UI templates from the embedded filesystem in
+  =Environment.initStaticTemplates()=.
+- [ ] Preserve template names used by =handlers.RenderDefaultTemplate("index")=,
+  =events=, and =mappings=.
+- [ ] Remove the startup hard failure caused by missing disk UI template files
+  when embedded defaults are being used.
+- [ ] Add or update unit tests for environment startup/template initialization
+  without a disk =web= directory.
+- [ ] Add or update router or integration coverage for =GET /=, =GET /events=,
+  and =GET /mappings=.
+
+*** Phase 3: Static Asset Serving
+
+- [ ] Replace the default =/static/*= file server with a server backed by the
+  embedded UI static filesystem.
+- [ ] Preserve URL paths beneath =/static/= so existing HTML references such as
+  =/static/js/jquery.min.js= and =/static/css/bootstrap.min.css= continue to
+  resolve.
+- [ ] Keep =/configs/static/*= unchanged and backed by =data-dir/static= through
+  =handlers.StaticConfigFileServer()=.
+- [ ] Add or update router or integration coverage for a known embedded UI asset
+  such as =GET /static/js/jquery.min.js=.
+- [ ] Add or update coverage proving =/configs/static/*= still serves from
+  =data-dir/static=.
+
+*** Phase 4: =-static-dir= Compatibility
+
+- [ ] Decide the final compatibility behavior for =-static-dir=, favoring an
+  optional disk override for local development/custom UI.
+- [ ] Adjust flag defaults and validation so =-static-dir= is no longer required
+  for normal operation.
+- [ ] If disk override support is kept, route both UI template parsing and
+  =/static/*= serving to the override directory only when =-static-dir= is
+  explicitly configured.
+- [ ] Ensure config-file and environment-variable behavior from
+  =github.com/namsral/flag= remains predictable when no override is set.
+- [ ] Update integration test setup so normal test startup does not depend on
+  passing the repository =web= directory as =static-dir=.
+
+*** Phase 5: Packaging And Documentation
+
+- [ ] Update Docker packaging to stop copying =/shoelaces/web= into the final
+  image.
+- [ ] Update the Docker entrypoint to stop passing =-static-dir /web= unless an
+  intentional override path is retained for image customization.
+- [ ] Review =.goreleaser.yaml=; if it excludes archive files with
+  =archives.files: none*=, leave that behavior in place because embedded assets
+  remove the need to ship =web/=.
+- [ ] Update README and =docs/shoelaces.8.scd= to document embedded UI assets,
+  the optional/deprecated role of =-static-dir=, and the separate
+  =/configs/static/*= provisioning static behavior.
+
+*** Phase 6: Final Verification
+
+- [ ] Run =go test ./...=.
+- [ ] Build and smoke test a binary with a valid =-data-dir= and no local =web/=
+  directory.
+
+** Acceptance Criteria
+
+- [ ] =go test ./...= passes.
+- [ ] Built binary runs with a valid =-data-dir= and no local =web/= directory.
+- [ ] UI routes render successfully for =/=, =/events=, and =/mappings=.
+- [ ] =/static/*= serves embedded UI assets.
+- [ ] =/configs/static/*= continues serving files from =data-dir/static=.
+- [ ] Release archives do not need to include =web/=.
+
+** Notes And Risks
+
+- The =web/= directory includes UI templates and browser assets only; do not move
+  firstboot, netboot, or provisioning static behavior into the embed.
+- Template parsing from =embed.FS= should preserve template basenames, because
+  handlers execute templates by logical names such as =index=.
+- Go's =http.FileServer(http.FS(...))= behavior differs slightly from
+  =http.Dir=; tests should cover the exact asset paths used by existing HTML
+  templates instead of only checking a directory listing.
+- If =-static-dir= remains as a disk override, config-file/env-var behavior from
+  =github.com/namsral/flag= needs careful handling so the default embedded path
+  is distinguishable from an explicitly configured override.
