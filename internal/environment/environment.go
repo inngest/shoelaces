@@ -103,6 +103,11 @@ func defaultEnvironment() *Environment {
 }
 
 func (env *Environment) initStaticTemplates() {
+	if env.UsesUIOverride() {
+		env.initStaticTemplatesFromDisk()
+		return
+	}
+
 	staticTemplates := []string{
 		"header.html",
 		"index.html",
@@ -112,6 +117,23 @@ func (env *Environment) initStaticTemplates() {
 	}
 
 	env.StaticTemplates = template.Must(template.ParseFS(shoelaces.TemplateFS(), staticTemplates...))
+}
+
+// UsesUIOverride reports whether UI templates/assets should be loaded from disk.
+func (env *Environment) UsesUIOverride() bool {
+	return env.UIOverrideDirSet && env.UIDir != ""
+}
+
+func (env *Environment) initStaticTemplatesFromDisk() {
+	staticTemplates := []string{
+		filepath.Join(env.UIDir, "templates/html/header.html"),
+		filepath.Join(env.UIDir, "templates/html/index.html"),
+		filepath.Join(env.UIDir, "templates/html/events.html"),
+		filepath.Join(env.UIDir, "templates/html/mappings.html"),
+		filepath.Join(env.UIDir, "templates/html/footer.html"),
+	}
+
+	env.StaticTemplates = template.Must(template.ParseFiles(staticTemplates...))
 }
 
 func (env *Environment) initEnvOverrides() []string {

@@ -34,8 +34,7 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	// Currently configured mappings page
 	r.Handle("/mappings", handlers.RenderDefaultTemplate("mappings")).Methods("GET")
 	// Static files used by the UI
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
-		http.FileServer(http.FS(shoelaces.StaticFS()))))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", staticFileServer(env)))
 	// Manual boot parameters POST endpoint
 	r.HandleFunc("/update/target", handlers.UpdateTargetHandler).Methods("POST")
 	// Provides a list of the servers that tried to boot but did not match
@@ -66,4 +65,12 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	r.HandleFunc("/ipxemenu", handlers.IPXEMenu).Methods("GET")
 
 	return r
+}
+
+func staticFileServer(env *environment.Environment) http.Handler {
+	if env.UsesUIOverride() {
+		return http.FileServer(http.Dir(env.UIDir))
+	}
+
+	return http.FileServer(http.FS(shoelaces.StaticFS()))
 }

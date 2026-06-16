@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -115,46 +117,56 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 
 func TestCommandUIDirPrecedence(t *testing.T) {
 	tests := []struct {
-		name        string
-		configValue string
-		envValue    string
-		cliValue    string
-		expected    string
+		name      string
+		configDir bool
+		envDir    bool
+		cliDir    bool
 	}{
 		{
 			name: "default uses embedded UI",
 		},
 		{
-			name:        "config overrides embedded UI",
-			configValue: "config-ui",
-			expected:    "config-ui",
+			name:      "config overrides embedded UI",
+			configDir: true,
 		},
 		{
-			name:        "env overrides config",
-			configValue: "config-ui",
-			envValue:    "env-ui",
-			expected:    "env-ui",
+			name:      "env overrides config",
+			configDir: true,
+			envDir:    true,
 		},
 		{
-			name:        "cli overrides env",
-			configValue: "config-ui",
-			envValue:    "env-ui",
-			cliValue:    "cli-ui",
-			expected:    "cli-ui",
+			name:      "cli overrides env",
+			configDir: true,
+			envDir:    true,
+			cliDir:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.envValue != "" {
-				t.Setenv("UI_DIR", tt.envValue)
+			var expected string
+			configValue := ""
+			envValue := ""
+			cliValue := ""
+			if tt.configDir {
+				configValue = writeCommandTestUIDir(t)
+				expected = configValue
+			}
+			if tt.envDir {
+				envValue = writeCommandTestUIDir(t)
+				t.Setenv("UI_DIR", envValue)
+				expected = envValue
+			}
+			if tt.cliDir {
+				cliValue = writeCommandTestUIDir(t)
+				expected = cliValue
 			}
 
 			configValues := map[any]any{
 				"data-dir": "../../configs/data-dir",
 			}
-			if tt.configValue != "" {
-				configValues["ui-dir"] = tt.configValue
+			if configValue != "" {
+				configValues["ui-dir"] = configValue
 			}
 
 			var got *environment.Environment
@@ -164,22 +176,23 @@ func TestCommandUIDirPrecedence(t *testing.T) {
 			})
 
 			args := []string{"shoelaces"}
-			if tt.cliValue != "" {
-				args = append(args, "--ui-dir", tt.cliValue)
+			if cliValue != "" {
+				args = append(args, "--ui-dir", cliValue)
 			}
 
 			require.NoError(t, cmd.Run(context.Background(), args))
 			require.NotNil(t, got)
-			assert.Equal(t, tt.expected, got.UIDir)
-			assert.Equal(t, tt.expected != "", got.UIOverrideDirSet)
+			assert.Equal(t, expected, got.UIDir)
+			assert.Equal(t, expected != "", got.UIOverrideDirSet)
 		})
 	}
 }
 
 func TestCommandStaticDirCompatibilityAlias(t *testing.T) {
+	uiDir := writeCommandTestUIDir(t)
 	configValues := map[any]any{
 		"data-dir":   "../../configs/data-dir",
-		"static-dir": "legacy-ui",
+		"static-dir": uiDir,
 	}
 
 	var got *environment.Environment
@@ -190,7 +203,7 @@ func TestCommandStaticDirCompatibilityAlias(t *testing.T) {
 
 	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
 	require.NotNil(t, got)
-	assert.Equal(t, "legacy-ui", got.UIDir)
+	assert.Equal(t, uiDir, got.UIDir)
 	assert.True(t, got.UIOverrideDirSet)
 }
 
@@ -202,4 +215,25 @@ func TestCommandVersionDoesNotRequireDataDir(t *testing.T) {
 	cmd.Writer = io.Discard
 
 	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--version"}))
+}
+
+func writeCommandTestUIDir(t *testing.T) string {
+	t.Helper()
+
+	uiDir := t.TempDir()
+	templatesDir := filepath.Join(uiDir, "templates/html")
+	require.NoError(t, os.MkdirAll(templatesDir, 0o755))
+
+	templates := map[string]string{
+		"header.html":   `{{ define "header" }}header{{ end }}`,
+		"index.html":    `{{ define "index" }}index{{ end }}`,
+		"events.html":   `{{ define "events" }}events{{ end }}`,
+		"mappings.html": `{{ define "mappings" }}mappings{{ end }}`,
+		"footer.html":   `{{ define "footer" }}footer{{ end }}`,
+	}
+	for name, content := range templates {
+		require.NoError(t, os.WriteFile(filepath.Join(templatesDir, name), []byte(content), 0o644))
+	}
+
+	return uiDir
 }

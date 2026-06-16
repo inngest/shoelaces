@@ -58,6 +58,23 @@ func TestStaticRouteServesEmbeddedUIAsset(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "jQuery")
 }
 
+func TestStaticRouteServesUIDirOverrideAsset(t *testing.T) {
+	uiDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(uiDir, "js"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(uiDir, "js", "jquery.min.js"), []byte("from ui dir\n"), 0o644))
+	handler := newTestRouterWithEnvironment(t, t.TempDir(), func(env *environment.Environment) {
+		env.UIDir = uiDir
+		env.UIOverrideDirSet = true
+	})
+	req := httptest.NewRequest(http.MethodGet, "/static/js/jquery.min.js", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "from ui dir\n", rr.Body.String())
+}
+
 func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
 	dataDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
@@ -75,6 +92,12 @@ func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
 func newTestRouter(t *testing.T, dataDir string) http.Handler {
 	t.Helper()
 
+	return newTestRouterWithEnvironment(t, dataDir, nil)
+}
+
+func newTestRouterWithEnvironment(t *testing.T, dataDir string, configure func(*environment.Environment)) http.Handler {
+	t.Helper()
+
 	staticTemplates := template.Must(template.ParseFS(shoelaces.TemplateFS(),
 		"header.html",
 		"index.html",
@@ -90,6 +113,9 @@ func newTestRouter(t *testing.T, dataDir string) http.Handler {
 		TemplateExtension: ".slc",
 		StaticTemplates:   staticTemplates,
 		Logger:            log.MakeLogger(io.Discard),
+	}
+	if configure != nil {
+		configure(env)
 	}
 	return handlers.MiddlewareChain(env).Then(ShoelacesRouter(env))
 }

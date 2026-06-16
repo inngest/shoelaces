@@ -101,7 +101,7 @@ through =/configs/static/*=.
   intentionally broken.
 - [X] Adjust flag defaults and validation so =ui-dir= is no longer required
   for normal operation.
-- [ ] If disk override support is kept, route both UI template parsing and
+- [X] If disk override support is kept, route both UI template parsing and
   =/static/*= serving to the override directory only when =ui-dir= is
   explicitly configured.
 - [X] Use current =urfave/cli= and Koanf-backed config behavior to distinguish an
