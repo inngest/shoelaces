@@ -49,11 +49,11 @@ through =/configs/static/*=.
 
 *** Phase 1: Embed Foundation
 
-- [ ] Add an embedded UI filesystem package or helper using Go =embed=,
+- [X] Add an embedded UI filesystem package or helper using Go =embed=,
   preferably embedding the full =web= tree with =//go:embed web=.
-- [ ] Expose focused helpers for the template subtree and static asset subtree
+- [X] Expose focused helpers for the template subtree and static asset subtree
   using =fs.Sub=, so callers do not need to know the embedded root layout.
-- [ ] Add a narrow unit test or compile-time check that the expected embedded
+- [X] Add a narrow unit test or compile-time check that the expected embedded
   files exist, including =templates/html/index.html= and =js/jquery.min.js=.
 
 *** Phase 2: Template Loading
