@@ -197,8 +197,8 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.Bool("version") {
-				fmt.Fprint(cmd.Writer, versionString())
-				return nil
+				_, err := fmt.Fprint(cmd.Writer, versionString())
+				return err
 			}
 
 			options := optionsFromCommand(cmd)
@@ -279,7 +279,6 @@ func readConfig(path string) (map[any]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
 
 	section := ""
 	scanner := bufio.NewScanner(file)
@@ -307,6 +306,9 @@ func readConfig(path string) (map[any]any, error) {
 		values[name] = value
 	}
 	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if err := file.Close(); err != nil {
 		return nil, err
 	}
 
