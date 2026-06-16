@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"io"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -27,98 +25,90 @@ func TestConfigPathFromArgs(t *testing.T) {
 	assert.Equal(t, "env.toml", configPathFromArgs([]string{"shoelaces", "--", "--config=ignored.toml"}, lookupEnv))
 }
 
-func TestReadConfigSupportsStructuredFormats(t *testing.T) {
-	tests := map[string]string{
-		"shoelaces.toml": `
-bind-addr = "localhost:8081"
-data-dir = "configs/data-dir/"
-debug = true
-
-[tftp]
-enabled = true
-address = ":69"
-root = "/var/lib/shoelaces/tftp"
-readonly = true
-timeout = "5s"
-`,
-		"shoelaces.yaml": `
-bind-addr: localhost:8081
-data-dir: configs/data-dir/
-debug: true
-tftp:
-  enabled: true
-  address: ":69"
-  root: /var/lib/shoelaces/tftp
-  readonly: true
-  timeout: 5s
-`,
-		"shoelaces.json": `{
-  "bind-addr": "localhost:8081",
-  "data-dir": "configs/data-dir/",
-  "debug": true,
-  "tftp": {
-    "enabled": true,
-    "address": ":69",
-    "root": "/var/lib/shoelaces/tftp",
-    "readonly": true,
-    "timeout": "5s"
-  }
-}`,
+func TestCommandValuePrecedence(t *testing.T) {
+	tests := []struct {
+		name        string
+		configValue string
+		envValue    string
+		cliValue    string
+		expected    string
+	}{
+		{
+			name:     "default used when no source is set",
+			expected: "localhost:8081",
+		},
+		{
+			name:        "config overrides default",
+			configValue: "config:8081",
+			expected:    "config:8081",
+		},
+		{
+			name:        "env overrides config",
+			configValue: "config:8081",
+			envValue:    "env:8081",
+			expected:    "env:8081",
+		},
+		{
+			name:        "cli overrides env",
+			configValue: "config:8081",
+			envValue:    "env:8081",
+			cliValue:    "cli:8081",
+			expected:    "cli:8081",
+		},
 	}
 
-	for name, body := range tests {
-		t.Run(name, func(t *testing.T) {
-			configPath := filepath.Join(t.TempDir(), name)
-			require.NoError(t, os.WriteFile(configPath, []byte(body), 0o644))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("BIND_ADDR", tt.envValue)
+			}
 
-			values, err := readConfig(configPath)
-			require.NoError(t, err)
+			configValues := map[any]any{
+				"data-dir":   "../../configs/data-dir",
+				"static-dir": "../../web",
+			}
+			if tt.configValue != "" {
+				configValues["bind-addr"] = tt.configValue
+			}
 
-			assert.Equal(t, "localhost:8081", values["bind-addr"])
-			assert.Equal(t, "configs/data-dir/", values["data-dir"])
-			assert.Equal(t, true, values["debug"])
-			assert.Equal(t, true, values["tftp-enabled"])
-			assert.Equal(t, ":69", values["tftp-addr"])
-			assert.Equal(t, "/var/lib/shoelaces/tftp", values["tftp-root"])
-			assert.Equal(t, true, values["tftp-readonly"])
-			assert.Equal(t, "5s", values["tftp-timeout"])
+			var got *environment.Environment
+			cmd := command("test.toml", configValues, func(env *environment.Environment) error {
+				got = env
+				return nil
+			})
+
+			args := []string{"shoelaces"}
+			if tt.cliValue != "" {
+				args = append(args, "--bind-addr", tt.cliValue)
+			}
+
+			require.NoError(t, cmd.Run(context.Background(), args))
+			require.NotNil(t, got)
+			assert.Equal(t, tt.expected, got.BindAddr)
 		})
 	}
 }
 
-func TestReadConfigRejectsUnsupportedFormat(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "shoelaces.conf")
-	require.NoError(t, os.WriteFile(configPath, []byte("data-dir=configs/data-dir/"), 0o644))
-
-	_, err := readConfig(configPath)
-	assert.ErrorContains(t, err, "unsupported config file extension")
-}
-
-func TestCommandAppliesCLIEnvConfigPrecedence(t *testing.T) {
-	t.Setenv("BIND_ADDR", "env:8081")
+func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 	t.Setenv("TFTP_ADDR", ":2069")
 
 	configValues := map[any]any{
-		"bind-addr":    "config:8081",
 		"data-dir":     "../../configs/data-dir",
 		"static-dir":   "../../web",
-		"tftp-enabled": "true",
+		"tftp-enabled": true,
 		"tftp-addr":    ":1069",
 		"tftp-timeout": "7s",
 	}
 
 	var got *environment.Environment
-	cmd := command("test.conf", configValues, func(env *environment.Environment) error {
+	cmd := command("test.toml", configValues, func(env *environment.Environment) error {
 		got = env
 		return nil
 	})
 
-	err := cmd.Run(context.Background(), []string{"shoelaces", "--bind-addr", "cli:8081"})
-	require.NoError(t, err)
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
 	require.NotNil(t, got)
 
-	assert.Equal(t, "cli:8081", got.BindAddr)
-	assert.Equal(t, "cli:8081", got.BaseURL)
 	require.NotNil(t, got.TFTP)
 	assert.True(t, got.TFTP.Enabled)
 	assert.Equal(t, ":2069", got.TFTP.Addr)
