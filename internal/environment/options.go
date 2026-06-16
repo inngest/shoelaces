@@ -2,15 +2,24 @@ package environment
 
 // Options contains startup configuration for a Shoelaces environment.
 type Options struct {
-	BindAddr          string
-	BaseURL           string
-	DataDir           string
-	StaticDir         string
-	EnvDir            string
+	// BindAddr is the HTTP listen address for the Shoelaces web server.
+	BindAddr string
+	// BaseURL is used when rendered templates need to refer back to Shoelaces.
+	BaseURL string
+	// DataDir is the root for mappings, boot templates, static config assets, and environment overrides.
+	DataDir string
+	// StaticDir contains the web UI templates and static frontend assets.
+	StaticDir string
+	// EnvDir is the directory under DataDir that contains environment-specific overrides.
+	EnvDir string
+	// TemplateExtension identifies files that should be parsed as dynamic Shoelaces templates.
 	TemplateExtension string
-	MappingsFile      string
-	Debug             bool
-	TFTP              *TFTPConfig
+	// MappingsFile is resolved relative to DataDir and maps hosts or networks to boot scripts.
+	MappingsFile string
+	// Debug enables debug-level logging.
+	Debug bool
+	// TFTP controls the optional embedded TFTP server. A nil value means use defaults.
+	TFTP *TFTPConfig
 }
 
 // DefaultOptions returns the runtime defaults for options not explicitly set.
