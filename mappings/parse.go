@@ -38,11 +38,9 @@ type Mappings struct {
 	NetworkMaps []NetworkMapConfig `koanf:"networkMaps"`
 	// HostnameMaps selects targets by matching the resolved/request hostname.
 	HostnameMaps []HostnameMapConfig `koanf:"hostnameMaps"`
-	// MacMaps selects targets by exact MAC address. Runtime integration follows
-	// in Phase 2; Phase 1 validates and stores this schema.
+	// MacMaps selects targets by exact MAC address.
 	MacMaps []MacMapConfig `koanf:"macMaps"`
-	// IPMaps selects targets by exact IP address. Runtime integration follows
-	// in Phase 2; Phase 1 validates and stores this schema.
+	// IPMaps selects targets by exact IP address.
 	IPMaps []IPMapConfig `koanf:"ipMaps"`
 }
 
