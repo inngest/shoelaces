@@ -9,7 +9,7 @@ before:
 
 builds:
   - id: shoelaces
-    main: ./cmd/shoelaces/main.go
+    main: ./cmd/shoelaces
     binary: shoelaces
     env:
       - CGO_ENABLED=0
