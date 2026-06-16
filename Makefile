@@ -59,6 +59,6 @@ goreleaser-snapshot:
 .PHONY: release-notes
 release-notes:
 ifndef RELEASE_TAG
-	$(error RELEASE_TAG is required, e.g. make release-notes RELEASE_TAG=v2026-05-07.01)
+	$(error RELEASE_TAG is required, e.g. make release-notes RELEASE_TAG=v1.4.0)
 endif
 	scripts/export-release-notes.sh "$(RELEASE_TAG)"
