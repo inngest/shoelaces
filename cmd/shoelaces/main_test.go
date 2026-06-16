@@ -64,8 +64,7 @@ func TestCommandValuePrecedence(t *testing.T) {
 			}
 
 			configValues := map[any]any{
-				"data-dir":   "../../configs/data-dir",
-				"static-dir": "../../web",
+				"data-dir": "../../configs/data-dir",
 			}
 			if tt.configValue != "" {
 				configValues["bind-addr"] = tt.configValue
@@ -94,7 +93,6 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 
 	configValues := map[any]any{
 		"data-dir":     "../../configs/data-dir",
-		"static-dir":   "../../web",
 		"tftp-enabled": true,
 		"tftp-addr":    ":1069",
 		"tftp-timeout": "7s",
@@ -113,6 +111,87 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 	assert.True(t, got.TFTP.Enabled)
 	assert.Equal(t, ":2069", got.TFTP.Addr)
 	assert.Equal(t, 7*time.Second, got.TFTP.Timeout)
+}
+
+func TestCommandUIDirPrecedence(t *testing.T) {
+	tests := []struct {
+		name        string
+		configValue string
+		envValue    string
+		cliValue    string
+		expected    string
+	}{
+		{
+			name: "default uses embedded UI",
+		},
+		{
+			name:        "config overrides embedded UI",
+			configValue: "config-ui",
+			expected:    "config-ui",
+		},
+		{
+			name:        "env overrides config",
+			configValue: "config-ui",
+			envValue:    "env-ui",
+			expected:    "env-ui",
+		},
+		{
+			name:        "cli overrides env",
+			configValue: "config-ui",
+			envValue:    "env-ui",
+			cliValue:    "cli-ui",
+			expected:    "cli-ui",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("UI_DIR", tt.envValue)
+			}
+
+			configValues := map[any]any{
+				"data-dir": "../../configs/data-dir",
+			}
+			if tt.configValue != "" {
+				configValues["ui-dir"] = tt.configValue
+			}
+
+			var got *environment.Environment
+			cmd := command("test.toml", configValues, func(env *environment.Environment) error {
+				got = env
+				return nil
+			})
+
+			args := []string{"shoelaces"}
+			if tt.cliValue != "" {
+				args = append(args, "--ui-dir", tt.cliValue)
+			}
+
+			require.NoError(t, cmd.Run(context.Background(), args))
+			require.NotNil(t, got)
+			assert.Equal(t, tt.expected, got.UIDir)
+			assert.Equal(t, tt.expected != "", got.UIOverrideDirSet)
+		})
+	}
+}
+
+func TestCommandStaticDirCompatibilityAlias(t *testing.T) {
+	configValues := map[any]any{
+		"data-dir":   "../../configs/data-dir",
+		"static-dir": "legacy-ui",
+	}
+
+	var got *environment.Environment
+	cmd := command("test.toml", configValues, func(env *environment.Environment) error {
+		got = env
+		return nil
+	})
+
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NotNil(t, got)
+	assert.Equal(t, "legacy-ui", got.UIDir)
+	assert.True(t, got.UIOverrideDirSet)
 }
 
 func TestCommandVersionDoesNotRequireDataDir(t *testing.T) {

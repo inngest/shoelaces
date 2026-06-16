@@ -45,7 +45,8 @@ type Environment struct {
 	BindAddr          string
 	BaseURL           string
 	DataDir           string
-	StaticDir         string
+	UIDir             string
+	UIOverrideDirSet  bool
 	EnvDir            string
 	TFTP              *TFTPConfig
 	TemplateExtension string

@@ -92,19 +92,19 @@ through =/configs/static/*=.
 
 *** Phase 4: =ui-dir= Compatibility
 
-- [ ] Replace the UI override config surface with =ui-dir= so the option is
+- [X] Replace the UI override config surface with =ui-dir= so the option is
   explicitly about UI templates/assets rather than provisioning static files.
-- [ ] Keep =ui-dir= as an optional UI-only disk override for local
+- [X] Keep =ui-dir= as an optional UI-only disk override for local
   development/custom UI assets.
-- [ ] Treat legacy =static-dir= as a deprecated compatibility alias for
+- [X] Treat legacy =static-dir= as a deprecated compatibility alias for
   =ui-dir=, or remove it with deliberate test/doc updates if compatibility is
   intentionally broken.
-- [ ] Adjust flag defaults and validation so =ui-dir= is no longer required
+- [X] Adjust flag defaults and validation so =ui-dir= is no longer required
   for normal operation.
 - [ ] If disk override support is kept, route both UI template parsing and
   =/static/*= serving to the override directory only when =ui-dir= is
   explicitly configured.
-- [ ] Use current =urfave/cli= and Koanf-backed config behavior to distinguish an
+- [X] Use current =urfave/cli= and Koanf-backed config behavior to distinguish an
   explicitly configured =ui-dir= from the embedded default path.
 - [ ] Update integration test setup so normal test startup does not depend on
   passing the repository =web= directory as =ui-dir=.

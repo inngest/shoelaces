@@ -86,7 +86,7 @@ func newTestRouter(t *testing.T, dataDir string) http.Handler {
 		BaseURL:           "localhost:8081",
 		DataDir:           dataDir,
 		EnvDir:            "env_overrides",
-		StaticDir:         filepath.Join(t.TempDir(), "missing-web"),
+		UIDir:             filepath.Join(t.TempDir(), "missing-web"),
 		TemplateExtension: ".slc",
 		StaticTemplates:   staticTemplates,
 		Logger:            log.MakeLogger(io.Discard),

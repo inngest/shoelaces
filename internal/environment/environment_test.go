@@ -71,7 +71,7 @@ func TestInitEnvOverridesReturnsEmptyWhenDirectoryIsMissing(t *testing.T) {
 
 func TestInitStaticTemplatesUsesEmbeddedTemplates(t *testing.T) {
 	env := defaultEnvironment()
-	env.StaticDir = filepath.Join(t.TempDir(), "missing-web")
+	env.UIDir = filepath.Join(t.TempDir(), "missing-web")
 
 	env.initStaticTemplates()
 
