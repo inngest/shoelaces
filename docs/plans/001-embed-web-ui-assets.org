@@ -106,7 +106,7 @@ through =/configs/static/*=.
   explicitly configured.
 - [X] Use current =urfave/cli= and Koanf-backed config behavior to distinguish an
   explicitly configured =ui-dir= from the embedded default path.
-- [ ] Update integration test setup so normal test startup does not depend on
+- [X] Update integration test setup so normal test startup does not depend on
   passing the repository =web= directory as =ui-dir=.
 
 *** Phase 5: Packaging And Documentation

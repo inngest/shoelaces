@@ -22,7 +22,6 @@ import subprocess
 import sys
 import time
 import tempfile
-import string
 import pytest
 import requests
 import datetime
@@ -34,7 +33,6 @@ API_URL = "http://{}".format(API_ADDR)
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(os.path.dirname(TEST_DIR))
 FIXTURE_DIR = os.path.join(TEST_DIR, 'expected-results')
-STATIC_DIR = os.path.join(BASE_DIR, "web")
 SHOELACES_BINARY = os.path.join(BASE_DIR, "shoelaces")
 
 
@@ -48,18 +46,17 @@ def shoelaces_binary():
 @pytest.fixture(scope="session", autouse=True)
 def config_file(shoelaces_binary):
     """ Create a temporary config file """
-    temp_config_tpl = string.Template("bind-addr=$bind_addr\n"
-                                      "data-dir=integ-test-configs\n"
-                                      "static-dir=$static_dir\n"
-                                      "template-extension=.slc\n"
-                                      "mappings-file=mappings.yaml\n"
-                                      "debug=true\n")
-    temp_config = temp_config_tpl.substitute(bind_addr=API_ADDR,
-                                             static_dir=STATIC_DIR)
+    temp_config = (
+        'bind-addr = "{}"\n'
+        'data-dir = "integ-test-configs"\n'
+        'template-extension = ".slc"\n'
+        'mappings-file = "mappings.yaml"\n'
+        'debug = true\n'
+    ).format(API_ADDR)
 
     sys.stderr.write("Using:\n{}".format(temp_config))
-    temp_cfg_file = tempfile.NamedTemporaryFile(delete=False)
-    temp_cfg_file.write(bytes(temp_config, 'ascii'))
+    temp_cfg_file = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".toml")
+    temp_cfg_file.write(temp_config)
     temp_cfg_file.flush()
     temp_cfg_file_name = temp_cfg_file.name
     temp_cfg_file.close()
