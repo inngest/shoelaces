@@ -145,6 +145,7 @@ targets:
 
 	require.NoError(t, env.initMappings(mappingsPath))
 
+	require.NotNil(t, env.MappingResolver)
 	require.Len(t, env.NetworkMaps, 2)
 	assert.True(t, env.NetworkMaps[0].Network.Contains(mustParseIP(t, "192.0.2.10")))
 	assert.Equal(t, "network.ipxe", env.NetworkMaps[0].Script.Name)

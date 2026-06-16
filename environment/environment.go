@@ -33,8 +33,11 @@ import (
 
 // Environment struct holds the shoelaces instance global data.
 type Environment struct {
-	HostnameMaps    []mappings.HostnameMap
-	NetworkMaps     []mappings.NetworkMap
+	HostnameMaps []mappings.HostnameMap
+	NetworkMaps  []mappings.NetworkMap
+	// MappingResolver holds the new target resolver for the mappings.yaml
+	// schema. Phase 4 will use it directly from polling and manual boot paths.
+	MappingResolver *mappings.Resolver
 	ServerStates    *server.States
 	EventLog        *event.Log
 	ParamsBlacklist []string
@@ -156,6 +159,10 @@ func (env *Environment) initMappings(mappingsPath string) error {
 	if err != nil {
 		return err
 	}
+	env.MappingResolver, err = mappings.NewResolver(configMappings)
+	if err != nil {
+		return err
+	}
 
 	for _, configNetMap := range configMappings.NetworkMaps {
 		_, ipnet, err := net.ParseCIDR(configNetMap.Network)
@@ -194,9 +201,9 @@ func (env *Environment) initMappings(mappingsPath string) error {
 	return nil
 }
 
-// initScriptForTarget adapts the new named-target mapping model to the current
-// polling runtime. Phase 2 replaces this default-target-only bridge with a
-// resolver that can expose multiple allowed targets for manual selection.
+// initScriptForTarget adapts the new named-target mapping model to the legacy
+// polling runtime. Phase 4 replaces this default-target-only bridge with direct
+// resolver use from polling and manual boot paths.
 func initScriptForTarget(configMappings *mappings.Mappings, targetName string, mappingParams map[string]any) (*mappings.Script, error) {
 	if targetName == "" {
 		return nil, nil
