@@ -15,13 +15,14 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 	"github.com/thousandeyes/shoelaces/internal/environment"
 	"github.com/thousandeyes/shoelaces/internal/handlers"
 	"github.com/thousandeyes/shoelaces/internal/router"
@@ -275,89 +276,15 @@ func readConfig(path string) (map[any]any, error) {
 		return values, nil
 	}
 
-	file, err := os.Open(path)
+	parser, err := parserForConfig(path)
 	if err != nil {
 		return nil, err
 	}
 
-	section := ""
-	scanner := bufio.NewScanner(file)
-	for lineNumber := 1; scanner.Scan(); lineNumber++ {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(line[1 : len(line)-1])
-			if section != "tftp" {
-				return nil, fmt.Errorf("%s:%d: unsupported config section %q", path, lineNumber, section)
-			}
-			continue
-		}
-
-		name, value := parseConfigLine(line)
-		if section != "" {
-			name = section + "." + name
-		}
-		name, value, err = normalizeConfigValue(name, value)
-		if err != nil {
-			return nil, fmt.Errorf("%s:%d: %w", path, lineNumber, err)
-		}
-		values[name] = value
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	if err := file.Close(); err != nil {
+	k := koanf.New(".")
+	if err := k.Load(file.Provider(path), parser); err != nil {
 		return nil, err
 	}
 
-	return values, nil
-}
-
-func parseConfigLine(line string) (string, string) {
-	if name, value, ok := strings.Cut(line, "="); ok {
-		return strings.TrimSpace(name), trimConfigValue(value)
-	}
-	if index := strings.IndexAny(line, " \t"); index >= 0 {
-		return strings.TrimSpace(line[:index]), trimConfigValue(line[index+1:])
-	}
-	return strings.TrimSpace(line), "true"
-}
-
-func trimConfigValue(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) >= 2 {
-		if value[0] == '"' && value[len(value)-1] == '"' {
-			return value[1 : len(value)-1]
-		}
-		if value[0] == '\'' && value[len(value)-1] == '\'' {
-			return value[1 : len(value)-1]
-		}
-	}
-	return value
-}
-
-func normalizeConfigValue(name, value string) (string, string, error) {
-	switch name {
-	case "bind-addr", "base-url", "data-dir", "static-dir", "env-dir", "template-extension", "mappings-file", "debug",
-		"tftp-enabled", "tftp-addr", "tftp-root", "tftp-readonly", "tftp-timeout":
-		return name, value, nil
-	case "tftp.enabled":
-		return "tftp-enabled", value, nil
-	case "tftp.address", "tftp.addr":
-		return "tftp-addr", value, nil
-	case "tftp.root":
-		return "tftp-root", value, nil
-	case "tftp.readonly":
-		return "tftp-readonly", value, nil
-	case "tftp.timeout":
-		return "tftp-timeout", value, nil
-	case "tftp.timeout_seconds":
-		// Preserve the checked-in legacy [tftp] config shape while feeding the
-		// duration parser the unit-suffixed value it expects.
-		return "tftp-timeout", value + "s", nil
-	default:
-		return "", "", fmt.Errorf("configuration variable provided but not defined: %s", name)
-	}
+	return configValuesFromKoanf(k)
 }
