@@ -84,6 +84,7 @@ macMaps:
   compatible.
 - [ ] Add strict top-level key validation for the new mapping schema.
 - [ ] Add tests proving the current example =mappings.yaml= still parses.
+- [ ] Add tests proving IPv4 and IPv6 CIDR network mappings parse and match.
 
 *** Phase 2: Targets And Multiple Choices
 
@@ -91,6 +92,8 @@ macMaps:
   params.
 - [ ] Add mapping-level =targets= and =defaultTarget=.
 - [ ] Add =macMaps= and =ipMaps= alongside existing hostname and network maps.
+- [ ] Add tests proving exact IP mappings work for both IPv4 and IPv6
+  addresses.
 - [ ] Define deterministic match precedence: manual selection, MAC, IP,
   hostname, network, then unmatched/manual queue.
 - [ ] Add tests for multiple targets, default target selection, and no-default
