@@ -4,31 +4,44 @@ LDFLAGS = "-s -w"
 
 pkgs = ./...
 
+.PHONY: all
 all:
 	$(GO) build ./cmd/shoelaces
 
+.PHONY: lint
+lint:
+	golangci-lint run -v
+
+.PHONY: fmt
 fmt:
 	$(GO) fmt ./...
 
+.PHONY: clean
 clean:
 	rm -f shoelaces docs/shoelaces.8
 
 shoelaces.8:
 	$(SCDOC) < docs/shoelaces.8.scd > docs/shoelaces.8
 
+.PHONY: docs
 docs: shoelaces.8
 
+.PHONY: unit
 unit: fmt
 	$(GO) test -v -count=1 $(pkgs)
 
+.PHONY: test
 test: unit
 	./test/integ-test/integ_test.py -vv
 
-.PHONY: all clean docs unit test
-
+.PHONY: binaries
 binaries: linux windows
+
+.PHONY: linux
 linux:
 		GOOS=linux ${GO} build -o bin/shoelaces -ldflags ${LDFLAGS} ./cmd/shoelaces
+
+.PHONY: windows
 windows:
 		GOOS=windows ${GO} build -o bin/shoelaces.exe -ldflags ${LDFLAGS} ./cmd/shoelaces
 
