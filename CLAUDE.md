@@ -21,7 +21,7 @@ Shoelaces is a lightweight server bootstrapping tool that serves iPXE boot scrip
 - Tests run on port 18888 and use fixtures in `test/integ-test/expected-results/`
 
 ### Running Shoelaces
-- `./shoelaces -config configs/shoelaces.conf` - Run with example configuration
+- `./shoelaces --config configs/shoelaces.conf` - Run with example configuration
 - Default web UI available at `localhost:8081`
 
 ## Architecture
