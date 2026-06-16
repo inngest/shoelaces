@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/inngest/shoelaces/server"
+	"github.com/inngest/shoelaces/utils"
 )
 
 // Type holds the different typs of events
@@ -69,7 +70,7 @@ func New(eventType Type, srv server.Server, bootType, script string, params map[
 	event.Server = srv
 	event.BootType = bootType
 	event.Script = script
-	event.Params = params
+	event.Params = utils.RedactParams(params)
 
 	event.setMessage()
 

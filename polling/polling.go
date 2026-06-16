@@ -131,7 +131,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 		return true, err
 	}
 
-	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", result.Params)
+	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
 	eventLog.AddEvent(event.UserSelection, resolvedServer, "", result.Target.Script, nil)
 	servers[srv.Mac].Server = resolvedServer
 	servers[srv.Mac].Target = result.Target.Script

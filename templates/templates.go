@@ -185,7 +185,7 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	if envName == "" {
 		envName = defaultEnvironment
 	}
-	logger.Info("component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.MapToString(paramMap))
+	logger.Info("component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
 
 	requiredVariables := s.envTemplates[envName].templateVars[configName]
 
