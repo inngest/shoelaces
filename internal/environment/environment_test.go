@@ -17,24 +17,17 @@ package environment
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/thousandeyes/shoelaces/internal/mappings"
 )
 
 func TestDefaultEnvironment(t *testing.T) {
 	env := defaultEnvironment()
-	if env.BaseURL != "" {
-		t.Error("BaseURL should be empty string if instantiated directly.")
-	}
-	if len(env.HostnameMaps) != 0 {
-		t.Error("Hostname mappings should be empty")
-	}
-	if len(env.NetworkMaps) != 0 {
-		t.Error("Network mappings should be empty")
-	}
-	if len(env.ParamsBlacklist) != 1 &&
-		env.ParamsBlacklist[0] != "baseURL" {
-		t.Error("ParamsBlacklist should have only baseURL")
-	}
+	assert.Empty(t, env.BaseURL)
+	assert.Empty(t, env.HostnameMaps)
+	assert.Empty(t, env.NetworkMaps)
+	assert.Equal(t, []string{"baseURL"}, env.ParamsBlacklist)
 }
 
 func TestInitScript(t *testing.T) {
@@ -42,20 +35,8 @@ func TestInitScript(t *testing.T) {
 	params["one"] = "one_value"
 	configScript := mappings.YamlScript{Name: "testscript", Params: params}
 	mappingScript := initScript(configScript)
-	if mappingScript.Name != "testscript" {
-		t.Errorf("Expected: %s\nGot: %s\n", "testscript", mappingScript.Name)
-	}
+	assert.Equal(t, "testscript", mappingScript.Name)
 	val, ok := mappingScript.Params["one"]
-	if !ok {
-		t.Error("Missing param")
-	} else {
-		v, ok := val.(string)
-		if !ok {
-			t.Error("Bad value type")
-		} else {
-			if v != "one_value" {
-				t.Error("Bad value")
-			}
-		}
-	}
+	require.True(t, ok)
+	assert.Equal(t, "one_value", val)
 }

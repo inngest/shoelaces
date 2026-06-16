@@ -18,6 +18,9 @@ import (
 	"net"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -62,39 +65,39 @@ func TestScript(t *testing.T) {
 	expected1 := "mock_script1 : { param11: param1_value1, param21: param2_value1 }"
 	expected2 := "mock_script1 : { param21: param2_value1, param11: param1_value1 }"
 	mockScriptString := mockScript1.String()
-	if mockScriptString != expected1 && mockScriptString != expected2 {
-		t.Errorf("Expected: %s or %s\nGot: %s\n", expected1, expected2, mockScriptString)
-	}
+	assert.Contains(t, []string{expected1, expected2}, mockScriptString)
 }
 
 func TestFindScriptForHostname(t *testing.T) {
 	maps := []HostnameMap{mockHostNameMap1, mockHostNameMap2}
 	script, success := FindScriptForHostname(maps, "mock_host1")
-	if script.Name != "mock_script1" || !success {
-		t.Error("Hostname should have matched")
-	}
+	require.True(t, success)
+	require.NotNil(t, script)
+	assert.Equal(t, "mock_script1", script.Name)
+
 	script, success = FindScriptForHostname(maps, "mock_host2")
-	if script.Name != "mock_script2" || !success {
-		t.Error("Hostname should have matched")
-	}
+	require.True(t, success)
+	require.NotNil(t, script)
+	assert.Equal(t, "mock_script2", script.Name)
+
 	script, success = FindScriptForHostname(maps, "mock_host_bad")
-	if script != nil || success {
-		t.Error("Hostname should have not matched")
-	}
+	assert.False(t, success)
+	assert.Nil(t, script)
 }
 
 func TestScriptForNetwork(t *testing.T) {
 	maps := []NetworkMap{mockNetworkMap1, mockNetworkMap2}
 	script, success := FindScriptForNetwork(maps, "10.0.0.1")
-	if script.Name != "mock_script1" || !success {
-		t.Error("IP should have matched the network map")
-	}
+	require.True(t, success)
+	require.NotNil(t, script)
+	assert.Equal(t, "mock_script1", script.Name)
+
 	script, success = FindScriptForNetwork(maps, "192.168.0.1")
-	if script.Name != "mock_script2" || !success {
-		t.Error("IP should have matched the network map")
-	}
+	require.True(t, success)
+	require.NotNil(t, script)
+	assert.Equal(t, "mock_script2", script.Name)
+
 	script, success = FindScriptForNetwork(maps, "8.8.8.8")
-	if script != nil || success {
-		t.Error("IP shouildn't have matched the network map")
-	}
+	assert.False(t, success)
+	assert.Nil(t, script)
 }

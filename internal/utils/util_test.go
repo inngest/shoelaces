@@ -16,13 +16,13 @@ package utils
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMacColonToDash(t *testing.T) {
 	testNormMac := func(givenMac, expectedMac string) {
-		if MacColonToDash(givenMac) != expectedMac {
-			t.Errorf("Expected: %s\nGot: %s", expectedMac, givenMac)
-		}
+		assert.Equal(t, expectedMac, MacColonToDash(givenMac))
 	}
 	testNormMac("ff:ff:ff:ff:ff:ff", "ff-ff-ff-ff-ff-ff")
 	testNormMac("ff-ff-ff-ff-ff-ff", "ff-ff-ff-ff-ff-ff")
@@ -30,9 +30,7 @@ func TestMacColonToDash(t *testing.T) {
 
 func TestMacDashToColon(t *testing.T) {
 	testNormMac := func(givenMac, expectedMac string) {
-		if MacDashToColon(givenMac) != expectedMac {
-			t.Errorf("Expected: %s\nGot: %s", expectedMac, givenMac)
-		}
+		assert.Equal(t, expectedMac, MacDashToColon(givenMac))
 	}
 	testNormMac("ff-ff-ff-ff-ff-ff", "ff:ff:ff:ff:ff:ff")
 	testNormMac("ff.ff.ff.ff.ff.ff", "ff.ff.ff.ff.ff.ff")
