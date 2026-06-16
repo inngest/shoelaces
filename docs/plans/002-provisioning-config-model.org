@@ -123,23 +123,23 @@ macMaps:
 
 *** Phase 3: Parameter Resolution
 
-- [ ] Define parameter merge order: global defaults, target params, matched
+- [X] Define parameter merge order: global defaults, target params, matched
   mapping params, manual/request params, generated values.
-- [ ] Support raw scalar parameter values.
-- [ ] Support explicit environment-backed parameter values such as ={ env:
+- [X] Support raw scalar parameter values.
+- [X] Support explicit environment-backed parameter values such as ={ env:
   SHOELACES_ROOT_PASSWORD_CRYPTED }=. These values come from the Shoelaces
   process environment, so systemd service environment variables work without a
   separate env file.
-- [ ] Decide and document whether Koanf environment overlay should also populate
-  missing mapping keys by path, or whether explicit ={ env: ... }= references
-  are the only environment-backed mapping mechanism.
-- [ ] Fail clearly when a referenced environment variable is missing.
-- [ ] Normalize all resolved params into the runtime template parameter map.
-- [ ] Copy/merge params into a fresh map per boot render so hostname/baseURL and
+- [X] Use explicit ={ env: ... }= references as the only environment-backed
+  mapping parameter mechanism for now. Do not add a broad Koanf environment
+  overlay for mapping params in this phase.
+- [X] Fail clearly when a referenced environment variable is missing.
+- [X] Normalize all resolved params into the runtime template parameter map.
+- [X] Copy/merge params into a fresh map per boot render so hostname/baseURL and
   other generated values do not mutate shared mapping or target config.
-- [ ] Add tests for merge order, raw values, env-backed values, and missing env
+- [X] Add tests for merge order, raw values, env-backed values, and missing env
   errors.
-- [ ] Add tests proving repeated boots from the same mapping do not leak params
+- [X] Add tests proving repeated boots from the same mapping do not leak params
   between hosts.
 
 *** Phase 4: Runtime Integration
@@ -193,9 +193,8 @@ macMaps:
 - Mapping config is site/runtime provisioning policy and should not be embedded
   as production configuration.
 - Avoid implicit environment fallback by parameter name. Environment-backed
-  values should be explicit in the mapping file unless the implementation
-  intentionally adds a documented Koanf environment overlay for missing mapping
-  keys.
+  mapping parameters use explicit ={ env: ... }= references; broad Koanf
+  environment overlay for mapping params is intentionally out of scope for now.
 - This plan intentionally changes the mapping schema. Documentation and examples
   must land with the runtime changes so operators have a clear migration path.
 - Existing polling mutates =Script.Params= when it adds generated values such as
