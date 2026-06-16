@@ -17,9 +17,13 @@ package mappings
 import (
 	"fmt"
 	"net"
+	"os"
 	"regexp"
 	"sort"
 )
+
+// EnvLookup reads an environment-backed parameter value.
+type EnvLookup func(string) (string, bool)
 
 // MatchType identifies which mapping rule selected or constrained a boot.
 type MatchType string
@@ -49,6 +53,14 @@ type ResolveRequest struct {
 	Hostname string
 	// ManualTarget is the explicit target name selected by a user/operator.
 	ManualTarget string
+	// Params contains request or manual form parameters supplied by the caller.
+	Params map[string]any
+	// GeneratedParams contains values produced by Shoelaces, such as hostname
+	// and baseURL. These have the highest merge precedence.
+	GeneratedParams map[string]any
+	// EnvLookup resolves explicit { env: VAR } parameter references. When nil,
+	// os.LookupEnv is used.
+	EnvLookup EnvLookup
 }
 
 // TargetCandidate is an immutable snapshot of a named boot target.
@@ -78,6 +90,8 @@ type ResolveResult struct {
 	AllowedTargets []TargetCandidate
 	// MappingParams is a copied parameter map from the matched mapping rule.
 	MappingParams map[string]any
+	// Params is the fully merged and normalized runtime template parameter map.
+	Params map[string]any
 	// RequiresManualSelection is true when no default target was selected.
 	RequiresManualSelection bool
 }
@@ -98,6 +112,8 @@ func (r ResolveResult) AllowedTargetNames() []string {
 
 // Resolver compiles a Mappings object for deterministic host target selection.
 type Resolver struct {
+	// defaults stores copied global default params from mappings.yaml.
+	defaults map[string]any
 	// targets stores copied target definitions by name.
 	targets map[string]Target
 	// targetOrder gives deterministic ordering for unrestricted manual choices.
@@ -148,7 +164,8 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 	}
 
 	resolver := &Resolver{
-		targets: make(map[string]Target, len(mappings.Targets)),
+		defaults: copyParamMap(mappings.Defaults.Params),
+		targets:  make(map[string]Target, len(mappings.Targets)),
 	}
 	for name, target := range mappings.Targets {
 		resolver.targets[name] = copyTarget(target)
@@ -230,6 +247,10 @@ func (r *Resolver) Resolve(request ResolveRequest) (ResolveResult, error) {
 	}
 	result.TargetName = policy.defaultTarget
 	result.Target = target
+	result.Params, err = r.resolveParams(target, result.MappingParams, request)
+	if err != nil {
+		return ResolveResult{}, err
+	}
 	return result, nil
 }
 
@@ -249,13 +270,18 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 	if err != nil {
 		return ResolveResult{}, err
 	}
-	return ResolveResult{
+	result := ResolveResult{
 		MatchType:      MatchManual,
 		TargetName:     request.ManualTarget,
 		Target:         target,
 		AllowedTargets: allowedTargets,
 		MappingParams:  mappingParams,
-	}, nil
+	}
+	result.Params, err = r.resolveParams(target, mappingParams, request)
+	if err != nil {
+		return ResolveResult{}, err
+	}
+	return result, nil
 }
 
 func (r *Resolver) findPolicy(request ResolveRequest) (*compiledPolicy, MatchType) {
@@ -344,6 +370,73 @@ func (r *Resolver) targetsByName(names []string) []TargetCandidate {
 
 func (r *Resolver) allTargets() []TargetCandidate {
 	return r.targetsByName(r.targetOrder)
+}
+
+func (r *Resolver) resolveParams(target TargetCandidate, mappingParams map[string]any, request ResolveRequest) (map[string]any, error) {
+	merged := make(map[string]any)
+	mergeParamMap(merged, r.defaults)
+	mergeParamMap(merged, target.Params)
+	mergeParamMap(merged, mappingParams)
+	mergeParamMap(merged, request.Params)
+	mergeParamMap(merged, request.GeneratedParams)
+
+	lookup := request.EnvLookup
+	if lookup == nil {
+		lookup = os.LookupEnv
+	}
+	for key, value := range merged {
+		resolved, err := resolveParamValue(key, value, lookup)
+		if err != nil {
+			return nil, err
+		}
+		merged[key] = resolved
+	}
+	return merged, nil
+}
+
+func mergeParamMap(dst map[string]any, src map[string]any) {
+	for key, value := range src {
+		dst[key] = value
+	}
+}
+
+func resolveParamValue(key string, value any, lookup EnvLookup) (any, error) {
+	envRef, ok, err := envReference(value)
+	if err != nil {
+		return nil, fmt.Errorf("parameter %q: %w", key, err)
+	}
+	if !ok {
+		return value, nil
+	}
+	resolved, found := lookup(envRef)
+	if !found {
+		return nil, fmt.Errorf("parameter %q references missing environment variable %q", key, envRef)
+	}
+	return resolved, nil
+}
+
+func envReference(value any) (env string, ok bool, err error) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return envReferenceFromMap(typed)
+	default:
+		return "", false, nil
+	}
+}
+
+func envReferenceFromMap(value map[string]any) (string, bool, error) {
+	envValue, ok := value["env"]
+	if !ok {
+		return "", false, nil
+	}
+	if len(value) != 1 {
+		return "", false, fmt.Errorf(`environment reference must only contain "env"`)
+	}
+	env, ok := envValue.(string)
+	if !ok || env == "" {
+		return "", false, fmt.Errorf(`environment reference "env" must be a non-empty string`)
+	}
+	return env, true, nil
 }
 
 func compilePolicy(defaultTarget string, targets []string, params map[string]any) compiledPolicy {

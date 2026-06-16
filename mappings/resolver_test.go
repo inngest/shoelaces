@@ -200,24 +200,124 @@ func TestResolverReturnsImmutableTargetSnapshots(t *testing.T) {
 	assert.Equal(t, "trixie", result.Target.Params["release"])
 }
 
+func TestResolverResolvesParamsInMergeOrder(t *testing.T) {
+	resolver := newTestResolver(t)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		Params: map[string]any{
+			"shared":          "request",
+			"request_only":    "request",
+			"install_disk":    "/dev/nvme0n1",
+			"linuxargs":       "console=ttyS0",
+			"install_retries": 3,
+			"enable_ssh":      true,
+		},
+		GeneratedParams: map[string]any{
+			"shared":   "generated",
+			"hostname": "iad-1",
+			"baseURL":  "http://shoelaces.example.com",
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{
+		"install_username":       "infra",
+		"default_only_parameter": "default",
+		"release":                "trixie",
+		"role":                   "mac",
+		"shared":                 "generated",
+		"request_only":           "request",
+		"install_disk":           "/dev/nvme0n1",
+		"linuxargs":              "console=ttyS0",
+		"install_retries":        3,
+		"enable_ssh":             true,
+		"hostname":               "iad-1",
+		"baseURL":                "http://shoelaces.example.com",
+	}, result.Params)
+}
+
+func TestResolverResolvesExplicitEnvironmentBackedParams(t *testing.T) {
+	resolver := newEnvTestResolver(t)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			return map[string]string{
+				"SHOELACES_ROOT_PASSWORD_CRYPTED": "$6$root",
+			}[key], key == "SHOELACES_ROOT_PASSWORD_CRYPTED"
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "$6$root", result.Params["root_password_crypted"])
+}
+
+func TestResolverReturnsMissingEnvironmentVariableError(t *testing.T) {
+	resolver := newEnvTestResolver(t)
+
+	_, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "", false
+		},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `parameter "root_password_crypted" references missing environment variable "SHOELACES_ROOT_PASSWORD_CRYPTED"`)
+}
+
+func TestResolverDoesNotLeakResolvedParamsBetweenBoots(t *testing.T) {
+	resolver := newEnvTestResolver(t)
+
+	first, err := resolver.Resolve(ResolveRequest{
+		Mac:             "0c:42:a1:c3:52:96",
+		GeneratedParams: map[string]any{"hostname": "first-host"},
+		EnvLookup: func(string) (string, bool) {
+			return "$6$first", true
+		},
+	})
+	require.NoError(t, err)
+	first.Params["hostname"] = "mutated"
+	first.Params["root_password_crypted"] = "mutated"
+
+	second, err := resolver.Resolve(ResolveRequest{
+		Mac:             "0c:42:a1:c3:52:96",
+		GeneratedParams: map[string]any{"hostname": "second-host"},
+		EnvLookup: func(string) (string, bool) {
+			return "$6$second", true
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "second-host", second.Params["hostname"])
+	assert.Equal(t, "$6$second", second.Params["root_password_crypted"])
+}
+
 func newTestResolver(t *testing.T) *Resolver {
 	t.Helper()
 
 	resolver, err := NewResolver(&Mappings{
 		Defaults: DefaultsMap{
-			Params: map[string]any{"install_username": "infra"},
+			Params: map[string]any{
+				"install_username":       "infra",
+				"shared":                 "defaults",
+				"install_retries":        1,
+				"enable_ssh":             false,
+				"default_only_parameter": "default",
+			},
 		},
 		Targets: map[string]Target{
 			"debian12": {
 				Script: "debian.ipxe",
 				Label:  "Debian 12",
-				Params: map[string]any{"release": "bookworm"},
+				Params: map[string]any{"release": "bookworm", "shared": "target"},
 			},
 			"debian13": {
 				Script:      "debian.ipxe",
 				Label:       "Debian 13",
 				Environment: "testing",
-				Params:      map[string]any{"release": "trixie"},
+				Params:      map[string]any{"release": "trixie", "shared": "target"},
 			},
 			"ubuntu2404": {
 				Script: "ubuntu.ipxe",
@@ -230,6 +330,7 @@ func newTestResolver(t *testing.T) *Resolver {
 				Mac:           "0c:42:a1:c3:52:96",
 				DefaultTarget: "debian13",
 				Targets:       []string{"debian13"},
+				Params:        map[string]any{"role": "mac", "shared": "mapping"},
 			},
 		},
 		IPMaps: []IPMapConfig{
@@ -260,6 +361,33 @@ func newTestResolver(t *testing.T) *Resolver {
 			{
 				Network: "2001:db8:1::/64",
 				Targets: []string{"debian12", "debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	return resolver
+}
+
+func newEnvTestResolver(t *testing.T) *Resolver {
+	t.Helper()
+
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Params: map[string]any{
+				"root_password_crypted": map[string]any{"env": "SHOELACES_ROOT_PASSWORD_CRYPTED"},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Params: map[string]any{"release": "trixie"},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
 			},
 		},
 	})
