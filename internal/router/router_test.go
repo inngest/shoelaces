@@ -19,6 +19,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,22 +32,7 @@ import (
 )
 
 func TestUIRoutesRenderEmbeddedTemplates(t *testing.T) {
-	staticTemplates := template.Must(template.ParseFS(shoelaces.TemplateFS(),
-		"header.html",
-		"index.html",
-		"events.html",
-		"mappings.html",
-		"footer.html",
-	))
-	env := &environment.Environment{
-		BaseURL:           "localhost:8081",
-		DataDir:           t.TempDir(),
-		EnvDir:            "env_overrides",
-		TemplateExtension: ".slc",
-		StaticTemplates:   staticTemplates,
-		Logger:            log.MakeLogger(io.Discard),
-	}
-	handler := handlers.MiddlewareChain(env).Then(ShoelacesRouter(env))
+	handler := newTestRouter(t, t.TempDir())
 
 	for _, path := range []string{"/", "/events", "/mappings"} {
 		t.Run(path, func(t *testing.T) {
@@ -58,4 +45,51 @@ func TestUIRoutesRenderEmbeddedTemplates(t *testing.T) {
 			assert.Contains(t, rr.Body.String(), "shoelaces - painless server bootstrapping")
 		})
 	}
+}
+
+func TestStaticRouteServesEmbeddedUIAsset(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/static/js/jquery.min.js", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "jQuery")
+}
+
+func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "provision.txt"), []byte("from data dir\n"), 0o644))
+	handler := newTestRouter(t, dataDir)
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/provision.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "from data dir\n", rr.Body.String())
+}
+
+func newTestRouter(t *testing.T, dataDir string) http.Handler {
+	t.Helper()
+
+	staticTemplates := template.Must(template.ParseFS(shoelaces.TemplateFS(),
+		"header.html",
+		"index.html",
+		"events.html",
+		"mappings.html",
+		"footer.html",
+	))
+	env := &environment.Environment{
+		BaseURL:           "localhost:8081",
+		DataDir:           dataDir,
+		EnvDir:            "env_overrides",
+		StaticDir:         filepath.Join(t.TempDir(), "missing-web"),
+		TemplateExtension: ".slc",
+		StaticTemplates:   staticTemplates,
+		Logger:            log.MakeLogger(io.Discard),
+	}
+	return handlers.MiddlewareChain(env).Then(ShoelacesRouter(env))
 }

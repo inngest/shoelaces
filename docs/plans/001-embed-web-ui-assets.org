@@ -71,16 +71,16 @@ through =/configs/static/*=.
 
 *** Phase 3: Static Asset Serving
 
-- [ ] Replace the default =/static/*= file server with a server backed by the
+- [X] Replace the default =/static/*= file server with a server backed by the
   embedded UI static filesystem.
-- [ ] Preserve URL paths beneath =/static/= so existing HTML references such as
+- [X] Preserve URL paths beneath =/static/= so existing HTML references such as
   =/static/js/jquery.min.js= and =/static/css/bootstrap.min.css= continue to
   resolve.
-- [ ] Keep =/configs/static/*= unchanged and backed by =data-dir/static= through
+- [X] Keep =/configs/static/*= unchanged and backed by =data-dir/static= through
   =handlers.StaticConfigFileServer()=.
-- [ ] Add or update router or integration coverage for a known embedded UI asset
+- [X] Add or update router or integration coverage for a known embedded UI asset
   such as =GET /static/js/jquery.min.js=.
-- [ ] Add or update coverage proving =/configs/static/*= still serves from
+- [X] Add or update coverage proving =/configs/static/*= still serves from
   =data-dir/static=.
 
 *** Phase 4: =-static-dir= Compatibility

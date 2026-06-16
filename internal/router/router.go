@@ -18,6 +18,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	shoelaces "github.com/thousandeyes/shoelaces"
 	"github.com/thousandeyes/shoelaces/internal/environment"
 	"github.com/thousandeyes/shoelaces/internal/handlers"
 )
@@ -34,7 +35,7 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	r.Handle("/mappings", handlers.RenderDefaultTemplate("mappings")).Methods("GET")
 	// Static files used by the UI
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
-		http.FileServer(http.Dir(env.StaticDir))))
+		http.FileServer(http.FS(shoelaces.StaticFS()))))
 	// Manual boot parameters POST endpoint
 	r.HandleFunc("/update/target", handlers.UpdateTargetHandler).Methods("POST")
 	// Provides a list of the servers that tried to boot but did not match
