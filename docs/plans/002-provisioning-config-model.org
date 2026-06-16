@@ -144,15 +144,15 @@ macMaps:
 
 *** Phase 4: Runtime Integration
 
-- [ ] Update automatic boot polling to resolve the selected target before
+- [X] Update automatic boot polling to resolve the selected target before
   rendering the iPXE template.
-- [ ] Preserve the current hostname and generated =baseURL= behavior after
+- [X] Preserve the current hostname and generated =baseURL= behavior after
   parameter resolution.
-- [ ] Update manual boot state/UI data so only allowed targets are exposed for a
+- [X] Update manual boot state/UI data so only allowed targets are exposed for a
   matched host when a mapping restricts target choices.
-- [ ] Add tests for automatic boot, restricted manual choices, unrestricted
+- [X] Add tests for automatic boot, restricted manual choices, unrestricted
   manual choices, and no-default manual queue behavior.
-- [ ] Add tests proving =/configs/<template>= direct query-param rendering is
+- [X] Add tests proving =/configs/<template>= direct query-param rendering is
   unchanged by mapping params.
 
 *** Phase 5: Sensitive Value Handling

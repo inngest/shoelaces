@@ -36,7 +36,7 @@ type Environment struct {
 	HostnameMaps []mappings.HostnameMap
 	NetworkMaps  []mappings.NetworkMap
 	// MappingResolver holds the new target resolver for the mappings.yaml
-	// schema. Phase 4 will use it directly from polling and manual boot paths.
+	// schema used by polling and manual boot paths.
 	MappingResolver *mappings.Resolver
 	ServerStates    *server.States
 	EventLog        *event.Log
@@ -201,9 +201,8 @@ func (env *Environment) initMappings(mappingsPath string) error {
 	return nil
 }
 
-// initScriptForTarget adapts the new named-target mapping model to the legacy
-// polling runtime. Phase 4 replaces this default-target-only bridge with direct
-// resolver use from polling and manual boot paths.
+// initScriptForTarget adapts default targets for legacy UI mapping display.
+// Runtime boot selection uses MappingResolver instead of these Script objects.
 func initScriptForTarget(configMappings *mappings.Mappings, targetName string, mappingParams map[string]any) (*mappings.Script, error) {
 	if targetName == "" {
 		return nil, nil
