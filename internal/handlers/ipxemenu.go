@@ -58,6 +58,6 @@ func IPXEMenu(w http.ResponseWriter, r *http.Request) {
 		bootItemsBuffer.WriteString(bootItem)
 	}
 	// Creates the bottom portion of the iPXE menu.
-	bootItemsBuffer.WriteString(fmt.Sprintf(menuFooter, env.BaseURL))
+	fmt.Fprintf(&bootItemsBuffer, menuFooter, env.BaseURL)
 	_, _ = w.Write(bootItemsBuffer.Bytes())
 }

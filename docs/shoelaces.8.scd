@@ -10,38 +10,57 @@ shoelaces - automated server bootstrapping
 
 # OPTIONS
 
-*-base-url* <string>
+*--base-url* <string>
 	Optional parameter. Specifies the base address that will be used when
 	generating URLs.
-	If it's not specified, the value of "-bind-addr" will be used.
+	If it's not specified, the value of "--bind-addr" will be used.
 
-*-bind-addr* <host:port>
+*--bind-addr* <host:port>
 	The address where Shoelaces will listen for requests. Defaults to
 	"localhost:8081".
 
-*-config* <config>
+*--config* <config>
 	Specifies a config file. All the following options can be specified in
 	the config.
 
-*-data-dir* <directory>
+*--data-dir* <directory>
 	Specifies a directory with mappings, configs, templates, etc.
 
-*-debug*
+*--debug*
 	Enables debug mode.
 
-*-env-dir* <directory>
+*--env-dir* <directory>
 	Specifies a directory with environment overrides. Refer to the README of
 	the project for more information about environment overrides.
 
-*-mappings-file* <file>
+*--mappings-file* <file>
 	Specifies a mappings YAML file. Defaults to "mappings.yaml". Refer to the
 	README of the project for more information about mappings.
 
-*-static-dir* <directory>
+*--static-dir* <directory>
 	Specifies a custom web directory with static files. Defaults to "web".
 
-*-template-extension* <extension>
+*--template-extension* <extension>
 	Shoelaces template extension. Defaults to ".slc".
+
+*--tftp-enabled*
+	Enables the embedded TFTP server. Disabled by default.
+
+*--tftp-addr* <host:port>
+	The embedded TFTP server UDP listen address. Defaults to ":69".
+
+*--tftp-root* <directory>
+	Directory to serve with the embedded TFTP server. Defaults to
+	"data-dir/tftp" when left unset.
+
+*--tftp-readonly*
+	Disables TFTP uploads. Defaults to true.
+
+*--tftp-timeout* <duration>
+	Per-request embedded TFTP timeout. Defaults to "5s".
+
+*--version*
+	Prints version information and exits.
 
 # DESCRIPTION
 
@@ -68,8 +87,17 @@ hooking it with Shoelaces.
 
 # CONFIGURATION
 
-Shoelaces searches for a config file whenever the *-config* flag is
+Shoelaces searches for a config file whenever the *--config* flag is
 specified.
+
+Options can be specified as command-line flags, environment variables, or
+config file entries. Command-line flags have the highest precedence, then
+environment variables, then config file values, then defaults. Environment
+variable names are uppercase flag names with hyphens converted to underscores,
+such as *DATA_DIR*, *BIND_ADDR*, and *TFTP_ENABLED*.
+
+Config files accept flat "key=value" or "key value" entries. The embedded TFTP
+settings also accept the existing "[tftp]" section form.
 
 Here is example config file:
 
@@ -79,6 +107,13 @@ data-dir=/etc/shoelaces/data-dir/
 template-extension=.slc
 mappings-file=mappings.yaml
 debug=true
+
+[tftp]
+enabled=true
+address=":69"
+root="/var/lib/shoelaces/tftp"
+readonly=true
+timeout_seconds=5
 ```
 
 *dhcpd*(8) can be hooked with Shoelaces by adding the following snippet in
@@ -103,8 +138,8 @@ dhcp-boot=tag:!ipxe,undionly.kpxe
 dhcp-boot=http://<shoelaces-server>/start
 ```
 
-A TFTP server such as *tftpd*(8) must be configured to serve the iPXE executable,
-*undionly.kpxe*.
+A TFTP server such as *tftpd*(8), or Shoelaces' embedded TFTP server, must be
+configured to serve the iPXE executable, *undionly.kpxe*.
 
 # SEE ALSO
 

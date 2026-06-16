@@ -15,10 +15,10 @@ Local unit-test, build, and version checks:
 go test ./...
 go test -race ./...
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o shoelaces ./cmd/shoelaces
-./shoelaces -version
+./shoelaces --version
 ```
 
-The `-version` flag prints the release version, commit, build date, and builder metadata embedded by GoReleaser, which is useful for verifying the exact binary installed on a Shoelaces host.
+The `--version` flag prints the release version, commit, build date, and builder metadata embedded by GoReleaser, which is useful for verifying the exact binary installed on a Shoelaces host.
 The `make unit` target runs formatted Go unit tests.
 The `make test` target runs `make unit` and then the historical Python integration test at `test/integ-test/integ_test.py`; that integration path may require local Python dependencies that are not installed by the Go toolchain.
 
@@ -149,7 +149,7 @@ running:
 
 You can quickly try Shoelaces after compiling it by using the example configuration file:
 
-    ./shoelaces -config configs/shoelaces.conf
+    ./shoelaces --config configs/shoelaces.conf
 
 Head to [localhost:8081](http://localhost:8081) to checkout Shoelaces' frontend.
 
@@ -158,18 +158,37 @@ Head to [localhost:8081](http://localhost:8081) to checkout Shoelaces' frontend.
 Shoelaces accepts several parameters:
 
 * `config`: the path to a configuration file.
+* `bind-addr`: the address Shoelaces listens on. Defaults to `localhost:8081`.
+* `base-url`: the base URL used when generating URLs. Defaults to `bind-addr`.
 * `data-dir`: the path to the root directory with the templates. It's advised to
   manage the templates in a VCS, such as a git repository. Refer to the [example
   data directory](configs/data-dir/) for more information.
-* `debug`: enable debug messages.
-* `domain`: the domain Shoelaces is going to be listening on.
-* `mappings-file`: the path to the YAML mappings file, relative to the `data-dir` parameter.
-* `port`: the port Shoelaces will listen on.
+* `static-dir`: the path to the web static files. Defaults to `web`.
+* `env-dir`: the environment overrides directory inside `data-dir`. Defaults to
+  `env_overrides`.
+* `mappings-file`: the path to the YAML mappings file, relative to the
+  `data-dir` parameter. Defaults to `mappings.yaml`.
 * `template-extension`: the filename extension for the templates. The default is
   `.slc`, so you can just stick with that.
+* `debug`: enable debug messages.
+* `tftp-enabled`: enable the embedded TFTP server.
+* `tftp-addr`: the embedded TFTP listen address. Defaults to `:69`.
+* `tftp-root`: the directory served over TFTP. Defaults to `data-dir/tftp` when
+  not explicitly set.
+* `tftp-readonly`: disable TFTP uploads. Defaults to `true`.
+* `tftp-timeout`: the embedded TFTP per-request timeout. Defaults to `5s`.
 
 The parameters can be specified in a configuration file, as environment
-variables or, of course, as parameters when running the Shoelaces binary.
+variables, or as parameters when running the Shoelaces binary. Command-line
+flags have the highest precedence, then environment variables, then config
+file values, then defaults. Environment variable names are uppercase flag names
+with hyphens converted to underscores, such as `DATA_DIR`, `BIND_ADDR`, and
+`TFTP_ENABLED`.
+
+Configuration files accept flat `key=value` or `key value` entries. The
+embedded TFTP settings also accept the existing `[tftp]` section form used by
+the example config, such as `enabled = true`, `address = ":69"`, and
+`timeout_seconds = 5`.
 
 Refer to the [example config file](configs/shoelaces.conf) for more information.
 

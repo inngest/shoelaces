@@ -6,9 +6,9 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/gorilla/mux v1.8.0
 	github.com/justinas/alice v1.2.0
-	github.com/namsral/flag v1.7.4-pre
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/stretchr/testify v1.11.1
+	github.com/urfave/cli/v3 v3.10.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 

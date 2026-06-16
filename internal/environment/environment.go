@@ -32,7 +32,6 @@ import (
 
 // Environment struct holds the shoelaces instance global data.
 type Environment struct {
-	ConfigFile      string
 	HostnameMaps    []mappings.HostnameMap
 	NetworkMaps     []mappings.NetworkMap
 	ServerStates    *server.States
@@ -52,20 +51,12 @@ type Environment struct {
 	TemplateExtension string
 	MappingsFile      string
 	Debug             bool
-	Version           bool
 }
 
 // New returns an initialized environment structure
-func New() *Environment {
+func New(options Options) *Environment {
 	env := defaultEnvironment()
-	env.setFlags()
-	env.validateFlags()
-
-	if env.Version {
-		return env
-	}
-
-	env.TFTP = tftpFromFlags()
+	env.applyOptions(options)
 
 	if env.TFTP != nil && env.TFTP.Root == "./tftp" && env.DataDir != "" {
 		env.TFTP.Root = env.DataDir + "/tftp"
