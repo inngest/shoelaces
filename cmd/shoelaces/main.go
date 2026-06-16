@@ -15,14 +15,18 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/thousandeyes/shoelaces/internal/environment"
 	"github.com/thousandeyes/shoelaces/internal/handlers"
 	"github.com/thousandeyes/shoelaces/internal/router"
 	"github.com/thousandeyes/shoelaces/internal/tftpserver"
+	cli "github.com/urfave/cli/v3"
 )
 
 var (
@@ -33,12 +37,18 @@ var (
 )
 
 func main() {
-	env := environment.New()
-	if env.Version {
-		fmt.Print(versionString())
-		return
+	cmd, err := newCommand(os.Args, runServer)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
 
+func runServer(env *environment.Environment) error {
 	app := handlers.MiddlewareChain(env).Then(router.ShoelacesRouter(env))
 
 	if env.TFTP != nil && env.TFTP.Enabled {
@@ -59,10 +69,293 @@ func main() {
 	}
 
 	env.Logger.Info("component", "main", "transport", "http", "addr", env.BindAddr, "msg", "listening")
-	env.Logger.Error("component", "main", "err", http.ListenAndServe(env.BindAddr, app))
-	os.Exit(1)
+	return http.ListenAndServe(env.BindAddr, app)
 }
 
 func versionString() string {
 	return fmt.Sprintf("shoelaces %s\ncommit: %s\ndate: %s\nbuilt by: %s\n", version, commit, date, builtBy)
+}
+
+type serverRunner func(*environment.Environment) error
+
+func newCommand(args []string, run serverRunner) (*cli.Command, error) {
+	// The config file path must be known before the urfave command is built
+	// because config values are wired in as flag value sources.
+	configPath := configPathFromArgs(args, os.LookupEnv)
+	configValues, err := readConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+	return command(configPath, configValues, run), nil
+}
+
+func command(configPath string, configValues map[any]any, run serverRunner) *cli.Command {
+	defaults := environment.DefaultOptions()
+	tftpDefaults := environment.DefaultTFTPConfig()
+	configSource := cli.NewMapSource("config", configValues)
+
+	flagSources := func(name, env string) cli.ValueSourceChain {
+		// Keep the previous precedence: command-line flags are handled by
+		// urfave/cli first, then env vars, then config values, then defaults.
+		return cli.NewValueSourceChain(cli.EnvVar(env), cli.NewMapValueSource(name, configSource))
+	}
+
+	return &cli.Command{
+		Name:        "shoelaces",
+		Usage:       "automated server bootstrapping",
+		UsageText:   "shoelaces [options...]",
+		HideVersion: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "config",
+				Value:   configPath,
+				Usage:   "Path to a config file",
+				Sources: cli.EnvVars("CONFIG"),
+			},
+			&cli.StringFlag{
+				Name:    "bind-addr",
+				Value:   defaults.BindAddr,
+				Usage:   "The address where Shoelaces will listen",
+				Sources: flagSources("bind-addr", "BIND_ADDR"),
+			},
+			&cli.StringFlag{
+				Name:    "base-url",
+				Value:   defaults.BaseURL,
+				Usage:   "The base Shoelaces URL. Defaults to bind-addr when omitted.",
+				Sources: flagSources("base-url", "BASE_URL"),
+			},
+			&cli.StringFlag{
+				Name:    "data-dir",
+				Value:   defaults.DataDir,
+				Usage:   "Directory with mappings, configs, templates, etc.",
+				Sources: flagSources("data-dir", "DATA_DIR"),
+			},
+			&cli.StringFlag{
+				Name:    "static-dir",
+				Value:   defaults.StaticDir,
+				Usage:   "A custom web directory with static files",
+				Sources: flagSources("static-dir", "STATIC_DIR"),
+			},
+			&cli.StringFlag{
+				Name:    "env-dir",
+				Value:   defaults.EnvDir,
+				Usage:   "Directory with environment overrides",
+				Sources: flagSources("env-dir", "ENV_DIR"),
+			},
+			&cli.StringFlag{
+				Name:    "template-extension",
+				Value:   defaults.TemplateExtension,
+				Usage:   "Shoelaces template extension",
+				Sources: flagSources("template-extension", "TEMPLATE_EXTENSION"),
+			},
+			&cli.StringFlag{
+				Name:    "mappings-file",
+				Value:   defaults.MappingsFile,
+				Usage:   "Mappings YAML file, relative to data-dir",
+				Sources: flagSources("mappings-file", "MAPPINGS_FILE"),
+			},
+			&cli.BoolFlag{
+				Name:    "debug",
+				Value:   defaults.Debug,
+				Usage:   "Enable debug mode",
+				Sources: flagSources("debug", "DEBUG"),
+			},
+			&cli.BoolFlag{
+				Name:    "tftp-enabled",
+				Value:   tftpDefaults.Enabled,
+				Usage:   "Enable embedded TFTP server",
+				Sources: flagSources("tftp-enabled", "TFTP_ENABLED"),
+			},
+			&cli.StringFlag{
+				Name:    "tftp-addr",
+				Value:   tftpDefaults.Addr,
+				Usage:   "TFTP listen address (UDP), e.g. 0.0.0.0:69",
+				Sources: flagSources("tftp-addr", "TFTP_ADDR"),
+			},
+			&cli.StringFlag{
+				Name:    "tftp-root",
+				Value:   tftpDefaults.Root,
+				Usage:   "Directory to serve via TFTP",
+				Sources: flagSources("tftp-root", "TFTP_ROOT"),
+			},
+			&cli.BoolFlag{
+				Name:    "tftp-readonly",
+				Value:   tftpDefaults.Readonly,
+				Usage:   "Disable TFTP uploads",
+				Sources: flagSources("tftp-readonly", "TFTP_READONLY"),
+			},
+			&cli.DurationFlag{
+				Name:    "tftp-timeout",
+				Value:   tftpDefaults.Timeout,
+				Usage:   "Per-request TFTP timeout",
+				Sources: flagSources("tftp-timeout", "TFTP_TIMEOUT"),
+			},
+			&cli.BoolFlag{
+				Name:  "version",
+				Usage: "Print version information and exit",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			if cmd.Bool("version") {
+				fmt.Fprint(cmd.Writer, versionString())
+				return nil
+			}
+
+			options := optionsFromCommand(cmd)
+			if err := validateOptions(options); err != nil {
+				return err
+			}
+			return run(environment.New(options))
+		},
+	}
+}
+
+func optionsFromCommand(cmd *cli.Command) environment.Options {
+	tftp := &environment.TFTPConfig{
+		Enabled:  cmd.Bool("tftp-enabled"),
+		Addr:     cmd.String("tftp-addr"),
+		Root:     cmd.String("tftp-root"),
+		Readonly: cmd.Bool("tftp-readonly"),
+		Timeout:  cmd.Duration("tftp-timeout"),
+	}
+
+	return environment.Options{
+		BindAddr:          cmd.String("bind-addr"),
+		BaseURL:           cmd.String("base-url"),
+		DataDir:           cmd.String("data-dir"),
+		StaticDir:         cmd.String("static-dir"),
+		EnvDir:            cmd.String("env-dir"),
+		TemplateExtension: cmd.String("template-extension"),
+		MappingsFile:      cmd.String("mappings-file"),
+		Debug:             cmd.Bool("debug"),
+		TFTP:              tftp,
+	}
+}
+
+func validateOptions(options environment.Options) error {
+	if options.DataDir == "" {
+		return fmt.Errorf("you must specify the data-dir parameter")
+	}
+	if options.StaticDir == "" {
+		return fmt.Errorf("you must specify the static-dir parameter")
+	}
+	return nil
+}
+
+func configPathFromArgs(args []string, lookupEnv func(string) (string, bool)) string {
+	// Only discover -config/--config here. Full argument validation happens
+	// later in urfave/cli after config values have been loaded.
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "-config" || arg == "--config" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		}
+		if value, ok := strings.CutPrefix(arg, "-config="); ok {
+			return value
+		}
+		if value, ok := strings.CutPrefix(arg, "--config="); ok {
+			return value
+		}
+	}
+	if value, ok := lookupEnv("CONFIG"); ok {
+		return value
+	}
+	return ""
+}
+
+func readConfig(path string) (map[any]any, error) {
+	values := map[any]any{}
+	if path == "" {
+		return values, nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	section := ""
+	scanner := bufio.NewScanner(file)
+	for lineNumber := 1; scanner.Scan(); lineNumber++ {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(line[1 : len(line)-1])
+			if section != "tftp" {
+				return nil, fmt.Errorf("%s:%d: unsupported config section %q", path, lineNumber, section)
+			}
+			continue
+		}
+
+		name, value := parseConfigLine(line)
+		if section != "" {
+			name = section + "." + name
+		}
+		name, value, err = normalizeConfigValue(name, value)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", path, lineNumber, err)
+		}
+		values[name] = value
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return values, nil
+}
+
+func parseConfigLine(line string) (string, string) {
+	if name, value, ok := strings.Cut(line, "="); ok {
+		return strings.TrimSpace(name), trimConfigValue(value)
+	}
+	if index := strings.IndexAny(line, " \t"); index >= 0 {
+		return strings.TrimSpace(line[:index]), trimConfigValue(line[index+1:])
+	}
+	return strings.TrimSpace(line), "true"
+}
+
+func trimConfigValue(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 {
+		if value[0] == '"' && value[len(value)-1] == '"' {
+			return value[1 : len(value)-1]
+		}
+		if value[0] == '\'' && value[len(value)-1] == '\'' {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
+}
+
+func normalizeConfigValue(name, value string) (string, string, error) {
+	switch name {
+	case "bind-addr", "base-url", "data-dir", "static-dir", "env-dir", "template-extension", "mappings-file", "debug",
+		"tftp-enabled", "tftp-addr", "tftp-root", "tftp-readonly", "tftp-timeout":
+		return name, value, nil
+	case "tftp.enabled":
+		return "tftp-enabled", value, nil
+	case "tftp.address", "tftp.addr":
+		return "tftp-addr", value, nil
+	case "tftp.root":
+		return "tftp-root", value, nil
+	case "tftp.readonly":
+		return "tftp-readonly", value, nil
+	case "tftp.timeout":
+		return "tftp-timeout", value, nil
+	case "tftp.timeout_seconds":
+		// Preserve the checked-in legacy [tftp] config shape while feeding the
+		// duration parser the unit-suffixed value it expects.
+		return "tftp-timeout", value + "s", nil
+	default:
+		return "", "", fmt.Errorf("configuration variable provided but not defined: %s", name)
+	}
 }
