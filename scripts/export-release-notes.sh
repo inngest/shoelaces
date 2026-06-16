@@ -14,7 +14,7 @@ release_tag="$1"
 output_file="${2:-}"
 changelog_file="${3:-CHANGELOG.md}"
 
-if ! printf '%s\n' "${release_tag}" | grep -Eq '^v[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{2}$'; then
+if ! printf '%s\n' "${release_tag}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
   echo "Release tag is not valid: ${release_tag}" >&2
   exit 1
 fi
