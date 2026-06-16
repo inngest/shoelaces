@@ -13,8 +13,7 @@ the Shoelaces config file.
 
 Mappings should support multiple named boot targets, per-host/per-network target
 policy, default target selection, raw parameter values, and explicit
-environment-backed parameter values. Existing =mappings.yaml= files should keep
-working.
+environment-backed parameter values.
 
 ** Boundaries
 
@@ -24,6 +23,16 @@ working.
 - This plan does not move UI assets; that remains Plan 001.
 - Runtime Shoelaces daemon options such as bind address, data dir, TFTP, and UI
   override directory stay in the normal Shoelaces config.
+- UI static/template loading and provisioning static files remain separate from
+  mappings. =/static/*= stays UI-only, and =/configs/static/*= continues to
+  serve files from =data-dir/static=.
+- The direct =/configs/<template>= endpoint keeps its current behavior:
+  template values come from request query parameters. Mapping params are applied
+  when a boot target is resolved for polling/manual boot, not as global defaults
+  for unrelated direct config requests.
+- Backward compatibility with the old =networkMaps[].script= and
+  =hostnameMaps[].script= format is not required. The new schema should be
+  documented clearly enough for operators to update their mappings.
 
 ** Target Shape
 
@@ -42,6 +51,7 @@ targets:
   debian12:
     script: debian.ipxe
     label: Debian 12 Bookworm
+    environment: ""
     params:
       release: bookworm
       preseed: preseed/debian
@@ -76,15 +86,24 @@ macMaps:
 
 ** Phased Implementation Plan
 
-*** Phase 1: Schema And Parser Foundation
+*** Phase 1: New Schema And Parser Foundation
 
-- [ ] Convert mapping parsing from direct =yaml.Unmarshal= to Koanf-backed YAML
-  loading.
-- [ ] Keep the existing =networkMaps= and =hostnameMaps= =script:= schema
-  compatible.
-- [ ] Add strict top-level key validation for the new mapping schema.
-- [ ] Add tests proving the current example =mappings.yaml= still parses.
+- [ ] Convert mapping parsing from direct =yaml.Unmarshal= to a Koanf-backed
+  loader.
+- [ ] Change mapping parsing to return errors instead of calling =os.Exit= so
+  callers and tests can report parse/load failures cleanly.
+- [ ] Define typed structs for the new mapping schema only: =defaults=,
+  =targets=, =networkMaps=, =hostnameMaps=, =macMaps=, and =ipMaps=.
+- [ ] Add strict top-level key validation for known mapping sections:
+  =defaults=, =targets=, =networkMaps=, =hostnameMaps=, =macMaps=, and
+  =ipMaps=.
+- [ ] Add validation that mappings reference existing named =targets= and that
+  =defaultTarget=, when set, is included in the mapping's allowed =targets=.
+- [ ] Add tests proving the new example =mappings.yaml= parses.
 - [ ] Add tests proving IPv4 and IPv6 CIDR network mappings parse and match.
+- [ ] Add tests proving parser errors are returned for missing files, invalid
+  YAML, unknown top-level keys, invalid target references, invalid CIDRs, and
+  invalid hostname regexes.
 
 *** Phase 2: Targets And Multiple Choices
 
@@ -92,6 +111,9 @@ macMaps:
   params.
 - [ ] Add mapping-level =targets= and =defaultTarget=.
 - [ ] Add =macMaps= and =ipMaps= alongside existing hostname and network maps.
+- [ ] Introduce a mapping resolver layer that returns an immutable boot
+  candidate/target result instead of exposing mutable map-owned =Script=
+  pointers directly to polling.
 - [ ] Add tests proving exact IP mappings work for both IPv4 and IPv6
   addresses.
 - [ ] Define deterministic match precedence: manual selection, MAC, IP,
@@ -105,21 +127,33 @@ macMaps:
   mapping params, manual/request params, generated values.
 - [ ] Support raw scalar parameter values.
 - [ ] Support explicit environment-backed parameter values such as ={ env:
-  SHOELACES_ROOT_PASSWORD_CRYPTED }=.
+  SHOELACES_ROOT_PASSWORD_CRYPTED }=. These values come from the Shoelaces
+  process environment, so systemd service environment variables work without a
+  separate env file.
+- [ ] Decide and document whether Koanf environment overlay should also populate
+  missing mapping keys by path, or whether explicit ={ env: ... }= references
+  are the only environment-backed mapping mechanism.
 - [ ] Fail clearly when a referenced environment variable is missing.
 - [ ] Normalize all resolved params into the runtime template parameter map.
+- [ ] Copy/merge params into a fresh map per boot render so hostname/baseURL and
+  other generated values do not mutate shared mapping or target config.
 - [ ] Add tests for merge order, raw values, env-backed values, and missing env
   errors.
+- [ ] Add tests proving repeated boots from the same mapping do not leak params
+  between hosts.
 
 *** Phase 4: Runtime Integration
 
 - [ ] Update automatic boot polling to resolve the selected target before
   rendering the iPXE template.
+- [ ] Preserve the current hostname and generated =baseURL= behavior after
+  parameter resolution.
 - [ ] Update manual boot state/UI data so only allowed targets are exposed for a
   matched host when a mapping restricts target choices.
-- [ ] Preserve legacy UI/manual behavior for legacy mappings with a single
-  =script:=.
-- [ ] Add tests for automatic boot, manual choice, and legacy mapping behavior.
+- [ ] Add tests for automatic boot, restricted manual choices, unrestricted
+  manual choices, and no-default manual queue behavior.
+- [ ] Add tests proving =/configs/<template>= direct query-param rendering is
+  unchanged by mapping params.
 
 *** Phase 5: Sensitive Value Handling
 
@@ -132,20 +166,26 @@ macMaps:
 
 *** Phase 6: Documentation And Verification
 
-- [ ] Document old and new mapping schemas in README and manpage.
+- [ ] Document the new mapping schema in README and manpage.
+- [ ] Replace the sample =configs/data-dir/mappings.yaml= with the new schema.
 - [ ] Add examples for Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04
   targets.
+- [ ] Add a migration note that old =networkMaps[].script= and
+  =hostnameMaps[].script= mappings are no longer supported.
 - [ ] Run =go test ./...=.
 - [ ] Run the plan status checker.
 
 ** Acceptance Criteria
 
-- [ ] Existing mappings files remain compatible.
 - [ ] Koanf-backed mappings parse successfully.
 - [ ] Mappings can allow multiple targets.
 - [ ] Mappings can select a default target.
 - [ ] Raw and environment-backed params render into provisioning templates.
+- [ ] Runtime boot rendering uses fresh resolved parameter maps and does not
+  mutate shared mapping configuration.
 - [ ] Sensitive params are redacted from logs/events.
+- [ ] =/static/*= and =/configs/static/*= remain separate from mapping
+  behavior.
 - [ ] =go test ./...= passes.
 
 ** Notes And Risks
@@ -153,6 +193,11 @@ macMaps:
 - Mapping config is site/runtime provisioning policy and should not be embedded
   as production configuration.
 - Avoid implicit environment fallback by parameter name. Environment-backed
-  values should be explicit in the mapping file so behavior is auditable.
-- This plan changes boot selection semantics, so preserve legacy behavior until
-  the new schema is fully documented and tested.
+  values should be explicit in the mapping file unless the implementation
+  intentionally adds a documented Koanf environment overlay for missing mapping
+  keys.
+- This plan intentionally changes the mapping schema. Documentation and examples
+  must land with the runtime changes so operators have a clear migration path.
+- Existing polling mutates =Script.Params= when it adds generated values such as
+  =hostname= and =baseURL=. Target resolution should avoid carrying that shared
+  mutable behavior into the new model.
