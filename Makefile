@@ -31,8 +31,11 @@ unit: fmt
 	$(GO) test -v -count=1 $(pkgs)
 
 .PHONY: test
-test: unit
-	./test/integ-test/integ_test.py -vv
+test: unit integration
+
+.PHONY: integration
+integration:
+	$(GO) test -tags=integration ./test/integ-test
 
 .PHONY: binaries
 binaries: linux windows
