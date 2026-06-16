@@ -27,6 +27,37 @@ those defaults.
   embedded defaults.
 - =data-dir= remains the site override root.
 - Environment overrides remain supported for disk-backed site files.
+- Generic embedded templates expose a small documented set of partial hooks so
+  sites can override common extension points without replacing whole OS install
+  templates.
+- Site-specific firstboot and post-install orchestration are implemented as
+  disk overrides, not embedded defaults.
+
+** Partial Hook Model
+
+Embedded templates should support both full template replacement and targeted
+partial replacement. A disk template that defines the same template name as an
+embedded template replaces that definition during parse/overlay.
+
+Initial documented partial hooks:
+
+- =preseed/common/locale=
+- =preseed/common/network=
+- =preseed/common/time=
+- =preseed/common/users=
+- =preseed/debian/storage=
+- =preseed/debian/packages=
+- =preseed/debian/late_command=
+- =preseed/debian/finish=
+- =ipxe/linux_args=
+- =ipxe/debian/kernel_args=
+- =ipxe/debian/preseed_url=
+- =kickstart/centos/storage=
+- =kickstart/centos/packages=
+- =kickstart/centos/post=
+- =cloudconfig/coreos/users=
+- =cloudconfig/coreos/units=
+- =cloudconfig/coreos/write_files=
 
 ** Phased Implementation Plan
 
@@ -43,7 +74,14 @@ those defaults.
 - [ ] Update dynamic template parsing to load embedded provisioning templates.
 - [ ] Overlay disk templates from =data-dir= on top of embedded defaults.
 - [ ] Preserve environment override behavior for disk files.
-- [ ] Add tests for embedded fallback and disk override precedence.
+- [ ] Refactor embedded provisioning templates around documented partial hooks:
+  preseed users, packages, storage, late command, finish; iPXE kernel args and
+  preseed URL; kickstart packages, storage, post; cloud-init users, units, and
+  write files.
+- [ ] Add default no-op post-install hooks where generic installs should not run
+  site-specific firstboot logic.
+- [ ] Add tests for embedded fallback, full-template disk override precedence,
+  and partial disk override precedence.
 
 *** Phase 3: Static Provisioning Overlay
 
@@ -64,6 +102,10 @@ those defaults.
 *** Phase 5: Documentation And Verification
 
 - [ ] Document the embedded-default plus disk-overlay model.
+- [ ] Document full template overrides versus documented partial hook overrides.
+- [ ] Document the default no-op =preseed/debian/late_command= behavior and show
+  an example site override that installs/enables firstboot from
+  =/configs/static/*=.
 - [ ] Document that =mappings.yaml= remains external site policy.
 - [ ] Run =go test ./...=.
 - [ ] Run the plan status checker.
@@ -73,6 +115,10 @@ those defaults.
 - [ ] Generic provisioning templates can be served from embedded defaults.
 - [ ] Generic static provisioning files can be served from embedded defaults.
 - [ ] Disk =data-dir= files override embedded provisioning defaults.
+- [ ] Disk templates can override documented partial hooks without replacing a
+  full OS install template.
+- [ ] Generic embedded templates do not trigger site-specific firstboot logic by
+  default.
 - [ ] =mappings.yaml= remains external runtime/site configuration.
 - [ ] =go test ./...= passes.
 
@@ -82,3 +128,5 @@ those defaults.
 - The current repo examples include site-shaped defaults; review them before
   making them embedded runtime defaults.
 - Disk overlay semantics should be explicit and deterministic.
+- Keep the partial hook surface intentionally small. Every documented hook is a
+  compatibility promise for future embedded template changes.
