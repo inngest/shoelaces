@@ -70,34 +70,114 @@ func TestScript(t *testing.T) {
 
 func TestFindScriptForHostname(t *testing.T) {
 	maps := []HostnameMap{mockHostNameMap1, mockHostNameMap2}
-	script, success := FindScriptForHostname(maps, "mock_host1")
-	require.True(t, success)
-	require.NotNil(t, script)
-	assert.Equal(t, "mock_script1", script.Name)
+	tests := []struct {
+		name       string
+		maps       []HostnameMap
+		hostname   string
+		wantName   string
+		wantFound  bool
+		wantScript bool
+	}{
+		{
+			name:       "first hostname map matches",
+			maps:       maps,
+			hostname:   "mock_host1",
+			wantName:   "mock_script1",
+			wantFound:  true,
+			wantScript: true,
+		},
+		{
+			name:       "second hostname map matches",
+			maps:       maps,
+			hostname:   "mock_host2",
+			wantName:   "mock_script2",
+			wantFound:  true,
+			wantScript: true,
+		},
+		{
+			name:      "hostname does not match",
+			maps:      maps,
+			hostname:  "mock_host_bad",
+			wantFound: false,
+		},
+		{
+			name:      "empty hostname maps do not match",
+			hostname:  "mock_host1",
+			wantFound: false,
+		},
+	}
 
-	script, success = FindScriptForHostname(maps, "mock_host2")
-	require.True(t, success)
-	require.NotNil(t, script)
-	assert.Equal(t, "mock_script2", script.Name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script, success := FindScriptForHostname(tt.maps, tt.hostname)
 
-	script, success = FindScriptForHostname(maps, "mock_host_bad")
-	assert.False(t, success)
-	assert.Nil(t, script)
+			assert.Equal(t, tt.wantFound, success)
+			if !tt.wantScript {
+				assert.Nil(t, script)
+				return
+			}
+			require.NotNil(t, script)
+			assert.Equal(t, tt.wantName, script.Name)
+		})
+	}
 }
 
 func TestScriptForNetwork(t *testing.T) {
 	maps := []NetworkMap{mockNetworkMap1, mockNetworkMap2}
-	script, success := FindScriptForNetwork(maps, "10.0.0.1")
-	require.True(t, success)
-	require.NotNil(t, script)
-	assert.Equal(t, "mock_script1", script.Name)
+	tests := []struct {
+		name       string
+		maps       []NetworkMap
+		ip         string
+		wantName   string
+		wantFound  bool
+		wantScript bool
+	}{
+		{
+			name:       "first network map matches",
+			maps:       maps,
+			ip:         "10.0.0.1",
+			wantName:   "mock_script1",
+			wantFound:  true,
+			wantScript: true,
+		},
+		{
+			name:       "second network map matches",
+			maps:       maps,
+			ip:         "192.168.0.1",
+			wantName:   "mock_script2",
+			wantFound:  true,
+			wantScript: true,
+		},
+		{
+			name:      "ip does not match",
+			maps:      maps,
+			ip:        "8.8.8.8",
+			wantFound: false,
+		},
+		{
+			name:      "invalid ip does not match",
+			maps:      maps,
+			ip:        "not-an-ip",
+			wantFound: false,
+		},
+		{
+			name:      "empty network maps do not match",
+			ip:        "10.0.0.1",
+			wantFound: false,
+		},
+	}
 
-	script, success = FindScriptForNetwork(maps, "192.168.0.1")
-	require.True(t, success)
-	require.NotNil(t, script)
-	assert.Equal(t, "mock_script2", script.Name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script, success := FindScriptForNetwork(tt.maps, tt.ip)
 
-	script, success = FindScriptForNetwork(maps, "8.8.8.8")
-	assert.False(t, success)
-	assert.Nil(t, script)
+			assert.Equal(t, tt.wantFound, success)
+			if !tt.wantScript {
+				assert.Nil(t, script)
+				return
+			}
+			require.NotNil(t, script)
+			assert.Equal(t, tt.wantName, script.Name)
+		})
+	}
 }
