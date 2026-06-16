@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/thousandeyes/shoelaces/internal/event"
 	"github.com/thousandeyes/shoelaces/internal/log"
 	"github.com/thousandeyes/shoelaces/internal/server"
@@ -27,12 +29,8 @@ import (
 func TestGenStartScriptUsesBaseURL(t *testing.T) {
 	script := GenStartScript(log.MakeLogger(testLogWriter{}), "127.0.0.1:8081")
 
-	if !strings.Contains(script, "http://127.0.0.1:8081/poll/1/${netX/mac:hexhyp}") {
-		t.Fatalf("start script does not chain to the configured base URL:\n%s", script)
-	}
-	if !strings.HasPrefix(script, "#!ipxe\n") {
-		t.Fatalf("start script should be an iPXE script, got:\n%s", script)
-	}
+	assert.Contains(t, script, "http://127.0.0.1:8081/poll/1/${netX/mac:hexhyp}")
+	assert.True(t, strings.HasPrefix(script, "#!ipxe\n"), "start script should be an iPXE script, got:\n%s", script)
 }
 
 func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
@@ -50,18 +48,10 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 		"127.0.0.1:8081",
 		srv,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(script, "chain -ar http://127.0.0.1:8081/poll/1/06-66-de-ad-be-ef") {
-		t.Fatalf("first poll should return retry script, got:\n%s", script)
-	}
-	if states.Servers[srv.Mac] == nil {
-		t.Fatal("unknown server was not added to retry state")
-	}
-	if got := len(events.Events[srv.Mac]); got != 1 {
-		t.Fatalf("expected one poll event, got %d", got)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, script, "chain -ar http://127.0.0.1:8081/poll/1/06-66-de-ad-be-ef")
+	require.NotNil(t, states.Servers[srv.Mac])
+	assert.Len(t, events.Events[srv.Mac], 1)
 
 	for i := 0; i <= maxRetry; i++ {
 		script, err = Poll(
@@ -74,17 +64,11 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 			"127.0.0.1:8081",
 			srv,
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
-	if script != timeoutScript {
-		t.Fatalf("expected timeout script after max retries, got:\n%s", script)
-	}
-	if states.Servers[srv.Mac] != nil {
-		t.Fatal("timed-out server should be removed from retry state")
-	}
+	assert.Equal(t, timeoutScript, script)
+	assert.Nil(t, states.Servers[srv.Mac])
 }
 
 func TestListServersReturnsOnlyWaitingServersSortedByMAC(t *testing.T) {
@@ -104,12 +88,9 @@ func TestListServersReturnsOnlyWaitingServersSortedByMAC(t *testing.T) {
 	}}
 
 	servers := ListServers(states)
-	if len(servers) != 2 {
-		t.Fatalf("expected 2 waiting servers, got %d", len(servers))
-	}
-	if servers[0].Mac != "00:00:00:00:00:01" || servers[1].Mac != "ff:ff:ff:ff:ff:ff" {
-		t.Fatalf("servers were not filtered and sorted by MAC: %#v", servers)
-	}
+	require.Len(t, servers, 2)
+	assert.Equal(t, "00:00:00:00:00:01", servers[0].Mac)
+	assert.Equal(t, "ff:ff:ff:ff:ff:ff", servers[1].Mac)
 }
 
 type testLogWriter struct{}
