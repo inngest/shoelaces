@@ -118,7 +118,7 @@ func TestShoelacesIntegration(t *testing.T) {
 		proc.assertGETFixture(t, pollPath, "poll-unknown.txt")
 
 		form := url.Values{
-			"target":      {"coreos.ipxe"},
+			"target":      {"coreos"},
 			"mac":         {"06:66:de:ad:be:ef"},
 			"version":     {"666.0"},
 			"cloudconfig": {"virtual"},
