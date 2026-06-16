@@ -21,6 +21,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOverlayFileServerServesUpperLayerBeforeLowerLayer(t *testing.T) {
@@ -35,12 +38,8 @@ func TestOverlayFileServerServesUpperLayerBeforeLowerLayer(t *testing.T) {
 
 	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
-	if !strings.HasPrefix(rr.Body.String(), "from upper") {
-		t.Fatalf("expected upper-layer content, got %q", rr.Body.String())
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.True(t, strings.HasPrefix(rr.Body.String(), "from upper"), "expected upper-layer content, got %q", rr.Body.String())
 }
 
 func TestOverlayFileServerFallsBackToLowerLayer(t *testing.T) {
@@ -54,12 +53,8 @@ func TestOverlayFileServerFallsBackToLowerLayer(t *testing.T) {
 
 	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
-	if !strings.HasPrefix(rr.Body.String(), "from lower") {
-		t.Fatalf("expected lower-layer content, got %q", rr.Body.String())
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.True(t, strings.HasPrefix(rr.Body.String(), "from lower"), "expected lower-layer content, got %q", rr.Body.String())
 }
 
 func TestOverlayFileServerMergesDirectoryIndex(t *testing.T) {
@@ -75,24 +70,14 @@ func TestOverlayFileServerMergesDirectoryIndex(t *testing.T) {
 
 	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
-	if !strings.Contains(body, `<a href="a.txt">a.txt</a>`) {
-		t.Fatalf("directory index missing upper file: %s", body)
-	}
-	if strings.Count(body, `<a href="b.txt">b.txt</a>`) != 1 {
-		t.Fatalf("directory index should de-duplicate overlaid names: %s", body)
-	}
-	if strings.Index(body, "a.txt") > strings.Index(body, "b.txt") {
-		t.Fatalf("directory index should be sorted: %s", body)
-	}
+	assert.Contains(t, body, `<a href="a.txt">a.txt</a>`)
+	assert.Equal(t, 1, strings.Count(body, `<a href="b.txt">b.txt</a>`))
+	assert.Less(t, strings.Index(body, "a.txt"), strings.Index(body, "b.txt"))
 }
 
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }

@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/thousandeyes/shoelaces/internal/server"
 )
 
@@ -26,28 +28,15 @@ const expectedEvent = `{"eventType":0,"date":"1970-01-01T00:00:00Z","server":{"M
 
 func TestNew(t *testing.T) {
 	event := New(HostPoll, server.Server{Mac: "", IP: "", Hostname: "test_host"}, PtrMatchBoot, "msdos.ipxe", map[string]interface{}{"test": "testParam"})
-	if event.Type != HostPoll {
-		t.Errorf("Expected: \"%d\"\nGot: \"%d\"", HostPoll, event.Type)
-	}
-	if event.Server.Hostname != "test_host" {
-		t.Errorf("Expected: \"test_host\"\nGot: \"%s\"", event.Server.Hostname)
-	}
-	if event.BootType != PtrMatchBoot {
-		t.Errorf("Expected: \"%s\"\nGot: \"%s\"", PtrMatchBoot, event.Server.Hostname)
-	}
-	if event.Script != "msdos.ipxe" {
-		t.Errorf("Expected: \"msdos.ipxe\"\nGot: \"%s\"", event.Server.Hostname)
-	}
-	if len(event.Params) != 1 {
-		t.Error("Expected one parameter")
-	}
-	if event.Params["test"] != "testParam" {
-		t.Error("Expected parameter test: testParam")
-	}
+	assert.Equal(t, HostPoll, event.Type)
+	assert.Equal(t, "test_host", event.Server.Hostname)
+	assert.Equal(t, PtrMatchBoot, event.BootType)
+	assert.Equal(t, "msdos.ipxe", event.Script)
+	require.Len(t, event.Params, 1)
+	assert.Equal(t, "testParam", event.Params["test"])
+
 	now := time.Now()
-	if event.Date.After(now) {
-		t.Errorf("Expected %s to be after %s", event.Date, now)
-	}
+	assert.False(t, event.Date.After(now))
 }
 
 func TestEventMarshalJSON(t *testing.T) {
@@ -65,8 +54,7 @@ func TestEventMarshalJSON(t *testing.T) {
 			"version":     "12345",
 		},
 	}
-	marshaled, _ := json.Marshal(event)
-	if string(marshaled) != expectedEvent {
-		t.Errorf("Expected %s\nGot: %s\n", expectedEvent, marshaled)
-	}
+	marshaled, err := json.Marshal(event)
+	require.NoError(t, err)
+	assert.Equal(t, expectedEvent, string(marshaled))
 }
