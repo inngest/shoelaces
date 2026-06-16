@@ -13,7 +13,6 @@ COPY --from=build /tmp/shoelaces /shoelaces
 
 WORKDIR /data
 COPY --from=build /tmp/mappings.yaml mappings.yaml
-COPY --from=build /shoelaces/web /web
 
 # TFTP files will be served from /data/tftp; mount or bake them in
 COPY --from=build /tmp/tftp /data/tftp
@@ -22,5 +21,5 @@ EXPOSE 8081/tcp 69/udp
 ENV BIND_ADDR=0.0.0.0:8081
 EXPOSE 8081
 
-ENTRYPOINT ["/shoelaces", "-data-dir", "/data", "-static-dir", "/web"]
+ENTRYPOINT ["/shoelaces", "-data-dir", "/data"]
 CMD []

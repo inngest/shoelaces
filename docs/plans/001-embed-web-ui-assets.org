@@ -111,18 +111,18 @@ through =/configs/static/*=.
 
 *** Phase 5: Packaging And Documentation
 
-- [ ] Update Docker packaging to stop copying =/shoelaces/web= into the final
+- [X] Update Docker packaging to stop copying =/shoelaces/web= into the final
   image.
-- [ ] Update the Docker entrypoint to stop passing a UI override directory unless
+- [X] Update the Docker entrypoint to stop passing a UI override directory unless
   an intentional override path is retained for image customization.
-- [ ] Review =.goreleaser.yaml=; if it excludes archive files with
+- [X] Review =.goreleaser.yaml=; if it excludes archive files with
   =archives.files: none*=, leave that behavior in place because embedded assets
   remove the need to ship =web/=.
-- [ ] Update README and =docs/shoelaces.8.scd= to document embedded UI assets,
+- [X] Update README and =docs/shoelaces.8.scd= to document embedded UI assets,
   the optional role of =ui-dir=, the deprecated legacy =static-dir= alias if it
   remains, and the separate
   =/configs/static/*= provisioning static behavior.
-- [ ] Update config examples to avoid implying =static-dir= is where
+- [X] Update config examples to avoid implying =static-dir= is where
   provisioning files belong; use =ui-dir= only for UI overrides, and document
   provisioning static files as =data-dir/static= served at =/configs/static/*=.
 

@@ -163,7 +163,12 @@ Shoelaces accepts several parameters:
 * `data-dir`: the path to the root directory with the templates. It's advised to
   manage the templates in a VCS, such as a git repository. Refer to the [example
   data directory](configs/data-dir/) for more information.
-* `static-dir`: the path to the web static files. Defaults to `web`.
+  Provisioning static files are served from `data-dir/static` at
+  `/configs/static/*`.
+* `ui-dir`: optional path to a custom UI directory containing web templates and
+  frontend assets. By default, Shoelaces uses UI assets embedded in the binary.
+* `static-dir`: deprecated alias for `ui-dir`, retained for compatibility. Do
+  not use it for provisioning static files.
 * `env-dir`: the environment overrides directory inside `data-dir`. Defaults to
   `env_overrides`.
 * `mappings-file`: the path to the YAML mappings file, relative to the
