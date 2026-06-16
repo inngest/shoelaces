@@ -19,8 +19,8 @@ import (
 
 	"github.com/gorilla/mux"
 	shoelaces "github.com/thousandeyes/shoelaces"
-	"github.com/thousandeyes/shoelaces/internal/environment"
-	"github.com/thousandeyes/shoelaces/internal/handlers"
+	"github.com/thousandeyes/shoelaces/environment"
+	"github.com/thousandeyes/shoelaces/handlers"
 )
 
 // ShoelacesRouter sets up all routes and handlers for shoelaces

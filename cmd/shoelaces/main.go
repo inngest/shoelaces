@@ -23,10 +23,10 @@ import (
 
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	"github.com/thousandeyes/shoelaces/internal/environment"
-	"github.com/thousandeyes/shoelaces/internal/handlers"
-	"github.com/thousandeyes/shoelaces/internal/router"
-	"github.com/thousandeyes/shoelaces/internal/tftpserver"
+	"github.com/thousandeyes/shoelaces/environment"
+	"github.com/thousandeyes/shoelaces/handlers"
+	"github.com/thousandeyes/shoelaces/router"
+	"github.com/thousandeyes/shoelaces/tftpserver"
 	cli "github.com/urfave/cli/v3"
 )
 

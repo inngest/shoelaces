@@ -60,15 +60,15 @@ configuration overrides.
 ### Core Components
 
 - `cmd/shoelaces/` defines the CLI entrypoint using `urfave/cli/v3`.
-- `internal/environment/` owns central configuration and runtime state,
+- `environment/` owns central configuration and runtime state,
   including templates, mappings, server states, logging, and TFTP settings.
-- `internal/handlers/` contains HTTP handlers for the UI, API endpoints, and
+- `handlers/` contains HTTP handlers for the UI, API endpoints, and
   boot script/config serving.
-- `internal/router/` wires routes with Gorilla Mux.
-- `internal/templates/` parses and renders Go templates with environment
+- `router/` wires routes with Gorilla Mux.
+- `templates/` parses and renders Go templates with environment
   override support.
-- `internal/mappings/` loads IP/hostname-to-boot-script mappings from YAML.
-- `internal/tftpserver/` implements the optional embedded TFTP server.
+- `mappings/` loads IP/hostname-to-boot-script mappings from YAML.
+- `tftpserver/` implements the optional embedded TFTP server.
 
 ### Boot Flow
 

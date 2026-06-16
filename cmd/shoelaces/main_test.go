@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thousandeyes/shoelaces/internal/environment"
+	"github.com/thousandeyes/shoelaces/environment"
 )
 
 func TestConfigPathFromArgs(t *testing.T) {

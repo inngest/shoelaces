@@ -18,9 +18,9 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/thousandeyes/shoelaces/internal/environment"
-	"github.com/thousandeyes/shoelaces/internal/ipxe"
-	"github.com/thousandeyes/shoelaces/internal/mappings"
+	"github.com/thousandeyes/shoelaces/environment"
+	"github.com/thousandeyes/shoelaces/ipxe"
+	"github.com/thousandeyes/shoelaces/mappings"
 )
 
 // DefaultTemplateRenderer holds information for rendering a template based

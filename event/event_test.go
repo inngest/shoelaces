@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thousandeyes/shoelaces/internal/server"
+	"github.com/thousandeyes/shoelaces/server"
 )
 
 const expectedEvent = `{"eventType":0,"date":"1970-01-01T00:00:00Z","server":{"Mac":"","IP":"","Hostname":"test_host"},"bootType":"Manual","script":"freebsd.ipxe","message":"","params":{"baseURL":"localhost:8080","cloudconfig":"virtual","hostname":"","version":"12345"}}`

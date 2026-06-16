@@ -22,10 +22,10 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
-	"github.com/thousandeyes/shoelaces/internal/log"
-	"github.com/thousandeyes/shoelaces/internal/polling"
-	"github.com/thousandeyes/shoelaces/internal/server"
-	"github.com/thousandeyes/shoelaces/internal/utils"
+	"github.com/thousandeyes/shoelaces/log"
+	"github.com/thousandeyes/shoelaces/polling"
+	"github.com/thousandeyes/shoelaces/server"
+	"github.com/thousandeyes/shoelaces/utils"
 )
 
 // StartPollingHandler is called by iPXE boot agents. It returns the poll script.

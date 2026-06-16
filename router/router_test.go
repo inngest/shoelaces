@@ -26,9 +26,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	shoelaces "github.com/thousandeyes/shoelaces"
-	"github.com/thousandeyes/shoelaces/internal/environment"
-	"github.com/thousandeyes/shoelaces/internal/handlers"
-	"github.com/thousandeyes/shoelaces/internal/log"
+	"github.com/thousandeyes/shoelaces/environment"
+	"github.com/thousandeyes/shoelaces/handlers"
+	"github.com/thousandeyes/shoelaces/log"
 )
 
 func TestUIRoutesRenderEmbeddedTemplates(t *testing.T) {

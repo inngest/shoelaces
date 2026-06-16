@@ -23,11 +23,11 @@ import (
 	"regexp"
 
 	shoelaces "github.com/thousandeyes/shoelaces"
-	"github.com/thousandeyes/shoelaces/internal/event"
-	"github.com/thousandeyes/shoelaces/internal/log"
-	"github.com/thousandeyes/shoelaces/internal/mappings"
-	"github.com/thousandeyes/shoelaces/internal/server"
-	"github.com/thousandeyes/shoelaces/internal/templates"
+	"github.com/thousandeyes/shoelaces/event"
+	"github.com/thousandeyes/shoelaces/log"
+	"github.com/thousandeyes/shoelaces/mappings"
+	"github.com/thousandeyes/shoelaces/server"
+	"github.com/thousandeyes/shoelaces/templates"
 )
 
 // Environment struct holds the shoelaces instance global data.

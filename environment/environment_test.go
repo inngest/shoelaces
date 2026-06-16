@@ -24,8 +24,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thousandeyes/shoelaces/internal/log"
-	"github.com/thousandeyes/shoelaces/internal/mappings"
+	"github.com/thousandeyes/shoelaces/log"
+	"github.com/thousandeyes/shoelaces/mappings"
 )
 
 func TestDefaultEnvironment(t *testing.T) {
