@@ -35,7 +35,7 @@ test: unit integration
 
 .PHONY: integration
 integration:
-	$(GO) test -tags=integration ./test/integ-test
+	$(GO) test -v -count=1 -tags=integration ./test/integ-test
 
 .PHONY: binaries
 binaries: linux windows
