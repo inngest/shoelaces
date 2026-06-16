@@ -1,0 +1,158 @@
+#+title: Provisioning Config Model
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-16 Tue>
+
+* Provisioning Config Model
+
+** Goal
+
+Make the provisioning mapping configuration the source of truth for boot target
+selection and runtime template parameters, while keeping daemon configuration in
+the Shoelaces config file.
+
+Mappings should support multiple named boot targets, per-host/per-network target
+policy, default target selection, raw parameter values, and explicit
+environment-backed parameter values. Existing =mappings.yaml= files should keep
+working.
+
+** Boundaries
+
+- This plan does not embed provisioning templates or static provisioning files;
+  that is Plan 003.
+- This plan does not add LUKS-specific templates; that is Plan 004.
+- This plan does not move UI assets; that remains Plan 001.
+- Runtime Shoelaces daemon options such as bind address, data dir, TFTP, and UI
+  override directory stay in the normal Shoelaces config.
+
+** Target Shape
+
+The new mapping model should support named targets and multiple allowed targets
+per mapping:
+
+#+begin_src yaml
+defaults:
+  params:
+    install_username: infra
+    ansible_repo_url: git@github.com:inngest/ansible.git
+    ansible_branch: main
+    ansible_playbook: playbooks/baremetal.yml
+
+targets:
+  debian12:
+    script: debian.ipxe
+    label: Debian 12 Bookworm
+    params:
+      release: bookworm
+      preseed: preseed/debian
+
+  debian13:
+    script: debian.ipxe
+    label: Debian 13 Trixie
+    params:
+      release: trixie
+      preseed: preseed/debian
+
+networkMaps:
+  - network: 104.225.9.96/27
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
+    params:
+      linuxargs: ""
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: debian13
+    targets:
+      - debian13
+    params:
+      hostname: iad-1
+      install_disk: /dev/nvme0n1
+      root_password_crypted:
+        env: SHOELACES_ROOT_PASSWORD_CRYPTED
+#+end_src
+
+** Phased Implementation Plan
+
+*** Phase 1: Schema And Parser Foundation
+
+- [ ] Convert mapping parsing from direct =yaml.Unmarshal= to Koanf-backed YAML
+  loading.
+- [ ] Keep the existing =networkMaps= and =hostnameMaps= =script:= schema
+  compatible.
+- [ ] Add strict top-level key validation for the new mapping schema.
+- [ ] Add tests proving the current example =mappings.yaml= still parses.
+- [ ] Add tests proving IPv4 and IPv6 CIDR network mappings parse and match.
+
+*** Phase 2: Targets And Multiple Choices
+
+- [ ] Add named =targets= with labels, script names, optional environment, and
+  params.
+- [ ] Add mapping-level =targets= and =defaultTarget=.
+- [ ] Add =macMaps= and =ipMaps= alongside existing hostname and network maps.
+- [ ] Add tests proving exact IP mappings work for both IPv4 and IPv6
+  addresses.
+- [ ] Define deterministic match precedence: manual selection, MAC, IP,
+  hostname, network, then unmatched/manual queue.
+- [ ] Add tests for multiple targets, default target selection, and no-default
+  manual selection behavior.
+
+*** Phase 3: Parameter Resolution
+
+- [ ] Define parameter merge order: global defaults, target params, matched
+  mapping params, manual/request params, generated values.
+- [ ] Support raw scalar parameter values.
+- [ ] Support explicit environment-backed parameter values such as ={ env:
+  SHOELACES_ROOT_PASSWORD_CRYPTED }=.
+- [ ] Fail clearly when a referenced environment variable is missing.
+- [ ] Normalize all resolved params into the runtime template parameter map.
+- [ ] Add tests for merge order, raw values, env-backed values, and missing env
+  errors.
+
+*** Phase 4: Runtime Integration
+
+- [ ] Update automatic boot polling to resolve the selected target before
+  rendering the iPXE template.
+- [ ] Update manual boot state/UI data so only allowed targets are exposed for a
+  matched host when a mapping restricts target choices.
+- [ ] Preserve legacy UI/manual behavior for legacy mappings with a single
+  =script:=.
+- [ ] Add tests for automatic boot, manual choice, and legacy mapping behavior.
+
+*** Phase 5: Sensitive Value Handling
+
+- [ ] Add parameter redaction for logs and event output where sensitive values
+  may appear.
+- [ ] Redact keys matching password, password_crypted, passphrase, secret,
+  token, private key, authorized keys, and similar names.
+- [ ] Add tests proving sensitive values do not appear in logs/events that use
+  redacted parameter rendering.
+
+*** Phase 6: Documentation And Verification
+
+- [ ] Document old and new mapping schemas in README and manpage.
+- [ ] Add examples for Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04
+  targets.
+- [ ] Run =go test ./...=.
+- [ ] Run the plan status checker.
+
+** Acceptance Criteria
+
+- [ ] Existing mappings files remain compatible.
+- [ ] Koanf-backed mappings parse successfully.
+- [ ] Mappings can allow multiple targets.
+- [ ] Mappings can select a default target.
+- [ ] Raw and environment-backed params render into provisioning templates.
+- [ ] Sensitive params are redacted from logs/events.
+- [ ] =go test ./...= passes.
+
+** Notes And Risks
+
+- Mapping config is site/runtime provisioning policy and should not be embedded
+  as production configuration.
+- Avoid implicit environment fallback by parameter name. Environment-backed
+  values should be explicit in the mapping file so behavior is auditable.
+- This plan changes boot selection semantics, so preserve legacy behavior until
+  the new schema is fully documented and tested.

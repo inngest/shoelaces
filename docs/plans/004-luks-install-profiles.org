@@ -1,0 +1,77 @@
+#+title: LUKS Install Profiles
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-16 Tue>
+
+* LUKS Install Profiles
+
+** Goal
+
+Add explicit install profiles for encrypted and unencrypted operating system
+installs after the provisioning config model can represent multiple targets and
+runtime params.
+
+** Boundaries
+
+- Depends on Plan 002 for named targets and resolved params.
+- May depend on Plan 003 if LUKS-capable preseeds are shipped as embedded
+  defaults.
+- Does not change UI embedding behavior.
+
+** Current State
+
+- Current preseed files do not configure full-disk LUKS.
+- =encrypt_home= only maps to =user-setup/encrypt-home= and is not LUKS.
+- Debian currently uses LVM without crypto.
+- Storage uses RAID/LVM without crypto.
+- Ubuntu minimal uses regular partitioning without crypto.
+
+** Phased Implementation Plan
+
+*** Phase 1: Install Parameter Model
+
+- [ ] Define install params for disk selection, partitioning mode, volume group,
+  root password hash, install user, and SSH keys.
+- [ ] Define LUKS params such as =luks_enabled=, =luks_passphrase=,
+  =luks_cipher=, and =luks_key_size=.
+- [ ] Support raw and environment-backed secret values through the Plan 002
+  parameter resolver.
+- [ ] Add tests for LUKS param resolution and redaction.
+
+*** Phase 2: LUKS-Capable Templates
+
+- [ ] Add a Debian LUKS preseed target or a separate =preseed/debian-luks=
+  template.
+- [ ] Keep the existing unencrypted LVM path available.
+- [ ] Pass LUKS-specific params from the selected target to the preseed.
+- [ ] Add template rendering tests for encrypted and unencrypted profiles.
+
+*** Phase 3: Target Examples
+
+- [ ] Add example targets for Debian 12 unencrypted, Debian 12 LUKS, Debian 13,
+  Ubuntu 24.04, and Ubuntu 26.04 where appropriate.
+- [ ] Add examples showing per-host LUKS passphrase environment variables.
+- [ ] Add examples showing raw lab-only values with warnings.
+
+*** Phase 4: Documentation And Verification
+
+- [ ] Document LUKS security tradeoffs, especially serving preseed over HTTP.
+- [ ] Document recommended use of per-host secrets and TLS/trusted networks.
+- [ ] Run =go test ./...=.
+- [ ] Run the plan status checker.
+
+** Acceptance Criteria
+
+- [ ] LUKS and non-LUKS install targets can coexist.
+- [ ] LUKS secrets can come from explicit environment-backed params.
+- [ ] Existing non-LUKS installs continue to render.
+- [ ] Sensitive LUKS values are redacted from logs/events.
+- [ ] =go test ./...= passes.
+
+** Notes And Risks
+
+- Full-disk encryption through preseed exposes sensitive material to the
+  installer. This should be restricted to trusted networks or HTTPS.
+- Prefer per-host LUKS passphrases over shared global passphrases.
+- Keep LUKS work separate from the mapping parser so boot-target semantics can
+  stabilize first.

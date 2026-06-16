@@ -14,6 +14,7 @@ func TestReadConfigSupportsStructuredFormats(t *testing.T) {
 		"shoelaces.toml": `
 bind-addr = "localhost:8081"
 data-dir = "configs/data-dir/"
+ui-dir = "/srv/shoelaces/ui"
 debug = true
 
 [tftp]
@@ -26,6 +27,7 @@ timeout = "5s"
 		"shoelaces.yaml": `
 bind-addr: localhost:8081
 data-dir: configs/data-dir/
+ui-dir: /srv/shoelaces/ui
 debug: true
 tftp:
   enabled: true
@@ -37,6 +39,7 @@ tftp:
 		"shoelaces.json": `{
   "bind-addr": "localhost:8081",
   "data-dir": "configs/data-dir/",
+  "ui-dir": "/srv/shoelaces/ui",
   "debug": true,
   "tftp": {
     "enabled": true,
@@ -58,6 +61,7 @@ tftp:
 
 			assert.Equal(t, "localhost:8081", values["bind-addr"])
 			assert.Equal(t, "configs/data-dir/", values["data-dir"])
+			assert.Equal(t, "/srv/shoelaces/ui", values["ui-dir"])
 			assert.Equal(t, true, values["debug"])
 			assert.Equal(t, true, values["tftp-enabled"])
 			assert.Equal(t, ":69", values["tftp-addr"])

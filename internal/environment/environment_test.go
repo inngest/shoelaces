@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"bytes"
 	"io"
 	"net"
 	"os"
@@ -67,6 +68,30 @@ func TestInitEnvOverridesReturnsEmptyWhenDirectoryIsMissing(t *testing.T) {
 	env.EnvDir = "env_overrides"
 
 	assert.Empty(t, env.initEnvOverrides())
+}
+
+func TestInitStaticTemplatesUsesEmbeddedTemplates(t *testing.T) {
+	env := defaultEnvironment()
+	env.UIDir = filepath.Join(t.TempDir(), "missing-web")
+
+	env.initStaticTemplates()
+
+	for _, name := range []string{"header", "index", "events", "mappings", "footer"} {
+		assert.NotNil(t, env.StaticTemplates.Lookup(name), "template %q should be parsed", name)
+	}
+}
+
+func TestInitStaticTemplatesUsesUIDirOverrideWhenSet(t *testing.T) {
+	uiDir := writeTestUITemplates(t)
+	env := defaultEnvironment()
+	env.UIDir = uiDir
+	env.UIOverrideDirSet = true
+
+	env.initStaticTemplates()
+
+	var rendered bytes.Buffer
+	require.NoError(t, env.StaticTemplates.ExecuteTemplate(&rendered, "index", nil))
+	assert.Equal(t, "disk index", rendered.String())
 }
 
 func TestInitMappingsLoadsNetworkAndHostnameMaps(t *testing.T) {
@@ -137,4 +162,25 @@ func mustParseIP(t *testing.T, ip string) net.IP {
 	parsed := net.ParseIP(ip)
 	require.NotNil(t, parsed)
 	return parsed
+}
+
+func writeTestUITemplates(t *testing.T) string {
+	t.Helper()
+
+	uiDir := t.TempDir()
+	templatesDir := filepath.Join(uiDir, "templates/html")
+	require.NoError(t, os.MkdirAll(templatesDir, 0o755))
+
+	templates := map[string]string{
+		"header.html":   `{{ define "header" }}disk header{{ end }}`,
+		"index.html":    `{{ define "index" }}disk index{{ end }}`,
+		"events.html":   `{{ define "events" }}disk events{{ end }}`,
+		"mappings.html": `{{ define "mappings" }}disk mappings{{ end }}`,
+		"footer.html":   `{{ define "footer" }}disk footer{{ end }}`,
+	}
+	for name, content := range templates {
+		require.NoError(t, os.WriteFile(filepath.Join(templatesDir, name), []byte(content), 0o644))
+	}
+
+	return uiDir
 }

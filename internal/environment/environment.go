@@ -15,7 +15,6 @@
 package environment
 
 import (
-	"fmt"
 	"html/template"
 	"net"
 	"os"
@@ -23,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	shoelaces "github.com/thousandeyes/shoelaces"
 	"github.com/thousandeyes/shoelaces/internal/event"
 	"github.com/thousandeyes/shoelaces/internal/log"
 	"github.com/thousandeyes/shoelaces/internal/mappings"
@@ -45,7 +45,8 @@ type Environment struct {
 	BindAddr          string
 	BaseURL           string
 	DataDir           string
-	StaticDir         string
+	UIDir             string
+	UIOverrideDirSet  bool
 	EnvDir            string
 	TFTP              *TFTPConfig
 	TemplateExtension string
@@ -102,21 +103,34 @@ func defaultEnvironment() *Environment {
 }
 
 func (env *Environment) initStaticTemplates() {
-	staticTemplates := []string{
-		path.Join(env.StaticDir, "templates/html/header.html"),
-		path.Join(env.StaticDir, "templates/html/index.html"),
-		path.Join(env.StaticDir, "templates/html/events.html"),
-		path.Join(env.StaticDir, "templates/html/mappings.html"),
-		path.Join(env.StaticDir, "templates/html/footer.html"),
+	if env.UsesUIOverride() {
+		env.initStaticTemplatesFromDisk()
+		return
 	}
 
-	fmt.Println(env.StaticDir)
+	staticTemplates := []string{
+		"header.html",
+		"index.html",
+		"events.html",
+		"mappings.html",
+		"footer.html",
+	}
 
-	for _, t := range staticTemplates {
-		if _, err := os.Stat(t); err != nil {
-			env.Logger.Error("component", "environment", "msg", "Template does not exists!", "environment", t)
-			os.Exit(1)
-		}
+	env.StaticTemplates = template.Must(template.ParseFS(shoelaces.TemplateFS(), staticTemplates...))
+}
+
+// UsesUIOverride reports whether UI templates/assets should be loaded from disk.
+func (env *Environment) UsesUIOverride() bool {
+	return env.UIOverrideDirSet && env.UIDir != ""
+}
+
+func (env *Environment) initStaticTemplatesFromDisk() {
+	staticTemplates := []string{
+		filepath.Join(env.UIDir, "templates/html/header.html"),
+		filepath.Join(env.UIDir, "templates/html/index.html"),
+		filepath.Join(env.UIDir, "templates/html/events.html"),
+		filepath.Join(env.UIDir, "templates/html/mappings.html"),
+		filepath.Join(env.UIDir, "templates/html/footer.html"),
 	}
 
 	env.StaticTemplates = template.Must(template.ParseFiles(staticTemplates...))

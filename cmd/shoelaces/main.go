@@ -132,9 +132,14 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 				Sources: flagSources("data-dir", "DATA_DIR"),
 			},
 			&cli.StringFlag{
+				Name:    "ui-dir",
+				Value:   defaults.UIDir,
+				Usage:   "Optional custom web UI directory with templates and static frontend assets",
+				Sources: flagSources("ui-dir", "UI_DIR"),
+			},
+			&cli.StringFlag{
 				Name:    "static-dir",
-				Value:   defaults.StaticDir,
-				Usage:   "A custom web directory with static files",
+				Usage:   "Deprecated alias for --ui-dir",
 				Sources: flagSources("static-dir", "STATIC_DIR"),
 			},
 			&cli.StringFlag{
@@ -219,12 +224,19 @@ func optionsFromCommand(cmd *cli.Command) environment.Options {
 		Readonly: cmd.Bool("tftp-readonly"),
 		Timeout:  cmd.Duration("tftp-timeout"),
 	}
+	uiDir := cmd.String("ui-dir")
+	uiDirSet := cmd.IsSet("ui-dir")
+	if !uiDirSet && cmd.IsSet("static-dir") {
+		uiDir = cmd.String("static-dir")
+		uiDirSet = true
+	}
 
 	return environment.Options{
 		BindAddr:          cmd.String("bind-addr"),
 		BaseURL:           cmd.String("base-url"),
 		DataDir:           cmd.String("data-dir"),
-		StaticDir:         cmd.String("static-dir"),
+		UIDir:             uiDir,
+		UIOverrideDirSet:  uiDirSet,
 		EnvDir:            cmd.String("env-dir"),
 		TemplateExtension: cmd.String("template-extension"),
 		MappingsFile:      cmd.String("mappings-file"),
@@ -236,9 +248,6 @@ func optionsFromCommand(cmd *cli.Command) environment.Options {
 func validateOptions(options environment.Options) error {
 	if options.DataDir == "" {
 		return fmt.Errorf("you must specify the data-dir parameter")
-	}
-	if options.StaticDir == "" {
-		return fmt.Errorf("you must specify the static-dir parameter")
 	}
 	return nil
 }

@@ -8,8 +8,10 @@ type Options struct {
 	BaseURL string
 	// DataDir is the root for mappings, boot templates, static config assets, and environment overrides.
 	DataDir string
-	// StaticDir contains the web UI templates and static frontend assets.
-	StaticDir string
+	// UIDir optionally overrides the embedded web UI templates and static frontend assets.
+	UIDir string
+	// UIOverrideDirSet tracks whether UIDir came from CLI, environment, or config.
+	UIOverrideDirSet bool
 	// EnvDir is the directory under DataDir that contains environment-specific overrides.
 	EnvDir string
 	// TemplateExtension identifies files that should be parsed as dynamic Shoelaces templates.
@@ -27,7 +29,6 @@ func DefaultOptions() Options {
 	tftp := DefaultTFTPConfig()
 	return Options{
 		BindAddr:          "localhost:8081",
-		StaticDir:         "web",
 		EnvDir:            "env_overrides",
 		TemplateExtension: ".slc",
 		MappingsFile:      "mappings.yaml",
@@ -40,9 +41,6 @@ func (env *Environment) applyOptions(options Options) {
 
 	if options.BindAddr == "" {
 		options.BindAddr = defaults.BindAddr
-	}
-	if options.StaticDir == "" {
-		options.StaticDir = defaults.StaticDir
 	}
 	if options.EnvDir == "" {
 		options.EnvDir = defaults.EnvDir
@@ -60,7 +58,8 @@ func (env *Environment) applyOptions(options Options) {
 	env.BindAddr = options.BindAddr
 	env.BaseURL = options.BaseURL
 	env.DataDir = options.DataDir
-	env.StaticDir = options.StaticDir
+	env.UIDir = options.UIDir
+	env.UIOverrideDirSet = options.UIOverrideDirSet
 	env.EnvDir = options.EnvDir
 	env.TemplateExtension = options.TemplateExtension
 	env.MappingsFile = options.MappingsFile

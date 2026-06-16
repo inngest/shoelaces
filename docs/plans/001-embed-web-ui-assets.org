@@ -1,0 +1,161 @@
+#+title: Embed Web UI Assets
+#+author: Darwin D. Wu
+#+status: Done
+#+date: <2026-06-15 Mon>
+
+* Embed Web UI Assets
+
+** Goal
+
+Embed the Shoelaces =web/= UI templates and assets into the Go binary so release
+artifacts no longer need to ship a runtime =web= directory.
+
+The embedded assets are only the Shoelaces UI assets currently under this
+repository's =web/= directory. Netboot, firstboot, and provisioning static files
+must remain outside the binary and continue to be served from =data-dir/static=
+through =/configs/static/*=.
+
+** Current State
+
+- At the start of this plan, =Environment.initStaticTemplates()= read UI templates from
+  =env.StaticDir/templates/html/*.html=, stats each path, and exits when a file
+  is missing.
+- At the start of this plan, =-static-dir= defaulted to =web= and was validated
+  as required.
+- At the start of this plan, =/static/*= served
+  =http.FileServer(http.Dir(env.StaticDir))=.
+- =/configs/static/*= serves =handlers.StaticConfigFileServer()=, which is tied
+  to the configured =data-dir/static= behavior and should not change.
+- Docker packaging copies =/shoelaces/web= into the final image and passes
+  =-static-dir /web=.
+- Integration tests currently pass a disk =static-dir= in the generated config
+  and compare =/static/= against an expected fixture.
+
+** Desired Behavior
+
+- Default operation uses embedded UI templates and embedded =/static/*= assets.
+- A built binary can start with a valid =-data-dir= even when no local =web/=
+  directory exists.
+- Existing UI routes continue to render:
+  - =/=
+  - =/events=
+  - =/mappings=
+- Existing static references continue to resolve, for example:
+  - =/static/js/jquery.min.js=
+  - =/static/css/bootstrap.min.css=
+- =/configs/static/*= remains backed by =data-dir/static=.
+- =/static/*= is UI-only. Provisioning files such as firstboot scripts and
+  services are not served from =/static/*=.
+- Release archives and Docker images do not need to include a runtime =web/=
+  directory.
+
+** Phased Implementation Plan
+
+*** Phase 1: Embed Foundation
+
+- [X] Add an embedded UI filesystem package or helper using Go =embed=,
+  preferably embedding the full =web= tree with =//go:embed web=.
+- [X] Expose focused helpers for the template subtree and static asset subtree
+  using =fs.Sub=, so callers do not need to know the embedded root layout.
+- [X] Add a narrow unit test or compile-time check that the expected embedded
+  files exist, including =templates/html/index.html= and =js/jquery.min.js=.
+
+*** Phase 2: Template Loading
+
+- [X] Parse default UI templates from the embedded filesystem in
+  =Environment.initStaticTemplates()=.
+- [X] Preserve template names used by =handlers.RenderDefaultTemplate("index")=,
+  =events=, and =mappings=.
+- [X] Remove the startup hard failure caused by missing disk UI template files
+  when embedded defaults are being used.
+- [X] Add or update unit tests for environment startup/template initialization
+  without a disk =web= directory.
+- [X] Add or update router or integration coverage for =GET /=, =GET /events=,
+  and =GET /mappings=.
+
+*** Phase 3: Static Asset Serving
+
+- [X] Replace the default =/static/*= file server with a server backed by the
+  embedded UI static filesystem.
+- [X] Keep UI static asset loading separate from provisioning static file
+  loading: =/static/*= must use only the UI asset filesystem, while
+  =/configs/static/*= must use only the provisioning static handler.
+- [X] Preserve URL paths beneath =/static/= so existing HTML references such as
+  =/static/js/jquery.min.js= and =/static/css/bootstrap.min.css= continue to
+  resolve.
+- [X] Keep =/configs/static/*= unchanged and backed by =data-dir/static= through
+  =handlers.StaticConfigFileServer()=.
+- [X] Add or update router or integration coverage for a known embedded UI asset
+  such as =GET /static/js/jquery.min.js=.
+- [X] Add or update coverage proving =/configs/static/*= still serves from
+  =data-dir/static=.
+
+*** Phase 4: =ui-dir= Compatibility
+
+- [X] Replace the UI override config surface with =ui-dir= so the option is
+  explicitly about UI templates/assets rather than provisioning static files.
+- [X] Keep =ui-dir= as an optional UI-only disk override for local
+  development/custom UI assets.
+- [X] Treat legacy =static-dir= as a deprecated compatibility alias for
+  =ui-dir=, or remove it with deliberate test/doc updates if compatibility is
+  intentionally broken.
+- [X] Adjust flag defaults and validation so =ui-dir= is no longer required
+  for normal operation.
+- [X] If disk override support is kept, route both UI template parsing and
+  =/static/*= serving to the override directory only when =ui-dir= is
+  explicitly configured.
+- [X] Use current =urfave/cli= and Koanf-backed config behavior to distinguish an
+  explicitly configured =ui-dir= from the embedded default path.
+- [X] Update integration test setup so normal test startup does not depend on
+  passing the repository =web= directory as =ui-dir=.
+
+*** Phase 5: Packaging And Documentation
+
+- [X] Update Docker packaging to stop copying =/shoelaces/web= into the final
+  image.
+- [X] Update the Docker entrypoint to stop passing a UI override directory unless
+  an intentional override path is retained for image customization.
+- [X] Review =.goreleaser.yaml=; if it excludes archive files with
+  =archives.files: none*=, leave that behavior in place because embedded assets
+  remove the need to ship =web/=.
+- [X] Update README and =docs/shoelaces.8.scd= to document embedded UI assets,
+  the optional role of =ui-dir=, the deprecated legacy =static-dir= alias if it
+  remains, and the separate
+  =/configs/static/*= provisioning static behavior.
+- [X] Update config examples to avoid implying =static-dir= is where
+  provisioning files belong; use =ui-dir= only for UI overrides, and document
+  provisioning static files as =data-dir/static= served at =/configs/static/*=.
+
+*** Phase 6: Final Verification
+
+- [X] Run =go test ./...=.
+- [X] Build and smoke test a binary with a valid =-data-dir= and no local =web/=
+  directory.
+
+** Acceptance Criteria
+
+- [X] =go test ./...= passes.
+- [X] Built binary runs with a valid =-data-dir= and no local =web/= directory.
+- [X] UI routes render successfully for =/=, =/events=, and =/mappings=.
+- [X] =/static/*= serves embedded UI assets.
+- [X] =/configs/static/*= continues serving files from =data-dir/static=.
+- [X] UI static loading and provisioning static loading remain separate; neither
+  handler falls back to the other's filesystem.
+- [X] Release archives do not need to include =web/=.
+
+** Notes And Risks
+
+- The =web/= directory includes UI templates and browser assets only; do not move
+  firstboot, netboot, or provisioning static behavior into the embed.
+- Template parsing from =embed.FS= should preserve template basenames, because
+  handlers execute templates by logical names such as =index=.
+- Go's =http.FileServer(http.FS(...))= behavior differs slightly from
+  =http.Dir=; tests should cover the exact asset paths used by existing HTML
+  templates instead of only checking a directory listing.
+- If =ui-dir= remains as a disk override, use =cmd.IsSet("ui-dir")= or
+  equivalent =urfave/cli= state so the default embedded path is distinguishable
+  from a CLI, environment, or config-file override.
+- The old provisioning references to =/static/firstboot.sh=,
+  =/static/firstboot.service=, =/static/authorized_keys=, and
+  =/static/id_ansible= should move to =/configs/static/*= as part of preserving
+  the UI/provisioning separation.

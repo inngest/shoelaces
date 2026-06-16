@@ -37,8 +37,14 @@ shoelaces - automated server bootstrapping
 	Specifies a mappings YAML file. Defaults to "mappings.yaml". Refer to the
 	README of the project for more information about mappings.
 
+*--ui-dir* <directory>
+	Optional parameter. Specifies a custom UI directory containing web
+	templates and frontend assets. If omitted, Shoelaces uses UI assets
+	embedded in the binary.
+
 *--static-dir* <directory>
-	Specifies a custom web directory with static files. Defaults to "web".
+	Deprecated alias for "--ui-dir". This option is only for UI assets and
+	does not control provisioning static files.
 
 *--template-extension* <extension>
 	Shoelaces template extension. Defaults to ".slc".
@@ -99,6 +105,11 @@ such as *DATA_DIR*, *BIND_ADDR*, and *TFTP_ENABLED*.
 Config files can be TOML, YAML, or JSON. The parser is selected from the file
 extension: ".toml", ".yaml", ".yml", or ".json". Nested TFTP settings use a
 "tftp" object/table and map to the "tftp-*" CLI flags.
+
+The Shoelaces web UI templates and frontend assets are embedded in the binary
+by default. Use *--ui-dir* only when intentionally overriding those UI assets.
+Provisioning static files are separate: files under "data-dir/static" are
+served from the "/configs/static/" URL path.
 
 Here is an example TOML config file:
 
