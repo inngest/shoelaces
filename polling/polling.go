@@ -91,20 +91,17 @@ func ListServers(serverStates *server.States) server.Servers {
 // put on hold. This method is called when something is finally chosen for
 // that host.
 func UpdateTarget(logger log.Logger, serverStates *server.States,
-	templateRenderer *templates.ShoelacesTemplates, eventLog *event.Log, baseURL string, srv server.Server,
-	scriptName string, envName string, params map[string]interface{}) (inputErr bool, err error) {
+	resolver *mappings.Resolver, templateRenderer *templates.ShoelacesTemplates, eventLog *event.Log, baseURL string, srv server.Server,
+	targetName string, _ string, params map[string]interface{}) (inputErr bool, err error) {
 
 	if !utils.IsValidMAC(srv.Mac) {
 		return true, errors.New("invalid MAC")
 	}
-	// Test the template with user inputs
-	setHostName(params, srv.Mac)
-
-	params["baseURL"] = utils.BaseURLforEnvName(baseURL, envName)
-	_, err = templateRenderer.RenderTemplate(logger, scriptName, params, envName)
-	if err != nil {
-		inputErr = true
-		return
+	if resolver == nil {
+		resolver, err = mappings.NewResolver(nil)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	serverStates.Lock()
@@ -114,12 +111,32 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 		return true, errors.New("MAC is not in the booting state")
 	}
 
-	hostname := servers[srv.Mac].Hostname
-	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", scriptName, "environment", envName, "hostname", hostname, "params", params)
-	eventLog.AddEvent(event.UserSelection, srv, "", scriptName, nil)
-	servers[srv.Mac].Target = scriptName
-	servers[srv.Mac].Environment = envName
-	servers[srv.Mac].Params = params
+	bootServer := servers[srv.Mac].Server
+	result, resolvedServer, err := resolveBootTarget(resolver, mappings.ResolveRequest{
+		Mac:          bootServer.Mac,
+		IP:           bootServer.IP,
+		Hostname:     bootServer.Hostname,
+		ManualTarget: targetName,
+		Params:       copyParams(params),
+	}, baseURL, bootServer)
+	if err != nil {
+		return true, err
+	}
+	if !result.HasTarget() {
+		return true, errors.New("manual target did not resolve to a boot script")
+	}
+
+	// Test the template before storing the selection for the polling host.
+	if _, err = templateRenderer.RenderTemplate(logger, result.Target.Script, result.Params, result.Target.Environment); err != nil {
+		return true, err
+	}
+
+	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", result.Params)
+	eventLog.AddEvent(event.UserSelection, resolvedServer, "", result.Target.Script, nil)
+	servers[srv.Mac].Server = resolvedServer
+	servers[srv.Mac].Target = result.Target.Script
+	servers[srv.Mac].Environment = result.Target.Environment
+	servers[srv.Mac].Params = result.Params
 	return false, nil
 }
 
@@ -127,50 +144,39 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 // the right script to return, as network maps, hostname maps and manual
 // selection.
 func Poll(logger log.Logger, serverStates *server.States,
-	hostnameMaps []mappings.HostnameMap, networkMaps []mappings.NetworkMap,
+	resolver *mappings.Resolver,
 	eventLog *event.Log, templateRenderer *templates.ShoelacesTemplates,
 	baseURL string, srv server.Server) (scriptText string, err error) {
 
-	script, found := attemptAutomaticBoot(logger, hostnameMaps, networkMaps, templateRenderer, eventLog, baseURL, srv)
-	if found {
-		return script, nil
+	if resolver == nil {
+		resolver, err = mappings.NewResolver(nil)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	return manualAction(logger, serverStates, templateRenderer, eventLog, baseURL, srv)
-}
-
-func attemptAutomaticBoot(logger log.Logger, hostnameMaps []mappings.HostnameMap, networkMaps []mappings.NetworkMap,
-	templateRenderer *templates.ShoelacesTemplates, eventLog *event.Log,
-	baseURL string, srv server.Server) (scriptText string, found bool) {
-
-	// Find with reverse hostname matched with the hostname regexps
-	if script, found := mappings.FindScriptForHostname(hostnameMaps, srv.Hostname); found {
-		logger.Debug("component", "polling", "msg", "Host found", "where", "hostname-mapping", "host", srv.Hostname)
-		eventLog.AddEvent(event.HostBoot, srv, event.PtrMatchBoot, script.Name, script.Params)
-		script.Params["hostname"] = srv.Hostname
-
-		return genBootScript(logger, templateRenderer, baseURL, script), found
+	result, resolvedServer, err := resolveBootTarget(resolver, mappings.ResolveRequest{
+		Mac:      srv.Mac,
+		IP:       srv.IP,
+		Hostname: srv.Hostname,
+	}, baseURL, srv)
+	if err != nil {
+		return "", err
 	}
-	logger.Debug("component", "polling", "msg", "Host not found", "where", "hostname-mapping", "host", srv.Hostname)
-
-	// Find with IP belonging to a configured subnet
-	if script, found := mappings.FindScriptForNetwork(networkMaps, srv.IP); found {
-		logger.Debug("component", "polling", "msg", "Host found", "where", "network-mapping", "ip", srv.IP)
-		setHostName(script.Params, srv.Mac)
-		srv.Hostname = script.Params["hostname"].(string)
-		eventLog.AddEvent(event.HostBoot, srv, event.SubnetMatchBoot, script.Name, script.Params)
-
-		return genBootScript(logger, templateRenderer, baseURL, script), found
+	if result.HasTarget() {
+		logger.Debug("component", "polling", "msg", "Host found", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
+		eventLog.AddEvent(event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params)
+		return genBootScript(logger, templateRenderer, result.Target.Script, result.Target.Environment, result.Params), nil
 	}
-	logger.Debug("component", "polling", "msg", "Host not found", "where", "network-mapping", "ip", srv.IP)
 
-	return "", false
+	logger.Debug("component", "polling", "msg", "Host needs manual target selection", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
+	return manualAction(logger, serverStates, templateRenderer, eventLog, baseURL, srv, targetOptions(result.AllowedTargets))
 }
 
 func manualAction(logger log.Logger, serverStates *server.States, templateRenderer *templates.ShoelacesTemplates,
-	eventLog *event.Log, baseURL string, srv server.Server) (scriptText string, err error) {
+	eventLog *event.Log, baseURL string, srv server.Server, allowedTargets []server.TargetOption) (scriptText string, err error) {
 
-	script, action := chooseManualAction(logger, serverStates, eventLog, srv)
+	script, action := chooseManualAction(logger, serverStates, eventLog, srv, allowedTargets)
 	logger.Debug("component", "polling", "target-script-name", script, "action", action)
 
 	switch action {
@@ -178,7 +184,7 @@ func manualAction(logger log.Logger, serverStates *server.States, templateRender
 		setHostName(script.Params, srv.Mac)
 		srv.Hostname = script.Params["hostname"].(string)
 		eventLog.AddEvent(event.HostBoot, srv, event.ManualBoot, script.Name, script.Params)
-		return genBootScript(logger, templateRenderer, baseURL, script), nil
+		return genBootScript(logger, templateRenderer, script.Name, script.Environment, script.Params), nil
 
 	case RetryAction:
 		return genRetryScript(logger, baseURL, srv.Mac), nil
@@ -193,7 +199,7 @@ func manualAction(logger log.Logger, serverStates *server.States, templateRender
 }
 
 func chooseManualAction(logger log.Logger, serverStates *server.States,
-	eventLog *event.Log, srv server.Server) (*mappings.Script, ManualAction) {
+	eventLog *event.Log, srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction) {
 
 	serverStates.Lock()
 	defer serverStates.Unlock()
@@ -218,11 +224,85 @@ func chooseManualAction(logger log.Logger, serverStates *server.States,
 		}
 	}
 
-	serverStates.AddServer(srv)
+	serverStates.AddServerWithTargets(srv, allowedTargets)
 	logger.Debug("component", "polling", "msg", "New server", "mac", srv.Mac)
 	eventLog.AddEvent(event.HostPoll, srv, "", "", nil)
 
 	return nil, RetryAction
+}
+
+func resolveBootTarget(resolver *mappings.Resolver, request mappings.ResolveRequest,
+	baseURL string, srv server.Server) (mappings.ResolveResult, server.Server, error) {
+	result, err := resolver.Resolve(request)
+	if err != nil || !result.HasTarget() {
+		return result, srv, err
+	}
+
+	request.GeneratedParams = generatedBootParams(result.Params, baseURL, result.Target.Environment, srv, result.MatchType)
+	result, err = resolver.Resolve(request)
+	if err != nil {
+		return mappings.ResolveResult{}, srv, err
+	}
+	if hostname, ok := result.Params["hostname"].(string); ok {
+		srv.Hostname = hostname
+	}
+	return result, srv, nil
+}
+
+func generatedBootParams(params map[string]interface{}, baseURL, envName string, srv server.Server, matchType mappings.MatchType) map[string]interface{} {
+	generated := map[string]interface{}{
+		"baseURL": utils.BaseURLforEnvName(baseURL, envName),
+	}
+	if matchType == mappings.MatchHostname && srv.Hostname != "" {
+		generated["hostname"] = srv.Hostname
+		return generated
+	}
+
+	hostnameParams := copyParams(params)
+	setHostName(hostnameParams, srv.Mac)
+	generated["hostname"] = hostnameParams["hostname"]
+	return generated
+}
+
+func bootTypeForMatch(matchType mappings.MatchType) string {
+	switch matchType {
+	case mappings.MatchMAC:
+		return "MAC Match"
+	case mappings.MatchIP:
+		return "IP Match"
+	case mappings.MatchHostname:
+		return event.PtrMatchBoot
+	case mappings.MatchNetwork:
+		return event.SubnetMatchBoot
+	case mappings.MatchManual:
+		return event.ManualBoot
+	default:
+		return ""
+	}
+}
+
+func targetOptions(targets []mappings.TargetCandidate) []server.TargetOption {
+	options := make([]server.TargetOption, 0, len(targets))
+	for _, target := range targets {
+		options = append(options, server.TargetOption{
+			Name:        target.Name,
+			Script:      target.Script,
+			Label:       target.Label,
+			Environment: target.Environment,
+		})
+	}
+	return options
+}
+
+func copyParams(params map[string]interface{}) map[string]interface{} {
+	if params == nil {
+		return nil
+	}
+	copied := make(map[string]interface{}, len(params))
+	for key, value := range params {
+		copied[key] = value
+	}
+	return copied
 }
 
 func setHostName(params map[string]interface{}, mac string) {
@@ -260,9 +340,8 @@ func GenStartScript(logger log.Logger, baseURL string) string {
 	return parsedTemplate.String()
 }
 
-func genBootScript(logger log.Logger, templateRenderer *templates.ShoelacesTemplates, baseURL string, script *mappings.Script) string {
-	script.Params["baseURL"] = utils.BaseURLforEnvName(baseURL, script.Environment)
-	text, err := templateRenderer.RenderTemplate(logger, script.Name, script.Params, script.Environment)
+func genBootScript(logger log.Logger, templateRenderer *templates.ShoelacesTemplates, scriptName, envName string, params map[string]interface{}) string {
+	text, err := templateRenderer.RenderTemplate(logger, scriptName, params, envName)
 	if err != nil {
 		panic(err)
 	}

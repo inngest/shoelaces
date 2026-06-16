@@ -26,11 +26,28 @@ const (
 	InitTarget = "NOTARGET"
 )
 
-// Server holds data that uniquely identifies a server
+// TargetOption is a boot target that can be selected for a waiting server.
+type TargetOption struct {
+	// Name is the target key from mappings.yaml and the value posted by the UI.
+	Name string
+	// Script is the iPXE template name rendered when this target is selected.
+	Script string
+	// Label is optional display text for operators.
+	Label string
+	// Environment selects an optional template override environment.
+	Environment string
+}
+
+// Server holds data that uniquely identifies a server.
 type Server struct {
-	Mac      string
-	IP       string
+	// Mac is the server MAC address in colon-separated form.
+	Mac string
+	// IP is the IP address observed by Shoelaces during polling.
+	IP string
+	// Hostname is the resolved or request-provided host name.
 	Hostname string
+	// AllowedTargets is the resolver-approved manual target list for this host.
+	AllowedTargets []TargetOption `json:",omitempty"`
 }
 
 // Servers is an array of Server
@@ -77,14 +94,29 @@ func New(mac string, ip string, hostname string) Server {
 	}
 }
 
-// AddServer adds a server to the States struct
+// AddServer adds a server to the States struct.
 func (m *States) AddServer(server Server) {
+	m.AddServerWithTargets(server, nil)
+}
+
+// AddServerWithTargets adds a waiting server with resolver-approved choices.
+func (m *States) AddServerWithTargets(server Server, allowedTargets []TargetOption) {
+	server.AllowedTargets = copyTargetOptions(allowedTargets)
 	m.Servers[server.Mac] = &State{
 		Server:     server,
 		Target:     InitTarget,
 		Retry:      1,
 		LastAccess: int(time.Now().UTC().Unix()),
 	}
+}
+
+func copyTargetOptions(options []TargetOption) []TargetOption {
+	if options == nil {
+		return nil
+	}
+	copied := make([]TargetOption, len(options))
+	copy(copied, options)
+	return copied
 }
 
 // DeleteServer deletes a server from the States struct
