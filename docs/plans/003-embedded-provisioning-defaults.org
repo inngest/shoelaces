@@ -1,0 +1,84 @@
+#+title: Embedded Provisioning Defaults
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-16 Tue>
+
+* Embedded Provisioning Defaults
+
+** Goal
+
+Embed generic provisioning templates and static provisioning files so Shoelaces
+can serve useful iPXE, preseed, kickstart, cloud-init, and firstboot defaults out
+of the box, while still allowing site-specific files in =data-dir= to override
+those defaults.
+
+** Boundaries
+
+- Do not embed =mappings.yaml= as production runtime policy.
+- Do not embed credentials or site secrets.
+- Keep UI assets under Plan 001.
+- Keep the richer target/mapping schema under Plan 002.
+
+** Desired Overlay Model
+
+- =/configs/*= serves dynamic provisioning templates from disk first, then
+  embedded defaults.
+- =/configs/static/*= serves provisioning static files from disk first, then
+  embedded defaults.
+- =data-dir= remains the site override root.
+- Environment overrides remain supported for disk-backed site files.
+
+** Phased Implementation Plan
+
+*** Phase 1: Embedded Provisioning Filesystem
+
+- [ ] Add an embedded provisioning filesystem helper for generic
+  =configs/data-dir= contents.
+- [ ] Exclude =mappings.yaml= from production runtime defaults, or make embedded
+  mappings inaccessible except as examples/tests.
+- [ ] Add tests proving representative embedded provisioning files exist.
+
+*** Phase 2: Dynamic Template Overlay
+
+- [ ] Update dynamic template parsing to load embedded provisioning templates.
+- [ ] Overlay disk templates from =data-dir= on top of embedded defaults.
+- [ ] Preserve environment override behavior for disk files.
+- [ ] Add tests for embedded fallback and disk override precedence.
+
+*** Phase 3: Static Provisioning Overlay
+
+- [ ] Update =/configs/static/*= serving to use disk =data-dir/static= first and
+  embedded static provisioning files second.
+- [ ] Preserve directory index behavior where existing tests rely on it.
+- [ ] Add tests for embedded fallback, disk override, and missing file behavior.
+
+*** Phase 4: Startup Without Disk Templates
+
+- [ ] Allow Shoelaces to start with external mappings/config but without a full
+  disk provisioning template tree.
+- [ ] Keep clear errors when required site configuration, such as mappings, is
+  missing.
+- [ ] Add a smoke/integration test for running with no disk provisioning
+  templates.
+
+*** Phase 5: Documentation And Verification
+
+- [ ] Document the embedded-default plus disk-overlay model.
+- [ ] Document that =mappings.yaml= remains external site policy.
+- [ ] Run =go test ./...=.
+- [ ] Run the plan status checker.
+
+** Acceptance Criteria
+
+- [ ] Generic provisioning templates can be served from embedded defaults.
+- [ ] Generic static provisioning files can be served from embedded defaults.
+- [ ] Disk =data-dir= files override embedded provisioning defaults.
+- [ ] =mappings.yaml= remains external runtime/site configuration.
+- [ ] =go test ./...= passes.
+
+** Notes And Risks
+
+- Embedded provisioning defaults should be generic and non-secret.
+- The current repo examples include site-shaped defaults; review them before
+  making them embedded runtime defaults.
+- Disk overlay semantics should be explicit and deterministic.
