@@ -1,21 +1,21 @@
-## 2026-06-12.05
+## 1.4.7
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Publish per-platform Shoelaces artifacts (#26)
-## 2026-06-12.04
+## 1.4.6
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Split out the release and tag operations due to aws credentials (#24)
 - *(release)* V2026-06-12.04 (#25)
-## 2026-06-12.03
+## 1.4.5
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Fix workflow permissions (#22)
 - *(release)* V2026-06-12.03 (#23)
-## 2026-06-12.02
+## 1.4.4
 
 ### 💼 Other
 
@@ -26,7 +26,7 @@
 - *(release)* Automate shoelaces release flow (#19)
 - Consolidate shoelaces release publishing (#21)
 - *(release)* V2026-06-12.02 (#20)
-## 2025-11-02.01
+## 1.4.0
 
 ### 🚀 Features
 
