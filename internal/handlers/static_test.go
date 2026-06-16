@@ -77,6 +77,36 @@ func TestOverlayFileServerMergesDirectoryIndex(t *testing.T) {
 	assert.Less(t, strings.Index(body, "a.txt"), strings.Index(body, "b.txt"))
 }
 
+func TestOverlayFileServerIncludesLowerLayerDirectoryEntries(t *testing.T) {
+	upper := t.TempDir()
+	lower := t.TempDir()
+
+	require.NoError(t, os.Mkdir(filepath.Join(lower, "lower-dir"), 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(upper, "upper-dir"), 0o755))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, `<a href="lower-dir/">lower-dir/</a>`)
+	assert.Contains(t, body, `<a href="upper-dir/">upper-dir/</a>`)
+}
+
+func TestOverlayFileServerReturnsNotFoundWhenFileIsMissing(t *testing.T) {
+	upper := t.TempDir()
+	lower := t.TempDir()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/missing.txt", nil)
+
+	OverlayFileServer(upper, lower).ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
