@@ -4,6 +4,11 @@ networkMaps:
       name: debian.ipxe
       params:
         release: bookworm
+  - network: 198.51.100.0/24
+    script:
+      name: debian.ipxe
+      params:
+        release: trixie
 hostnameMaps:
   - hostname: msc1.example.com
     script:

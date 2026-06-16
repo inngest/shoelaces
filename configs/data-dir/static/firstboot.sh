@@ -113,7 +113,14 @@ VENV=/opt/firstboot/.venv
 python3 -m venv "$VENV"
 . "$VENV/bin/activate"
 pip install --upgrade pip setuptools wheel
-pip install "ansible-core==2.14.*" pynetbox requests boto3 botocore
+
+# Trixie needs ansible 2.18 - keep 2.14 pin for bookworm backwards compatibility
+. /etc/os-release
+case "${VERSION_CODENAME}" in
+  trixie) ANSIBLE_CORE_PIN="ansible-core>=2.18,<2.20" ;;
+  *)      ANSIBLE_CORE_PIN="ansible-core==2.14.*" ;;
+esac
+pip install "${ANSIBLE_CORE_PIN}" pynetbox requests boto3 botocore
 
 # ensure the venv's ansible is used as controller
 export PATH="/opt/firstboot/.venv/bin:$PATH"
@@ -123,7 +130,9 @@ export ANSIBLE_PYTHON_INTERPRETER="$VENV/bin/python"
 export ANSIBLE_COLLECTIONS_PATHS="/root/.ansible/collections:$DEST/vendor/collections:/usr/share/ansible/collections"
 
 # NetBox collection (installed for ansible, OK to do system-wide)
-ansible-galaxy collection install netbox.netbox
+# This shoulnd't be necessary anymore and breaks the ansible run
+# Commenting for now, can delete when this is live
+# ansible-galaxy collection install netbox.netbox
 
 # Set up SSH for Ansible (key provided by preseed late_command)
 mkdir -p /root/.ssh
@@ -166,7 +175,8 @@ ansible-pull -U git@github.com:inngest/ansible.git -C "$ANSIBLE_BRANCH" -d "$DES
 export PATH="/opt/firstboot/.venv/bin:$PATH"
 export ANSIBLE_PYTHON_INTERPRETER="/opt/firstboot/.venv/bin/python"
 
-ansible-galaxy collection install -r "$DEST/collections/requirements.yml"
+ansible-galaxy collection install -r "$DEST/collections/requirements.yml" \
+  -p "$DEST/vendor/collections" --force
 
 # Run the playbook
 ansible-pull \
