@@ -23,12 +23,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/environment"
+	"github.com/inngest/shoelaces/handlers"
+	"github.com/inngest/shoelaces/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	shoelaces "github.com/thousandeyes/shoelaces"
-	"github.com/thousandeyes/shoelaces/internal/environment"
-	"github.com/thousandeyes/shoelaces/internal/handlers"
-	"github.com/thousandeyes/shoelaces/internal/log"
 )
 
 func TestUIRoutesRenderEmbeddedTemplates(t *testing.T) {

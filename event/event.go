@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/thousandeyes/shoelaces/internal/server"
+	"github.com/inngest/shoelaces/server"
 )
 
 // Type holds the different typs of events

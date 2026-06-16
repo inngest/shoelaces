@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/thousandeyes/shoelaces/internal/environment"
-	"github.com/thousandeyes/shoelaces/internal/log"
+	"github.com/inngest/shoelaces/environment"
+	"github.com/inngest/shoelaces/log"
 )
 
 // ScriptName keeps the name of a script

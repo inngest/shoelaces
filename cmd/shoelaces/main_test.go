@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/inngest/shoelaces/environment"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thousandeyes/shoelaces/internal/environment"
 )
 
 func TestConfigPathFromArgs(t *testing.T) {

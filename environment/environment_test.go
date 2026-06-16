@@ -22,10 +22,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thousandeyes/shoelaces/internal/log"
-	"github.com/thousandeyes/shoelaces/internal/mappings"
 )
 
 func TestDefaultEnvironment(t *testing.T) {

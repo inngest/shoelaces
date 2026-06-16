@@ -141,8 +141,8 @@ how to compile Shoelaces.
 Once that you have configured your Go, you can get and compile Shoelaces by
 running:
 
-    $ go get github.com/thousandeyes/shoelaces
-    $ cd $GOPATH/src/github.com/thousandeyes/shoelaces
+    $ go get github.com/inngest/shoelaces
+    $ cd $GOPATH/src/github.com/inngest/shoelaces
     $ go build
 
 #### Running Shoelaces
@@ -333,7 +333,7 @@ override you won't be able to select it.
 Contributions to Shoelaces are very welcome! Take into account the following
 guidelines:
 
-* [File an issue](https://github.com/thousandeyes/shoelaces/issues) if you find
+* [File an issue](https://github.com/inngest/shoelaces/issues) if you find
   a bug or, even better, contribute with a pull request.
 * We have a bunch of integration tests that can be run by executing `make test`.
   Ensure that all test pass before submitting your pull request.

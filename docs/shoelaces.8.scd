@@ -164,7 +164,7 @@ configured to serve the iPXE executable, *undionly.kpxe*.
 
 Maintained by ThousandEyes Inc. <opensource@thousandeyes.com>.
 
-Up-to-date sources can be found at https://github.com/thousandeyes/shoelaces.
+Up-to-date sources can be found at https://github.com/inngest/shoelaces.
 
 Bugs reports and patches can be submitted via GitHub's interface or
 contacting the maintainers directly via email.

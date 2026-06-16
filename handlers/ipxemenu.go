@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/thousandeyes/shoelaces/internal/ipxe"
+	"github.com/inngest/shoelaces/ipxe"
 )
 
 const menuHeader = "#!ipxe\n" +

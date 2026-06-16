@@ -22,12 +22,12 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/thousandeyes/shoelaces/internal/event"
-	"github.com/thousandeyes/shoelaces/internal/log"
-	"github.com/thousandeyes/shoelaces/internal/mappings"
-	"github.com/thousandeyes/shoelaces/internal/server"
-	"github.com/thousandeyes/shoelaces/internal/templates"
-	"github.com/thousandeyes/shoelaces/internal/utils"
+	"github.com/inngest/shoelaces/event"
+	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/server"
+	"github.com/inngest/shoelaces/templates"
+	"github.com/inngest/shoelaces/utils"
 )
 
 // ManualAction represent an action taken when no automatic boot is available.

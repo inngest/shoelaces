@@ -22,13 +22,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/inngest/shoelaces/event"
+	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/server"
+	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thousandeyes/shoelaces/internal/event"
-	"github.com/thousandeyes/shoelaces/internal/log"
-	"github.com/thousandeyes/shoelaces/internal/mappings"
-	"github.com/thousandeyes/shoelaces/internal/server"
-	"github.com/thousandeyes/shoelaces/internal/templates"
 )
 
 func TestGenStartScriptUsesBaseURL(t *testing.T) {

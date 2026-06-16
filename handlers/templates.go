@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/thousandeyes/shoelaces/internal/utils"
+	"github.com/inngest/shoelaces/utils"
 )
 
 // TemplateHandler handles templated config files
