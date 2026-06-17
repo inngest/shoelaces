@@ -149,6 +149,101 @@ targets:
         sudo: ALL=(ALL) NOPASSWD:ALL
 ```
 
+## Structured Provisioning
+
+Shoelaces also accepts structured provisioning sections on `defaults`, targets,
+and mapping rules. These fields are parsed, validated, and merged in the same
+order as runtime params: defaults, target, matched mapping rule. Template
+rendering migrates to these fields in phases, so `params:` remains available for
+low-level template-specific values during the transition.
+
+```yaml
+defaults:
+  locale:
+    language: en_US.UTF-8
+    keyboard: us
+  time:
+    timezone: UTC
+    utc: true
+    ntp: true
+  network:
+    bootproto: dhcp
+    nameservers:
+      - 1.1.1.1
+  packages:
+    install:
+      - openssh-server
+      - curl
+    groups:
+      - core
+  storage:
+    disk: /dev/nvme0n1
+    wipe: true
+    mode: lvm
+    volumeGroup: vg0
+    filesystems:
+      root:
+        mountpoint: /
+        fstype: ext4
+        size: grow
+      swap:
+        fstype: swap
+        sizeMiB: 8192
+  boot:
+    firmware: uefi
+    netboot:
+      method: ipxe
+      kernelArgs:
+        - console=ttyS0
+    installed:
+      bootloader: grub
+      timeoutSeconds: 5
+      kernelArgs:
+        - consoleblank=0
+  repos:
+    osMirror: https://deb.debian.org/debian
+    release: bookworm
+    firmware: true
+    contrib: true
+    nonFree: true
+  installer:
+    configTemplate: preseed/debian
+    extraTemplate: provisioning/extra
+    configParams:
+      encrypt_home: false
+```
+
+Scalar fields merge by replacement. String lists, such as package names and
+kernel args, replace inherited lists when set. Keyed maps, such as
+`storage.filesystems`, merge by key; set `absent: true` on a filesystem entry
+to suppress an inherited entry.
+
+`networkMaps[].network` is the CIDR selector, so network-specific structured
+settings on a network map use `networkConfig:`. Other mapping types use
+`network:`:
+
+```yaml
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+    networkConfig:
+      hostname: rack-default
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: debian12
+    targets:
+      - debian12
+    network:
+      hostname: iad-1
+    storage:
+      filesystems:
+        swap:
+          absent: true
+```
+
 ## Late Command Scripts
 
 The embedded Debian `preseed/debian/late_command` hook is a no-op:
