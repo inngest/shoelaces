@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,6 +51,7 @@ var (
 
 	_, mockNetwork1, _ = net.ParseCIDR("10.0.0.0/8")
 	_, mockNetwork2, _ = net.ParseCIDR("192.168.0.0/16")
+	_, mockNetwork3, _ = net.ParseCIDR("2001:db8::/64")
 
 	mockNetworkMap1 = NetworkMap{
 		Network: mockNetwork1,
@@ -58,6 +60,10 @@ var (
 	mockNetworkMap2 = NetworkMap{
 		Network: mockNetwork2,
 		Script:  &mockScript2,
+	}
+	mockNetworkMap3 = NetworkMap{
+		Network: mockNetwork3,
+		Script:  &mockScript1,
 	}
 )
 
@@ -123,7 +129,7 @@ func TestFindScriptForHostname(t *testing.T) {
 }
 
 func TestScriptForNetwork(t *testing.T) {
-	maps := []NetworkMap{mockNetworkMap1, mockNetworkMap2}
+	maps := []NetworkMap{mockNetworkMap1, mockNetworkMap2, mockNetworkMap3}
 	tests := []struct {
 		name       string
 		maps       []NetworkMap
@@ -145,6 +151,14 @@ func TestScriptForNetwork(t *testing.T) {
 			maps:       maps,
 			ip:         "192.168.0.1",
 			wantName:   "mock_script2",
+			wantFound:  true,
+			wantScript: true,
+		},
+		{
+			name:       "ipv6 network map matches",
+			maps:       maps,
+			ip:         "2001:db8::10",
+			wantName:   "mock_script1",
 			wantFound:  true,
 			wantScript: true,
 		},

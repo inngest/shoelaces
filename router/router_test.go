@@ -1,4 +1,5 @@
 // Copyright 2026 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +28,8 @@ import (
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/handlers"
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +92,40 @@ func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
 	assert.Equal(t, "from data dir\n", rr.Body.String())
 }
 
+func TestConfigTemplateRouteUsesQueryParamsWithoutMappingDefaults(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.ipxe.slc"), []byte(`{{define "install.ipxe"}}release={{.release}}
+baseURL={{.baseURL}}
+{{end}}
+`), 0o644))
+
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates = templates.New()
+		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		env.MappingResolver = mustMappingResolver(t, &mappings.Mappings{
+			Defaults: mappings.DefaultsMap{
+				Params: map[string]interface{}{
+					"release": "mapping-release",
+					"secret":  "mapping-secret",
+				},
+			},
+			Targets: map[string]mappings.Target{
+				"debian12": {Script: "install.ipxe"},
+			},
+		})
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/install.ipxe?release=query-release", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "release=query-release")
+	assert.Contains(t, rr.Body.String(), "baseURL=localhost:8081")
+	assert.NotContains(t, rr.Body.String(), "mapping-release")
+	assert.NotContains(t, rr.Body.String(), "mapping-secret")
+}
+
 func newTestRouter(t *testing.T, dataDir string) http.Handler {
 	t.Helper()
 
@@ -118,4 +155,12 @@ func newTestRouterWithEnvironment(t *testing.T, dataDir string, configure func(*
 		configure(env)
 	}
 	return handlers.MiddlewareChain(env).Then(ShoelacesRouter(env))
+}
+
+func mustMappingResolver(t *testing.T, config *mappings.Mappings) *mappings.Resolver {
+	t.Helper()
+
+	resolver, err := mappings.NewResolver(config)
+	require.NoError(t, err)
+	return resolver
 }

@@ -1,6 +1,7 @@
 //go:build integration
 
 // Copyright 2026 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -118,7 +119,7 @@ func TestShoelacesIntegration(t *testing.T) {
 		proc.assertGETFixture(t, pollPath, "poll-unknown.txt")
 
 		form := url.Values{
-			"target":      {"coreos.ipxe"},
+			"target":      {"coreos"},
 			"mac":         {"06:66:de:ad:be:ef"},
 			"version":     {"666.0"},
 			"cloudconfig": {"virtual"},

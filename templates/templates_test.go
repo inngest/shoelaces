@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package templates
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,6 +76,25 @@ func TestRenderTemplateReturnsMissingVariableError(t *testing.T) {
 	assert.Empty(t, rendered)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Missing variables in request: baseURL")
+}
+
+func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
+	renderer := newTestRenderer(t)
+	var logOutput bytes.Buffer
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(&logOutput), "boot.ipxe", map[string]interface{}{
+		"hostname":              "secure-host",
+		"baseURL":               "127.0.0.1:8081",
+		"root_password_crypted": "hash",
+		"bootstrap_token":       "token-value",
+	}, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "secure-host")
+	assert.NotContains(t, logOutput.String(), "hash")
+	assert.NotContains(t, logOutput.String(), "token-value")
+	assert.Contains(t, logOutput.String(), "root_password_crypted:[REDACTED]")
+	assert.Contains(t, logOutput.String(), "bootstrap_token:[REDACTED]")
 }
 
 func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {

@@ -1,17 +1,76 @@
+defaults:
+  params:
+    encrypt_home: "false"
+    ansible_repo_url: git@example.com:infra/ansible.git
+    ansible_branch: main
+    ansible_playbook: playbooks/baremetal.yml
+    linuxargs: ""
+
+targets:
+  debian12:
+    script: debian.ipxe
+    label: Debian 12 Bookworm
+    params:
+      release: bookworm
+
+  debian13:
+    script: debian.ipxe
+    label: Debian 13 Trixie
+    params:
+      release: trixie
+
+  ubuntu2404:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 24.04 LTS
+    params:
+      release: noble
+
+  ubuntu2604:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 26.04 LTS
+    params:
+      release: resolute
+
 networkMaps:
   - network: 104.225.9.96/27
-    script:
-      name: debian.ipxe
-      params:
-        release: bookworm
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
+      - ubuntu2404
+      - ubuntu2604
+    params:
+      hostnamePrefix: iad-
+
   - network: 198.51.100.0/24
-    script:
-      name: debian.ipxe
-      params:
-        release: trixie
+    targets:
+      - debian12
+      - debian13
+      - ubuntu2404
+      - ubuntu2604
+
 hostnameMaps:
-  - hostname: msc1.example.com
-    script:
-      name: ubuntu-minimal.ipxe
-      params:
-        release: trusty
+  - hostname: '^debian13-[0-9]+\.example\.com$'
+    defaultTarget: debian13
+    targets:
+      - debian13
+
+  - hostname: '^ubuntu24-[0-9]+\.example\.com$'
+    defaultTarget: ubuntu2404
+    targets:
+      - ubuntu2404
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: ubuntu2604
+    targets:
+      - ubuntu2604
+    params:
+      hostname: ubuntu2604-example
+
+ipMaps:
+  - ip: 2001:db8::10
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13

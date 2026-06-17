@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,6 +94,24 @@ func TestLogAddEventInitializesAndAppendsEvents(t *testing.T) {
 	assert.Equal(t, HostPoll, log.Events[srv.Mac][0].Type)
 	assert.Equal(t, UserSelection, log.Events[srv.Mac][1].Type)
 	assert.Equal(t, "freebsd.ipxe", log.Events[srv.Mac][1].Script)
+}
+
+func TestHostBootEventRedactsSensitiveParams(t *testing.T) {
+	event := New(HostBoot, server.Server{Hostname: "test_host"}, ManualBoot, "debian.ipxe", map[string]interface{}{
+		"hostname":              "test_host",
+		"root_password_crypted": "hash",
+		"bootstrap_token":       "token-value",
+		"ssh_private_key":       "private-key",
+	})
+
+	assert.Equal(t, "test_host", event.Params["hostname"])
+	assert.Equal(t, "[REDACTED]", event.Params["root_password_crypted"])
+	assert.Equal(t, "[REDACTED]", event.Params["bootstrap_token"])
+	assert.Equal(t, "[REDACTED]", event.Params["ssh_private_key"])
+	assert.NotContains(t, event.Message, "hash")
+	assert.NotContains(t, event.Message, "token-value")
+	assert.NotContains(t, event.Message, "private-key")
+	assert.Contains(t, event.Message, "[REDACTED]")
 }
 
 func TestEventMarshalJSON(t *testing.T) {

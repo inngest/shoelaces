@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +16,8 @@
 package polling
 
 import (
-	"net"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -47,7 +46,6 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 		log.MakeLogger(testLogWriter{}),
 		states,
 		nil,
-		nil,
 		events,
 		templates.New(),
 		"127.0.0.1:8081",
@@ -62,7 +60,6 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 		script, err = Poll(
 			log.MakeLogger(testLogWriter{}),
 			states,
-			nil,
 			nil,
 			events,
 			templates.New(),
@@ -80,23 +77,31 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 	tests := []struct {
 		name         string
 		srv          server.Server
-		hostnameMaps []mappings.HostnameMap
-		networkMaps  []mappings.NetworkMap
+		resolver     *mappings.Resolver
 		wantBootType string
 		wantHostname string
 		wantRendered string
 		wantParams   map[string]interface{}
 	}{
 		{
-			name: "hostname match",
+			name: "hostname match keeps resolved hostname",
 			srv:  server.New("06:66:de:ad:be:ef", "192.0.2.10", "matched-host"),
-			hostnameMaps: []mappings.HostnameMap{{
-				Hostname: regexp.MustCompile(`^matched-host$`),
-				Script: &mappings.Script{
-					Name:   "test.ipxe",
-					Params: map[string]interface{}{"role": "web"},
+			resolver: mustResolver(t, &mappings.Mappings{
+				Targets: map[string]mappings.Target{
+					"web": {
+						Script: "test.ipxe",
+						Params: map[string]interface{}{
+							"hostname": "target-host",
+							"role":     "web",
+						},
+					},
 				},
-			}},
+				HostnameMaps: []mappings.HostnameMapConfig{{
+					Hostname:      `^matched-host$`,
+					DefaultTarget: "web",
+					Targets:       []string{"web"},
+				}},
+			}),
 			wantBootType: event.PtrMatchBoot,
 			wantHostname: "matched-host",
 			wantRendered: "boot matched-host",
@@ -109,16 +114,22 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 		{
 			name: "network match with hostname prefix",
 			srv:  server.New("06:66:de:ad:be:ef", "192.0.2.10", ""),
-			networkMaps: []mappings.NetworkMap{{
-				Network: mustCIDR(t, "192.0.2.0/24"),
-				Script: &mappings.Script{
-					Name: "test.ipxe",
-					Params: map[string]interface{}{
-						"hostnamePrefix": "rack-",
-						"role":           "db",
+			resolver: mustResolver(t, &mappings.Mappings{
+				Targets: map[string]mappings.Target{
+					"db": {
+						Script: "test.ipxe",
+						Params: map[string]interface{}{
+							"hostnamePrefix": "rack-",
+							"role":           "db",
+						},
 					},
 				},
-			}},
+				NetworkMaps: []mappings.NetworkMapConfig{{
+					Network:       "192.0.2.0/24",
+					DefaultTarget: "db",
+					Targets:       []string{"db"},
+				}},
+			}),
 			wantBootType: event.SubnetMatchBoot,
 			wantHostname: "rack-06-66-de-ad-be-ef",
 			wantRendered: "boot rack-06-66-de-ad-be-ef",
@@ -137,8 +148,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			rendered, err := Poll(
 				log.MakeLogger(testLogWriter{}),
 				&server.States{Servers: make(map[string]*server.State)},
-				tt.hostnameMaps,
-				tt.networkMaps,
+				tt.resolver,
 				events,
 				newTestTemplates(t),
 				"127.0.0.1:8081",
@@ -165,16 +175,25 @@ func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	templateRenderer := newTestTemplates(t)
 	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "manual-host")
 	states.AddServer(srv)
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"manual": {
+				Script: "test.ipxe",
+				Params: map[string]interface{}{"role": "target"},
+			},
+		},
+	})
 	params := map[string]interface{}{"role": "manual"}
 
 	inputErr, err := UpdateTarget(
 		log.MakeLogger(testLogWriter{}),
 		states,
+		resolver,
 		templateRenderer,
 		events,
 		"127.0.0.1:8081",
 		srv,
-		"test.ipxe",
+		"manual",
 		"",
 		params,
 	)
@@ -185,9 +204,89 @@ func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	assert.Equal(t, "test.ipxe", states.Servers[srv.Mac].Target)
 	assert.Equal(t, "06-66-de-ad-be-ef", states.Servers[srv.Mac].Params["hostname"])
 	assert.Equal(t, "127.0.0.1:8081", states.Servers[srv.Mac].Params["baseURL"])
+	assert.Equal(t, "manual", states.Servers[srv.Mac].Params["role"])
 	require.Len(t, events.Events[srv.Mac], 1)
 	assert.Equal(t, event.UserSelection, events.Events[srv.Mac][0].Type)
 	assert.Equal(t, "test.ipxe", events.Events[srv.Mac][0].Script)
+}
+
+func TestPollQueuesRestrictedManualTargets(t *testing.T) {
+	states := &server.States{Servers: make(map[string]*server.State)}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"debian12": {Script: "test.ipxe", Label: "Debian 12"},
+			"debian13": {Script: "test.ipxe", Label: "Debian 13"},
+			"ubuntu24": {Script: "test.ipxe", Label: "Ubuntu 24.04"},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network: "192.0.2.0/24",
+			Targets: []string{
+				"debian12",
+				"debian13",
+			},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	script, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		states,
+		resolver,
+		&event.Log{},
+		newTestTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, script, "/poll/1/06-66-de-ad-be-ef")
+	require.NotNil(t, states.Servers[srv.Mac])
+	assert.Equal(t, []string{"debian12", "debian13"}, targetOptionNames(states.Servers[srv.Mac].AllowedTargets))
+
+	waiting := ListServers(states)
+	require.Len(t, waiting, 1)
+	assert.Equal(t, []string{"debian12", "debian13"}, targetOptionNames(waiting[0].AllowedTargets))
+
+	inputErr, err := UpdateTarget(
+		log.MakeLogger(testLogWriter{}),
+		states,
+		resolver,
+		newTestTemplates(t),
+		&event.Log{},
+		"127.0.0.1:8081",
+		srv,
+		"ubuntu24",
+		"",
+		map[string]interface{}{},
+	)
+	assert.True(t, inputErr)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
+}
+
+func TestPollQueuesUnrestrictedManualTargets(t *testing.T) {
+	states := &server.States{Servers: make(map[string]*server.State)}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"ubuntu24": {Script: "test.ipxe"},
+			"debian12": {Script: "test.ipxe"},
+		},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	_, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		states,
+		resolver,
+		&event.Log{},
+		newTestTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, states.Servers[srv.Mac])
+	assert.Equal(t, []string{"debian12", "ubuntu24"}, targetOptionNames(states.Servers[srv.Mac].AllowedTargets))
 }
 
 func TestListServersReturnsOnlyWaitingServersSortedByMAC(t *testing.T) {
@@ -238,10 +337,18 @@ role {{.role}}
 	return templateRenderer
 }
 
-func mustCIDR(t *testing.T, cidr string) *net.IPNet {
+func mustResolver(t *testing.T, mappingsConfig *mappings.Mappings) *mappings.Resolver {
 	t.Helper()
 
-	_, network, err := net.ParseCIDR(cidr)
+	resolver, err := mappings.NewResolver(mappingsConfig)
 	require.NoError(t, err)
-	return network
+	return resolver
+}
+
+func targetOptionNames(options []server.TargetOption) []string {
+	names := make([]string, 0, len(options))
+	for _, option := range options {
+		names = append(names, option.Name)
+	}
+	return names
 }

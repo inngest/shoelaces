@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/inngest/shoelaces/server"
+	"github.com/inngest/shoelaces/utils"
 )
 
 // Type holds the different typs of events
@@ -69,7 +71,7 @@ func New(eventType Type, srv server.Server, bootType, script string, params map[
 	event.Server = srv
 	event.BootType = bootType
 	event.Script = script
-	event.Params = params
+	event.Params = utils.RedactParams(params)
 
 	event.setMessage()
 

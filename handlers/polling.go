@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,7 +67,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 
 	server := server.New(mac, ip, host)
 	script, err := polling.Poll(
-		env.Logger, env.ServerStates, env.HostnameMaps, env.NetworkMaps,
+		env.Logger, env.ServerStates, env.MappingResolver,
 		env.EventLog, env.Templates, env.BaseURL, server)
 
 	if err != nil {
@@ -114,7 +115,7 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 
 	server := server.New(mac, ip, "")
 	inputErr, err := polling.UpdateTarget(
-		env.Logger, env.ServerStates, env.Templates, env.EventLog, env.BaseURL, server,
+		env.Logger, env.ServerStates, env.MappingResolver, env.Templates, env.EventLog, env.BaseURL, server,
 		scriptName, environment, params)
 
 	if err != nil {

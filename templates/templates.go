@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -185,7 +186,7 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	if envName == "" {
 		envName = defaultEnvironment
 	}
-	logger.Info("component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.MapToString(paramMap))
+	logger.Info("component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
 
 	requiredVariables := s.envTemplates[envName].templateVars[configName]
 

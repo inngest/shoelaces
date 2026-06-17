@@ -78,8 +78,8 @@ deployments:
 - Has a simple but nice UI to show the current configuration, and history
   of servers that booted.
 - Uses Go templates to handle complex configurations.
-- Allows specifying the boot entry point for a given server based on its IP
-  address or DNS PTR record.
+- Allows specifying the boot target for a given server based on its MAC
+  address, IP address, DNS PTR record, or CIDR network.
 - Supports the notion of environments for Development and Production
   environment configurations, while trying to minimize template
   duplication.
@@ -130,6 +130,35 @@ timeout = "5s"
 
 Equivalent examples are kept in *configs/shoelaces.toml*,
 *configs/shoelaces.yaml*, and *configs/shoelaces.json*.
+
+# MAPPINGS
+
+Shoelaces reads runtime boot policy from the YAML file selected by
+*--mappings-file*, relative to *--data-dir*. The mapping file defines named
+*targets* and then references those targets from *networkMaps*, *hostnameMaps*,
+*macMaps*, and *ipMaps*.
+
+Each target has a required *script*, optional *label*, optional *environment*,
+and optional *params*. Mapping rules can define *targets* to restrict manual
+choices and *defaultTarget* to select a target automatically. If a matched rule
+has no *defaultTarget*, Shoelaces queues the host for manual choice in the UI and
+only exposes the rule's allowed targets.
+
+Parameter merge order is global defaults, target params, matched mapping params,
+manual/request params, then generated values such as *hostname* and *baseURL*.
+Sensitive values can be loaded explicitly from the Shoelaces process
+environment:
+
+```
+params:
+  root_password_crypted:
+    env: SHOELACES_ROOT_PASSWORD_CRYPTED
+```
+
+The old *networkMaps[].script* and *hostnameMaps[].script* mapping schema is no
+longer supported. Define named targets and reference them from mapping rules
+instead. See *configs/data-dir/mappings.yaml* for a complete example including
+Debian and Ubuntu targets.
 
 *dhcpd*(8) can be hooked with Shoelaces by adding the following snippet in
 *dhcpd.conf*(5):

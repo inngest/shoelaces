@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package environment
 
 import (
+	"fmt"
 	"html/template"
 	"net"
 	"os"
@@ -32,8 +34,11 @@ import (
 
 // Environment struct holds the shoelaces instance global data.
 type Environment struct {
-	HostnameMaps    []mappings.HostnameMap
-	NetworkMaps     []mappings.NetworkMap
+	HostnameMaps []mappings.HostnameMap
+	NetworkMaps  []mappings.NetworkMap
+	// MappingResolver holds the new target resolver for the mappings.yaml
+	// schema used by polling and manual boot paths.
+	MappingResolver *mappings.Resolver
 	ServerStates    *server.States
 	EventLog        *event.Log
 	ParamsBlacklist []string
@@ -151,7 +156,14 @@ func (env *Environment) initEnvOverrides() []string {
 }
 
 func (env *Environment) initMappings(mappingsPath string) error {
-	configMappings := mappings.ParseYamlMappings(env.Logger, mappingsPath)
+	configMappings, err := mappings.ParseMappings(env.Logger, mappingsPath)
+	if err != nil {
+		return err
+	}
+	env.MappingResolver, err = mappings.NewResolver(configMappings)
+	if err != nil {
+		return err
+	}
 
 	for _, configNetMap := range configMappings.NetworkMaps {
 		_, ipnet, err := net.ParseCIDR(configNetMap.Network)
@@ -159,7 +171,14 @@ func (env *Environment) initMappings(mappingsPath string) error {
 			return err
 		}
 
-		netMap := mappings.NetworkMap{Network: ipnet, Script: initScript(configNetMap.Script)}
+		script, err := initScriptForTarget(configMappings, configNetMap.DefaultTarget, configNetMap.Params)
+		if err != nil {
+			return err
+		}
+		if script == nil {
+			continue
+		}
+		netMap := mappings.NetworkMap{Network: ipnet, Script: script}
 		env.NetworkMaps = append(env.NetworkMaps, netMap)
 	}
 
@@ -169,22 +188,46 @@ func (env *Environment) initMappings(mappingsPath string) error {
 			return err
 		}
 
-		hostMap := mappings.HostnameMap{Hostname: regex, Script: initScript(configHostMap.Script)}
+		script, err := initScriptForTarget(configMappings, configHostMap.DefaultTarget, configHostMap.Params)
+		if err != nil {
+			return err
+		}
+		if script == nil {
+			continue
+		}
+		hostMap := mappings.HostnameMap{Hostname: regex, Script: script}
 		env.HostnameMaps = append(env.HostnameMaps, hostMap)
 	}
 
 	return nil
 }
 
-func initScript(configScript mappings.YamlScript) *mappings.Script {
-	mappingScript := &mappings.Script{
-		Name:        configScript.Name,
-		Environment: configScript.Environment,
-		Params:      make(map[string]interface{}),
-	}
-	for key := range configScript.Params {
-		mappingScript.Params[key] = configScript.Params[key]
+// initScriptForTarget adapts default targets for legacy UI mapping display.
+// Runtime boot selection uses MappingResolver instead of these Script objects.
+func initScriptForTarget(configMappings *mappings.Mappings, targetName string, mappingParams map[string]any) (*mappings.Script, error) {
+	if targetName == "" {
+		return nil, nil
 	}
 
-	return mappingScript
+	target, ok := configMappings.Targets[targetName]
+	if !ok {
+		return nil, fmt.Errorf("default target %q not found", targetName)
+	}
+
+	mappingScript := &mappings.Script{
+		Name:        target.Script,
+		Environment: target.Environment,
+		Params:      make(map[string]interface{}),
+	}
+	for key, value := range configMappings.Defaults.Params {
+		mappingScript.Params[key] = fmt.Sprint(value)
+	}
+	for key, value := range target.Params {
+		mappingScript.Params[key] = fmt.Sprint(value)
+	}
+	for key, value := range mappingParams {
+		mappingScript.Params[key] = fmt.Sprint(value)
+	}
+
+	return mappingScript, nil
 }

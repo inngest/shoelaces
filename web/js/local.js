@@ -1,5 +1,6 @@
 /*
   Copyright 2018 ThousandEyes Inc.
+  Copyright 2026 Inngest Inc.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -16,11 +17,16 @@
 
 'use strict';
 
+var systemsByMac = {};
+var defaultTargetOptions = [];
+
 $(document).ready(function () {
     $('#systems').hide()
+    defaultTargetOptions = readTargetOptions();
     updateHostnames();
     updateEventHistory();
     $('#target').on('change', scriptSelection);
+    $('#mac').on('change', serverSelection);
 
     window.setTimeout(function () {
         $('.alert').fadeTo(1000, 0).slideUp(1000, function () {
@@ -35,18 +41,23 @@ window.setInterval(updateEventHistory, 5000);
 function updateHostnames() {
     $.getJSON('/ajax/servers', function (systems) {
         var macs = $('#mac');
-        var selection = $('select[name="mac"]').find('option:selected').text();
+        var selection = macs.val();
+        systemsByMac = {};
         macs.empty();
 
         if (systems.length == 0) {
             $('#systems').fadeOut(500);
             $('#loading').fadeIn(500);
+            if (populateTargetOptions(defaultTargetOptions)) {
+                scriptSelection();
+            }
         } else {
             $('#loading').hide(500);
             $('#systems').removeClass('hide');
             $('#systems').fadeIn(500);
 
             $.each(systems, function () {
+                systemsByMac[this.Mac] = this;
                 var system_str = this.Mac + ' - ' + this.IP;
                 if (this.Hostname != '') {
                     system_str += ' - ' + this.Hostname;
@@ -54,12 +65,72 @@ function updateHostnames() {
                 macs.append('<option class="text-primary-custom" value="' + this.Mac + '">' + system_str  +  '</option>');
             });
 
-            $('#mac option').filter(function () {
-                //may want to use $.trim in here
-                return $(this).text() == selection;
-            }).prop('selected', true);
+            macs.val(selection);
+            refreshServerSelection();
         }
     });
+}
+
+function readTargetOptions() {
+    var options = [];
+    $('#target option').each(function () {
+        var option = $(this);
+        if (!option.val()) {
+            return;
+        }
+        options.push({
+            Name: option.val(),
+            Script: option.data('script'),
+            Environment: option.data('env') || '',
+            Label: option.text()
+        });
+    });
+    return options;
+}
+
+function serverSelection() {
+    populateTargetsForSelectedServer();
+    scriptSelection();
+}
+
+function refreshServerSelection() {
+    if (populateTargetsForSelectedServer()) {
+        scriptSelection();
+    }
+}
+
+function populateTargetsForSelectedServer() {
+    var selectedMac = $('#mac').val();
+    var system = systemsByMac[selectedMac];
+    if (system) {
+        return populateTargetOptions(system.AllowedTargets || []);
+    }
+    return populateTargetOptions(defaultTargetOptions);
+}
+
+function populateTargetOptions(targets) {
+    var targetSelect = $('#target');
+    var previousTarget = targetSelect.val();
+    targetSelect.empty();
+    targetSelect.append($('<option>').attr('value', '').text('Select an iPXE script'));
+
+    $.each(targets, function () {
+        var label = this.Label || this.Name;
+        if (this.Environment) {
+            label += ' [' + this.Environment + ']';
+        }
+        targetSelect.append($('<option>')
+            .attr('value', this.Name)
+            .attr('data-script', this.Script)
+            .attr('data-env', this.Environment || '')
+            .text(label));
+    });
+
+    targetSelect.val(previousTarget);
+    if (targetSelect.val() == null) {
+        targetSelect.val('');
+    }
+    return previousTarget != targetSelect.val();
 }
 
 function scriptSelection() {
