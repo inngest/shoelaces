@@ -15,7 +15,6 @@ implementation exists:
 | Path                                    | Notes                                                            |
 |-----------------------------------------|------------------------------------------------------------------|
 | `cloud-config/cloud-config-release.slc` | Generic CoreOS cloud-config template.                            |
-| `cloud-config/users.slc`                | Generic empty users/key partial. Sites should override it.       |
 | `ipxe/centos.ipxe.slc`                  | Generic CentOS iPXE entrypoint.                                  |
 | `ipxe/coreos.ipxe.slc`                  | Generic CoreOS iPXE entrypoint.                                  |
 | `ipxe/debian.ipxe.slc`                  | Generic Debian iPXE entrypoint.                                  |

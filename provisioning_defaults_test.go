@@ -24,7 +24,6 @@ import (
 
 var genericProvisioningDefaultCandidates = []string{
 	"cloud-config/cloud-config-release.slc",
-	"cloud-config/users.slc",
 	"ipxe/centos.ipxe.slc",
 	"ipxe/coreos.ipxe.slc",
 	"ipxe/debian.ipxe.slc",

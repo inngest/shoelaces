@@ -367,6 +367,85 @@ d-i preseed/late_command string echo partial override for {{.hostname}}
 	assert.NotContains(t, rendered, "d-i preseed/late_command string true")
 }
 
+func TestEmbeddedUserRenderingDoesNotRequireDiskUserPartials(t *testing.T) {
+	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+	params := mappings.ParamsWithUsers(map[string]interface{}{
+		"baseURL":      "127.0.0.1:8081",
+		"encrypt_home": false,
+		"hostname":     "structured-host",
+	}, map[string]mappings.ResolvedUser{
+		"infra": {
+			Name:            "infra",
+			Primary:         true,
+			FullName:        "Infrastructure User",
+			PasswordCrypted: "$6$infra",
+		},
+	})
+
+	preseed, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+	require.NoError(t, err)
+	assert.Contains(t, preseed, "d-i passwd/user-fullname string Infrastructure User")
+	assert.Contains(t, preseed, "d-i passwd/username string infra")
+
+	cloudConfig, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "cloudconfig-coreos", params, "")
+	require.NoError(t, err)
+	assert.Contains(t, cloudConfig, "  - name: infra")
+	assert.Contains(t, cloudConfig, `    passwd: "$6$infra"`)
+}
+
+func TestDiskUserPartialsDoNotOverrideEmbeddedUserRendering(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "preseed", "common", "users.slc"), `{{define "preseed/common/users" -}}
+d-i passwd/username string disk-partial-user
+{{end}}
+`)
+	writeTemplate(t, filepath.Join(dataDir, "cloud-config", "users.slc"), `{{define "cloudconfig/coreos/users" -}}
+users:
+  - name: disk-partial-user
+{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+	params := mappings.ParamsWithUsers(map[string]interface{}{
+		"baseURL":      "127.0.0.1:8081",
+		"encrypt_home": false,
+		"hostname":     "structured-host",
+	}, map[string]mappings.ResolvedUser{
+		"infra": {
+			Name:    "infra",
+			Primary: true,
+		},
+	})
+
+	preseed, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+	require.NoError(t, err)
+	assert.Contains(t, preseed, "d-i passwd/username string infra")
+	assert.NotContains(t, preseed, "disk-partial-user")
+
+	cloudConfig, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "cloudconfig-coreos", params, "")
+	require.NoError(t, err)
+	assert.Contains(t, cloudConfig, "  - name: infra")
+	assert.NotContains(t, cloudConfig, "disk-partial-user")
+}
+
+func TestDiskFullTemplateOverrideCanReplaceEmbeddedUserRendering(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "preseed", "debian.preseed.slc"), `{{define "preseed/debian" -}}
+d-i passwd/username string full-template-user
+d-i netcfg/get_hostname string {{ .hostname }}
+{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", map[string]interface{}{
+		"hostname": "override-host",
+	}, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "d-i passwd/username string full-template-user")
+	assert.Contains(t, rendered, "d-i netcfg/get_hostname string override-host")
+	assert.NotContains(t, rendered, "d-i passwd/username string debian")
+}
+
 func newTestRenderer(t *testing.T) *ShoelacesTemplates {
 	t.Helper()
 

@@ -20,7 +20,9 @@ Dynamic templates are loaded in this order:
 3. disk environment overrides under `data-dir/env_overrides/<env>`
 
 If a later layer defines the same template name as an earlier layer, the later
-definition wins. This works for complete templates and for named partial hooks.
+definition wins. This works for complete templates and for the remaining named
+partial hooks. User and account settings are rendered from structured
+`mappings.yaml` policy instead of user partial hooks.
 Variables referenced by partial hooks are included when Shoelaces reports
 required template parameters for manual rendering in the web UI.
 
@@ -78,11 +80,11 @@ data-dir/
           late_command.slc
 ```
 
-## Shared Preseed User Parameters
+## Structured Users
 
-The embedded preseed defaults call `preseed/common/users` from Debian, Ubuntu
-minimal, and storage preseeds. By default, they create a regular user with a
-locked password:
+The embedded preseed, kickstart, and cloud-init defaults render users from the
+structured `users:` policy in `mappings.yaml`. By default, Debian and Ubuntu
+preseeds create a regular user with a locked password:
 
 ```text
 d-i passwd/user-fullname string Provisioning User
@@ -110,6 +112,41 @@ targets:
       install_username: infra
       install_user_fullname: Infrastructure User
       install_user_password_crypted: "$6$rounds=4096$example$salthash"
+```
+
+For new mappings, prefer the structured `users:` model. Users are keyed by
+username, `root` is configured like any other account, and sensitive fields can
+be loaded from the process environment with `{ env: ENV_VAR }`:
+
+```yaml
+defaults:
+  users:
+    root:
+      system: true
+      locked: true
+
+targets:
+  debian12:
+    script: debian.ipxe
+    params:
+      release: bookworm
+      encrypt_home: false
+    users:
+      root:
+        locked: false
+        passwordCrypted:
+          env: SHOELACES_ROOT_PASSWORD_CRYPTED
+      infra:
+        primary: true
+        fullName: Infrastructure User
+        passwordCrypted:
+          env: SHOELACES_INFRA_PASSWORD_CRYPTED
+        sshAuthorizedKeys:
+          - env: SHOELACES_INFRA_AUTHORIZED_KEY
+        groups:
+          - sudo
+        shell: /bin/bash
+        sudo: ALL=(ALL) NOPASSWD:ALL
 ```
 
 ## Late Command Scripts
@@ -178,7 +215,6 @@ Initial embedded partial hooks:
 - `preseed/common/locale`
 - `preseed/common/network`
 - `preseed/common/time`
-- `preseed/common/users`
 - `preseed/debian/storage`
 - `preseed/debian/packages`
 - `preseed/debian/late_command`
@@ -189,7 +225,6 @@ Initial embedded partial hooks:
 - `kickstart/centos/storage`
 - `kickstart/centos/packages`
 - `kickstart/centos/post`
-- `cloudconfig/coreos/users`
 - `cloudconfig/coreos/units`
 - `cloudconfig/coreos/write_files`
 
