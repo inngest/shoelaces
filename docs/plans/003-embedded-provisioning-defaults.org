@@ -37,16 +37,17 @@ defaults.
 
 ** Current Repo Audit Notes
 
-- Existing =configs/data-dir/static/firstboot.sh=,
+- Phase 1 classified current =configs/data-dir= files in
+  =docs/provisioning-defaults-audit.md=.
+- =configs/data-dir/static/firstboot.sh=,
   =configs/data-dir/static/firstboot.service=, SSH key references, and Ansible
-  bootstrap behavior are site-shaped examples and should not become embedded
+  bootstrap behavior are site-shaped examples and must not become embedded
   generic defaults.
-- Existing Debian preseed late_command currently installs firstboot assets. The
-  embedded default should replace that with a documented no-op hook.
+- The Debian preseed late_command is now a documented no-op hook by default.
 - A site can restore firstboot behavior by overriding the late_command partial
   and serving its scripts from disk-backed =/configs/static/*=.
-- Existing template references to provisioning static files should use
-  =/configs/static/*=, not UI =/static/*=.
+- Template references to provisioning static files should use =/configs/static/*=,
+  not UI =/static/*=.
 
 ** Desired Overlay Model
 
@@ -195,16 +196,16 @@ Initial documented partial hooks:
 
 *** Phase 1: Provisioning Default Audit And Sanitization
 
-- [ ] Classify current =configs/data-dir= files as generic embeddable defaults,
+- [X] Classify current =configs/data-dir= files as generic embeddable defaults,
   site-only examples, or tests-only fixtures.
-- [ ] Remove or isolate site-specific behavior from candidates for embedded
+- [X] Remove or isolate site-specific behavior from candidates for embedded
   defaults, including firstboot scripts, Ansible checkout defaults, SSH key
   fetches, and hard-coded credentials.
-- [ ] Rewrite default Debian late_command behavior to a documented no-op partial
+- [X] Rewrite default Debian late_command behavior to a documented no-op partial
   hook.
-- [ ] Update provisioning static URL examples to use =/configs/static/*= instead
+- [X] Update provisioning static URL examples to use =/configs/static/*= instead
   of UI =/static/*=.
-- [ ] Add tests or static checks proving embedded-default candidates do not
+- [X] Add tests or static checks proving embedded-default candidates do not
   include known site-only file names or secret-like placeholders.
 
 *** Phase 2: Embedded Provisioning Filesystem
