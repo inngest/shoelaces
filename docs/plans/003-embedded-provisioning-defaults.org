@@ -199,11 +199,18 @@ script/template hooks for imperative or site-specific behavior:
 
 - =preseed/debian/late_command=
 - =kickstart/centos/post=
+- =cloudconfig/coreos/runcmd=
 - =cloudconfig/coreos/units=
 - =cloudconfig/coreos/write_files=
 
-Those hooks can still download raw static scripts from =/configs/static/*= or
-templated scripts from =/configs/<template>=. Full-template overrides remain the
+Those hooks are intentionally unstructured. The embedded defaults should provide
+no-op hook definitions, and a disk override should be rendered verbatim into the
+installer config. Shoelaces should not try to parse, validate, normalize, or
+make correctness guarantees for the hook body beyond normal Go template
+rendering. Operators own the installer-specific syntax they place there.
+
+The hooks can download raw static scripts from =/configs/static/*= or templated
+scripts from =/configs/<template>=. Full-template overrides remain the broader
 escape hatch when a site needs behavior outside the structured model.
 
 ** Structured Users Model
@@ -401,8 +408,13 @@ Supported imperative hooks:
 
 - =preseed/debian/late_command=
 - =kickstart/centos/post=
+- =cloudconfig/coreos/runcmd=
 - =cloudconfig/coreos/units=
 - =cloudconfig/coreos/write_files=
+
+Each supported imperative hook should have an embedded no-op default. Disk
+overrides for these names are rendered verbatim, so their syntax is deliberately
+the operator's responsibility.
 
 ** Phased Implementation Plan
 
@@ -569,6 +581,8 @@ Supported imperative hooks:
   preseed/kickstart/cloud-init URLs from structured =boot.netboot=,
   =installer=, and =repos= data.
 - [ ] Render installed-system bootloader settings from =boot.installed= data.
+- [ ] Render supported imperative hooks verbatim after structured sections and
+  keep embedded no-op defaults for each hook.
 - [ ] Keep legacy flat params as temporary projections or fallbacks where current
   templates already consume them, including =release=, =linuxargs=,
   =encrypt_home=, =vg_name=, =install_username=,
@@ -586,7 +600,10 @@ Supported imperative hooks:
   common packages, locale, time, network, storage, boot, installer, repo, or
   user configuration.
 - [ ] Keep imperative hooks documented for post-install scripts, cloud-init
-  units, cloud-init write_files, and full-template replacement.
+  runcmd, cloud-init units, cloud-init write_files, and full-template
+  replacement.
+- [ ] Document that supported imperative hook overrides are rendered verbatim and
+  are not syntax-validated beyond template rendering.
 - [ ] Add tests proving common declarative provisioning renders correctly without
   disk partial overrides.
 - [ ] Add tests proving disk overrides for removed declarative hook names no
@@ -621,6 +638,8 @@ Supported imperative hooks:
   configuration no longer requires partial overrides.
 - [ ] Imperative post-install hooks remain available for site-specific scripts,
   files, services, and full-template replacement.
+- [ ] Supported imperative hooks have embedded no-op defaults and render disk
+  overrides verbatim.
 - [X] Generic embedded templates do not trigger site-specific firstboot logic by
   default.
 - [X] =mappings.yaml= remains external runtime/site configuration.
