@@ -1,6 +1,6 @@
 #+title: Provisioning Config Model
 #+author: Darwin D. Wu
-#+status: Active
+#+status: Done
 #+date: <2026-06-16 Tue>
 
 * Provisioning Config Model
@@ -166,27 +166,27 @@ macMaps:
 
 *** Phase 6: Documentation And Verification
 
-- [ ] Document the new mapping schema in README and manpage.
-- [ ] Replace the sample =configs/data-dir/mappings.yaml= with the new schema.
-- [ ] Add examples for Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04
+- [X] Document the new mapping schema in README and manpage.
+- [X] Replace the sample =configs/data-dir/mappings.yaml= with the new schema.
+- [X] Add examples for Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04
   targets.
-- [ ] Add a migration note that old =networkMaps[].script= and
+- [X] Add a migration note that old =networkMaps[].script= and
   =hostnameMaps[].script= mappings are no longer supported.
-- [ ] Run =go test ./...=.
-- [ ] Run the plan status checker.
+- [X] Run =go test ./...=.
+- [X] Run the plan status checker.
 
 ** Acceptance Criteria
 
-- [ ] Koanf-backed mappings parse successfully.
-- [ ] Mappings can allow multiple targets.
-- [ ] Mappings can select a default target.
-- [ ] Raw and environment-backed params render into provisioning templates.
-- [ ] Runtime boot rendering uses fresh resolved parameter maps and does not
+- [X] Koanf-backed mappings parse successfully.
+- [X] Mappings can allow multiple targets.
+- [X] Mappings can select a default target.
+- [X] Raw and environment-backed params render into provisioning templates.
+- [X] Runtime boot rendering uses fresh resolved parameter maps and does not
   mutate shared mapping configuration.
 - [X] Sensitive params are redacted from logs/events.
-- [ ] =/static/*= and =/configs/static/*= remain separate from mapping
+- [X] =/static/*= and =/configs/static/*= remain separate from mapping
   behavior.
-- [ ] =go test ./...= passes.
+- [X] =go test ./...= passes.
 
 ** Notes And Risks
 
