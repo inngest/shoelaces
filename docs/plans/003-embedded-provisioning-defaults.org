@@ -568,23 +568,27 @@ operator's responsibility.
 
 *** Phase 10: Structured Provisioning Schema
 
-- [ ] Add structured =locale=, =time=, =network=, =packages=, =storage=,
+- [X] Add structured =locale=, =time=, =network=, =packages=, =storage=,
   =boot=, =installer=, and =repos= schemas to mapping defaults, targets,
   hostname maps, network maps, MAC maps, and IP maps.
-- [ ] Split boot config into =boot.netboot= for iPXE/netboot behavior and
+- [X] Split boot config into =boot.netboot= for iPXE/netboot behavior and
   =boot.installed= for installed-system bootloader behavior.
-- [ ] Add =installer.configTemplate=, =installer.configParams=, and
+- [X] Add =installer.configTemplate=, =installer.configParams=, and
   =installer.extraTemplate= as the structured replacement for installer config
   URL partials and the native installer snippet escape hatch.
-- [ ] Define merge semantics for scalar fields, string lists, keyed maps, and
+- [X] Define merge semantics for scalar fields, string lists, keyed maps, and
   removal/suppression where inherited structured values need to be disabled.
-- [ ] Preserve =params= as an escape hatch for low-level template-specific
+- [X] Preserve =params= as an escape hatch for low-level template-specific
   values while structured fields become the preferred common path.
-- [ ] Add validation for required fields and OS-support boundaries, such as
+- [X] Add validation for required fields and OS-support boundaries, such as
   storage mode values, package list shapes, mirror URLs, and valid boot
   argument lists.
-- [ ] Add tests for parsing, merge order, list merging or replacement behavior,
+- [X] Add tests for parsing, merge order, list merging or replacement behavior,
   validation errors, and interaction with existing raw =params=.
+
+  Note: =networkMaps[].network= remains the CIDR selector, so structured
+  network settings on network maps are exposed as =networkConfig=. Other mapping
+  types use =network= for structured network settings.
 
 *** Phase 11: Structured Renderer Migration
 
