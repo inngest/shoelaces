@@ -122,6 +122,8 @@ func TestRenderedPreseedsHaveRequiredShape(t *testing.T) {
 }
 
 func TestRenderedPreseedsPassDebconfSetSelectionsWhenAvailable(t *testing.T) {
+	// debconf-set-selections is the closest lightweight syntax checker for
+	// preseed files; CI requires it while local runs skip when unavailable.
 	debconfSetSelections := validatorPath(t, "debconf-set-selections")
 	renderer := newRenderer(t)
 
@@ -243,6 +245,8 @@ func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name s
 func assertValidIPXEScript(t *testing.T, rendered string) []string {
 	t.Helper()
 
+	// This is a rendered-script lint, not a full iPXE emulator. It catches the
+	// line-continuation and command-shape failures that break before booting.
 	allowedCommands := map[string]bool{
 		"boot":    true,
 		"chain":   true,
@@ -287,6 +291,8 @@ func assertValidIPXEScript(t *testing.T, rendered string) []string {
 		} else {
 			continued = segment
 		}
+		// Keep collecting physical lines until the iPXE continuation ends, then
+		// validate the reconstructed logical command.
 		if hasContinuation {
 			continue
 		}

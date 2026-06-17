@@ -69,7 +69,9 @@ func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment 
 			os.Exit(1)
 		}
 		s.envTemplates[environment] = shoelacesTemplateEnvironment{
-			templateObj:  c,
+			templateObj: c,
+			// Environment overrides inherit the default index, then replace entries
+			// for any templates they override.
 			templateVars: cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateVars),
 			templateRefs: cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateRefs),
 		}
@@ -117,6 +119,9 @@ func cloneTemplateIndex(index map[string][]string) map[string][]string {
 }
 
 func extractTemplateInfo(root parse.Node) ([]string, []string) {
+	// Keep direct variables and template references separate. References are
+	// resolved after parsing so disk overrides and later partial definitions
+	// participate in ListVariables and missing-variable errors.
 	var variables []string
 	var refs []string
 	walkTemplateNode(root, func(variable string) {
@@ -135,6 +140,7 @@ func walkTemplateNode(node parse.Node, addVariable func(string), addRef func(str
 	if node == nil {
 		return
 	}
+	// Optional branches and pipes can arrive as typed nil parse nodes.
 	value := reflect.ValueOf(node)
 	if value.Kind() == reflect.Ptr && value.IsNil() {
 		return
@@ -168,6 +174,8 @@ func walkTemplateNode(node parse.Node, addVariable func(string), addRef func(str
 		walkTemplateNode(n.List, addVariable, addRef)
 		walkTemplateNode(n.ElseList, addVariable, addRef)
 	case *parse.TemplateNode:
+		// Template references are followed during variable listing so partials
+		// can be parsed or overridden independently of their callers.
 		addRef(n.Name)
 		walkTemplateNode(n.Pipe, addVariable, addRef)
 	case *parse.WithNode:
@@ -329,6 +337,8 @@ func (e shoelacesTemplateEnvironment) collectVariables(templateName string, visi
 	if visited[templateName] {
 		return nil
 	}
+	// Guard against cyclic template references while still allowing shared
+	// partials to be reached from multiple top-level templates.
 	visited[templateName] = true
 
 	var variables []string
