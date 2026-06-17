@@ -520,18 +520,18 @@ operator's responsibility.
 
 *** Phase 7: Structured User Schema And Resolver
 
-- [ ] Add a keyed =users= schema to mapping defaults, targets, hostname maps,
+- [X] Add a keyed =users= schema to mapping defaults, targets, hostname maps,
   network maps, MAC maps, and IP maps.
-- [ ] Treat =users.root= as the root account by username rather than a separate
+- [X] Treat =users.root= as the root account by username rather than a separate
   root-only schema branch.
-- [ ] Support raw and ={ env: ENV_VAR }= values for sensitive user fields,
+- [X] Support raw and ={ env: ENV_VAR }= values for sensitive user fields,
   including =passwordCrypted= and =sshAuthorizedKeys=.
-- [ ] Define deterministic user merge semantics by username across defaults,
+- [X] Define deterministic user merge semantics by username across defaults,
   target, and matched mapping policy.
-- [ ] Support =absent: true= for suppressing inherited users.
-- [ ] Validate that at most one non-root user resolves with =primary: true= for
+- [X] Support =absent: true= for suppressing inherited users.
+- [X] Validate that at most one non-root user resolves with =primary: true= for
   installer flows that need a single install user.
-- [ ] Add tests for keyed user parsing, merge order, =root= handling, inherited
+- [X] Add tests for keyed user parsing, merge order, =root= handling, inherited
   user suppression, raw values, environment-backed values, and missing
   environment variables.
 
