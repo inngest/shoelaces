@@ -60,9 +60,9 @@ defaults.
   embedded generic static defaults.
 - =data-dir= remains the site override root.
 - Environment overrides remain supported for disk-backed site files.
-- Generic embedded templates expose a small documented set of partial hooks so
-  sites can override common extension points without replacing whole OS install
-  templates.
+- Generic embedded templates expose only imperative extension hooks for
+  post-install scripts, cloud-init units, cloud-init files, and full-template
+  replacement.
 - Common user/account provisioning should be data-driven from mappings through a
   structured keyed =users= model instead of requiring operators to override user
   partial templates.
@@ -158,9 +158,9 @@ macMaps:
       disk: /dev/nvme1n1
 #+end_src
 
-Structured config should replace common partial overrides, but it should not try
-to model arbitrary post-install automation. Keep script/template hooks for
-imperative or site-specific behavior:
+Structured config should replace declarative partial overrides as a breaking
+change. It should not try to model arbitrary post-install automation. Keep
+script/template hooks for imperative or site-specific behavior:
 
 - =preseed/debian/late_command=
 - =kickstart/centos/post=
@@ -256,16 +256,16 @@ template parameter names while templates are migrated:
 
 After OS templates render directly from normalized structured data, the
 dedicated user, package, locale, time, network, storage, boot, and repo partial
-hooks should be deprecated and removed from the supported override contract.
-Post-install/script hooks remain useful for imperative site behavior.
+hooks should be removed from the supported override contract. Post-install and
+script hooks remain useful for imperative site behavior.
 
-** Partial Hook Model
+** Override Model
 
-Embedded templates should support both full template replacement and targeted
-partial replacement. A disk template that defines the same template name as an
-embedded template replaces that definition during parse/overlay.
+Embedded templates should support full template replacement and a narrow set of
+imperative hooks. A disk template that defines the same top-level template name
+as an embedded template replaces that definition during parse/overlay.
 
-Partial overrides are provided as normal Shoelaces =.slc= templates under
+Imperative hooks are provided as normal Shoelaces =.slc= templates under
 =data-dir=. The file path is for operator organization and template discovery;
 the ={{define "..."}= name is the contract that decides what is overridden.
 Recommended convention is to mirror the hook name in the path:
@@ -360,46 +360,9 @@ d-i preseed/late_command string \
 
 Full-template overrides work the same way but define the top-level template name
 instead, such as ={{define "preseed/debian"}}...{{end}}=. A full-template
-override should be used when a site needs to replace the whole install template;
-a partial override should be used when the embedded template exposes a suitable
-hook.
+override should be used when a site needs to replace the whole install template.
 
-Initial documented partial hooks:
-
-- =preseed/common/locale=
-- =preseed/common/network=
-- =preseed/common/time=
-- =preseed/debian/storage=
-- =preseed/debian/packages=
-- =preseed/debian/late_command=
-- =preseed/debian/finish=
-- =ipxe/linux_args=
-- =ipxe/debian/kernel_args=
-- =ipxe/debian/preseed_url=
-- =kickstart/centos/storage=
-- =kickstart/centos/packages=
-- =kickstart/centos/post=
-- =cloudconfig/coreos/units=
-- =cloudconfig/coreos/write_files=
-
-Transitional declarative hooks kept only until structured config renders across
-supported OS defaults:
-
-- =preseed/common/users=
-- =cloudconfig/coreos/users=
-- =preseed/common/locale=
-- =preseed/common/network=
-- =preseed/common/time=
-- =preseed/debian/storage=
-- =preseed/debian/packages=
-- =preseed/debian/finish=
-- =ipxe/linux_args=
-- =ipxe/debian/kernel_args=
-- =ipxe/debian/preseed_url=
-- =kickstart/centos/storage=
-- =kickstart/centos/packages=
-
-Long-term supported imperative hooks:
+Supported imperative hooks:
 
 - =preseed/debian/late_command=
 - =kickstart/centos/post=
@@ -524,18 +487,18 @@ Long-term supported imperative hooks:
   cloud-init, and CentOS kickstart output valid user/account syntax.
 - [ ] Add tests proving sensitive user fields are redacted from logs/events.
 
-*** Phase 9: User Partial Hook Deprecation
+*** Phase 9: Remove User Partial Hooks
 
-- [ ] Mark =preseed/common/users= and =cloudconfig/coreos/users= as deprecated
-  transitional hooks in docs after structured users are rendered by default.
-- [ ] Remove examples that recommend user partial overrides for common account,
+- [ ] Remove =preseed/common/users= and =cloudconfig/coreos/users= as supported
+  hooks after structured users are rendered by default.
+- [ ] Remove docs and examples that recommend user partial overrides for common account,
   password, SSH key, sudo, shell, or root-lock configuration.
 - [ ] Keep full-template overrides available for uncommon site-specific account
   flows that structured users intentionally do not model.
-- [ ] Remove the dedicated user partial hooks from the documented compatibility
-  contract once structured users cover the supported OS defaults.
 - [ ] Add tests proving default user rendering works without a disk user partial
   override.
+- [ ] Add tests proving disk user partial overrides no longer affect embedded
+  default rendering.
 - [ ] Run =go test ./...=.
 - [ ] Run =go test -tags=integration ./test/integ-test=.
 - [ ] Run the plan status checker.
@@ -574,18 +537,18 @@ Long-term supported imperative hooks:
 - [ ] Add integration coverage proving mapping-resolved boots render structured
   defaults without disk partial overrides.
 
-*** Phase 12: Declarative Partial Hook Deprecation
+*** Phase 12: Remove Declarative Partial Hooks
 
-- [ ] Mark declarative partial hooks as deprecated once the equivalent
-  structured config renders by default.
-- [ ] Remove examples that recommend declarative partial overrides for common
+- [ ] Remove declarative partial hooks once the equivalent structured config
+  renders by default.
+- [ ] Remove docs and examples that recommend declarative partial overrides for common
   packages, locale, time, network, storage, boot, repo, or user configuration.
 - [ ] Keep imperative hooks documented for post-install scripts, cloud-init
   units, cloud-init write_files, and full-template replacement.
-- [ ] Remove deprecated declarative hooks from the documented compatibility
-  contract once structured config covers the supported OS defaults.
 - [ ] Add tests proving common declarative provisioning renders correctly without
   disk partial overrides.
+- [ ] Add tests proving disk overrides for removed declarative hook names no
+  longer affect embedded default rendering.
 - [ ] Run =go test ./...=.
 - [ ] Run =go test -tags=integration ./test/integ-test=.
 - [ ] Run the plan status checker.
@@ -595,10 +558,10 @@ Long-term supported imperative hooks:
 - [X] Generic provisioning templates can be served from embedded defaults.
 - [X] Generic static provisioning files can be served from embedded defaults.
 - [X] Disk =data-dir= files override embedded provisioning defaults.
-- [X] Disk templates can override documented partial hooks without replacing a
-  full OS install template.
-- [X] Partial override documentation shows both the disk path convention and the
-  required template =define= name.
+- [ ] Declarative provisioning fields are configured through structured mappings
+  rather than partial hooks.
+- [ ] Disk templates can still use full-template replacement and supported
+  imperative hooks for site-specific behavior.
 - [ ] Mappings can define structured keyed users at defaults, target, and
   mapping levels.
 - [ ] =users.root= is rendered as the OS root account without requiring a
