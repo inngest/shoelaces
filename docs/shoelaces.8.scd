@@ -108,8 +108,18 @@ extension: ".toml", ".yaml", ".yml", or ".json". Nested TFTP settings use a
 
 The Shoelaces web UI templates and frontend assets are embedded in the binary
 by default. Use *--ui-dir* only when intentionally overriding those UI assets.
-Provisioning static files are separate: files under "data-dir/static" are
-served from the "/configs/static/" URL path.
+Generic provisioning templates are also embedded. Disk templates under
+"data-dir" override embedded provisioning templates, and disk environment
+overrides under "data-dir/env_overrides/<env>" override both. Provisioning
+static files are separate: files under "data-dir/static" are served first from
+the "/configs/static/" URL path, then embedded generic provisioning static
+defaults are used as a fallback. The UI "/static/" path never serves
+provisioning files.
+
+"mappings.yaml" remains external site policy. It is not embedded and must be
+provided through *--data-dir*. See "docs/provisioning-overrides.md" in the
+source tree for full-template override, partial hook, and late-command script
+examples.
 
 Here is an example TOML config file:
 

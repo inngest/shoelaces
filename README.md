@@ -163,7 +163,9 @@ Shoelaces accepts several parameters:
 * `data-dir`: the path to the root directory with the templates. It's advised to
   manage the templates in a VCS, such as a git repository. Refer to the [example
   data directory](configs/data-dir/) for more information.
-  Provisioning static files are served from `data-dir/static` at
+  Shoelaces embeds generic provisioning templates by default; disk templates in
+  `data-dir` override those embedded defaults. Provisioning static files are
+  served from `data-dir/static` first, then embedded generic defaults, at
   `/configs/static/*`.
 * `ui-dir`: optional path to a custom UI directory containing web templates and
   frontend assets. By default, Shoelaces uses UI assets embedded in the binary.
@@ -194,6 +196,12 @@ Configuration files can be TOML, YAML, or JSON. The parser is selected from
 the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`. Nested TFTP
 settings use a `tftp` object/table and map to the `tftp-*` CLI flags, such as
 `tftp.enabled`, `tftp.address`, and `tftp.timeout`.
+
+Generic provisioning defaults are embedded in the binary, but `mappings.yaml`
+is still external site policy and must be provided through `data-dir`. See
+[Provisioning Defaults And Overrides](docs/provisioning-overrides.md) for the
+disk overlay model, full-template overrides, partial hooks, and late-command
+script examples.
 
 Example TOML config:
 
