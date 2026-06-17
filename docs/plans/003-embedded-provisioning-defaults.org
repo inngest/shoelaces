@@ -552,19 +552,19 @@ operator's responsibility.
 
 *** Phase 9: Remove User Partial Hooks
 
-- [ ] Remove =preseed/common/users= and =cloudconfig/coreos/users= as supported
+- [X] Remove =preseed/common/users= and =cloudconfig/coreos/users= as supported
   hooks after structured users are rendered by default.
-- [ ] Remove docs and examples that recommend user partial overrides for common account,
+- [X] Remove docs and examples that recommend user partial overrides for common account,
   password, SSH key, sudo, shell, or root-lock configuration.
-- [ ] Keep full-template overrides available for uncommon site-specific account
+- [X] Keep full-template overrides available for uncommon site-specific account
   flows that structured users intentionally do not model.
-- [ ] Add tests proving default user rendering works without a disk user partial
+- [X] Add tests proving default user rendering works without a disk user partial
   override.
-- [ ] Add tests proving disk user partial overrides no longer affect embedded
+- [X] Add tests proving disk user partial overrides no longer affect embedded
   default rendering.
-- [ ] Run =go test ./...=.
-- [ ] Run =go test -tags=integration ./test/integ-test=.
-- [ ] Run the plan status checker.
+- [X] Run =go test ./...=.
+- [X] Run =go test -tags=integration ./test/integ-test=.
+- [X] Run the plan status checker.
 
 *** Phase 10: Structured Provisioning Schema
 
