@@ -18,15 +18,27 @@ imgfree
 #  - firmware=1 asks the installer to load needed firmware
 #  - preseed/url points at our served preseed
 kernel ${mirror}/linux \
+{{template "ipxe/debian/kernel_args" .}}
+
+initrd ${mirror}/initrd.gz
+boot
+{{end}}
+
+{{define "ipxe/debian/kernel_args" -}}
   auto=true priority=critical \
   netcfg/choose_interface=auto \
   ip=dhcp \
   hostname={{ .hostname }} \
   domain=local \
   firmware=1 \
-  preseed/url=http://{{ .baseURL }}/configs/preseed/debian?encrypt_home={{ .encrypt_home }} \
-  {{if .linuxargs}}{{ .linuxargs }}{{end}}
+  preseed/url={{template "ipxe/debian/preseed_url" .}} \
+  {{template "ipxe/linux_args" .}}
+{{end}}
 
-initrd ${mirror}/initrd.gz
-boot
+{{define "ipxe/debian/preseed_url" -}}
+http://{{ .baseURL }}/configs/preseed/debian?encrypt_home={{ .encrypt_home }}
+{{end}}
+
+{{define "ipxe/linux_args" -}}
+{{if .linuxargs}}{{ .linuxargs }}{{end}}
 {{end}}

@@ -126,6 +126,22 @@ baseURL={{.baseURL}}
 	assert.NotContains(t, rr.Body.String(), "mapping-secret")
 }
 
+func TestConfigTemplateRouteRendersEmbeddedProvisioningTemplate(t *testing.T) {
+	dataDir := t.TempDir()
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates = templates.New()
+		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/preseed/debian?encrypt_home=false", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "d-i user-setup/encrypt-home boolean false")
+	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string true")
+}
+
 func newTestRouter(t *testing.T, dataDir string) http.Handler {
 	t.Helper()
 

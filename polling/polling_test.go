@@ -169,6 +169,45 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 	}
 }
 
+func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
+	events := &event.Log{}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script: "debian.ipxe",
+				Params: map[string]interface{}{
+					"encrypt_home": false,
+					"release":      "bookworm",
+				},
+			},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian12",
+			Targets:       []string{"debian12"},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	rendered, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		&server.States{Servers: make(map[string]*server.State)},
+		resolver,
+		events,
+		newEmbeddedProvisioningTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "Debian bookworm netboot")
+	assert.Contains(t, rendered, "hostname=06-66-de-ad-be-ef")
+	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
+	require.Len(t, events.Events[srv.Mac], 1)
+	assert.Equal(t, event.HostBoot, events.Events[srv.Mac][0].Type)
+	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
+}
+
 func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	states := &server.States{Servers: make(map[string]*server.State)}
 	events := &event.Log{}
@@ -334,6 +373,14 @@ role {{.role}}
 
 	templateRenderer := templates.New()
 	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", nil, ".slc")
+	return templateRenderer
+}
+
+func newEmbeddedProvisioningTemplates(t *testing.T) *templates.ShoelacesTemplates {
+	t.Helper()
+
+	templateRenderer := templates.New()
+	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), t.TempDir(), "env_overrides", nil, ".slc")
 	return templateRenderer
 }
 

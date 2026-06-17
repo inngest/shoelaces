@@ -1,11 +1,19 @@
 {{define "cloudconfig-coreos" -}}
 #cloud-config
-{{template "cloudconfig-coreos-users"}}
+{{template "cloudconfig/coreos/users" .}}
 
 hostname:{{.hostname}}
 coreos:
   update:
     reboot-strategy: off
+{{template "cloudconfig/coreos/write_files" .}}
+{{template "cloudconfig/coreos/units" .}}
+{{end}}
+
+{{define "cloudconfig/coreos/write_files" -}}
+{{end}}
+
+{{define "cloudconfig/coreos/units" -}}
   units:
     - name: update-engine.service
       enable: true

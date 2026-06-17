@@ -1,12 +1,27 @@
-{{define "preseed/common"}}
+{{define "preseed/common" -}}
+{{template "preseed/common/locale" .}}
+{{template "preseed/common/network" .}}
+{{template "preseed/common/time" .}}
+{{template "preseed/common/users" .}}
+{{end}}
+
+{{define "preseed/common/locale" -}}
 d-i auto-install/enable boolean true
 d-i debian-installer/locale string en_US.UTF-8
 d-i console-setup/ask_detect boolean false
 d-i console-keymaps-at/keymap select us
 d-i keyboard-configuration/xkb-keymap select us
+{{end}}
+
+{{define "preseed/common/network" -}}
+{{end}}
+
+{{define "preseed/common/time" -}}
 d-i time/zone string UTC
 d-i clock-setup/utc boolean true
+{{end}}
 
+{{define "preseed/common/users" -}}
 # Create a regular user. The default password is locked; provide
 # install_user_password_crypted from mappings or query params to enable login.
 d-i user-setup/allow-password-weak boolean false

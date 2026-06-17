@@ -16,9 +16,9 @@
 package templates
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,14 +26,14 @@ import (
 	"strings"
 	"text/template"
 
+	shoelaces "github.com/inngest/shoelaces"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/utils"
 )
 
 const defaultEnvironment = "default"
 
-var varRegex = regexp.MustCompile(`{{\.(.*?)}}`)
-var configNameRegex = regexp.MustCompile(`{{define\s+"(.*?)".*}}`)
+var varRegex = regexp.MustCompile(`{{-?\s*\.(.*?)}}`)
 
 // ShoelacesTemplates holds the core attributes for handling the dyanmic configurations
 // in Shoelaces.
@@ -65,41 +65,6 @@ func New() *ShoelacesTemplates {
 	return &ShoelacesTemplates{envTemplates: e}
 }
 
-func (s *ShoelacesTemplates) parseTemplateInfo(logger log.Logger, path string) shoelacesTemplateInfo {
-	fh, err := os.Open(path)
-	if err != nil {
-		logger.Error("component", "template", "err", err.Error())
-		os.Exit(1)
-	}
-
-	defer func() { _ = fh.Close() }()
-
-	templateVars := make([]string, 0)
-	scanner := bufio.NewScanner(fh)
-	templateName := ""
-	i := 0
-	for scanner.Scan() {
-		// find variables
-		result := varRegex.FindAllStringSubmatch(scanner.Text(), -1)
-		if varRegex.MatchString(scanner.Text()) {
-			for _, v := range result {
-				// we only want the actual match, being second in the group
-				if !utils.StringInSlice(v[1], templateVars) {
-					templateVars = append(templateVars, v[1])
-				}
-			}
-		}
-		// if first line get name of template
-		if i == 0 {
-			nameResult := configNameRegex.FindAllStringSubmatch(scanner.Text(), -1)
-			templateName = nameResult[0][1]
-		}
-		i++
-	}
-
-	return shoelacesTemplateInfo{name: templateName, variables: templateVars}
-}
-
 func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment string) {
 	if _, ok := s.envTemplates[environment]; !ok {
 		c, e := s.envTemplates[defaultEnvironment].templateObj.Clone()
@@ -115,14 +80,59 @@ func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment 
 }
 
 func (s *ShoelacesTemplates) addTemplate(logger log.Logger, path string, environment string) error {
-	s.checkAddEnvironment(logger, environment)
-	i := s.parseTemplateInfo(logger, path)
-	_, err := s.envTemplates[environment].templateObj.ParseFiles(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	s.envTemplates[environment].templateVars[i.name] = i.variables
+	return s.addTemplateContent(logger, path, content, environment)
+}
+
+func (s *ShoelacesTemplates) addTemplateContent(logger log.Logger, source string, content []byte, environment string) error {
+	s.checkAddEnvironment(logger, environment)
+	sourceName := filepath.Base(source)
+	parsed, err := template.New(sourceName).Parse(string(content))
+	if err != nil {
+		return err
+	}
+
+	templateEnv := s.envTemplates[environment]
+	for _, parsedTemplate := range parsed.Templates() {
+		if parsedTemplate.Tree == nil || parsedTemplate.Tree.Root == nil {
+			continue
+		}
+		if parsedTemplate.Name() == sourceName && strings.TrimSpace(parsedTemplate.Tree.Root.String()) == "" {
+			continue
+		}
+		if _, err := templateEnv.templateObj.AddParseTree(parsedTemplate.Name(), parsedTemplate.Tree); err != nil {
+			return err
+		}
+		templateEnv.templateVars[parsedTemplate.Name()] = extractTemplateVariables(parsedTemplate.Tree.Root.String())
+	}
 	return nil
+}
+
+func extractTemplateVariables(content string) []string {
+	templateVars := make([]string, 0)
+	result := varRegex.FindAllStringSubmatch(content, -1)
+	for _, v := range result {
+		variable := normalizeVariableName(v[1])
+		if variable != "" && !utils.StringInSlice(variable, templateVars) {
+			templateVars = append(templateVars, variable)
+		}
+	}
+	return templateVars
+}
+
+func normalizeVariableName(variable string) string {
+	variable = strings.TrimSpace(variable)
+	if variable == "" {
+		return ""
+	}
+	fields := strings.Fields(variable)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(fields[0], ".")
 }
 
 func (s *ShoelacesTemplates) getEnvFromPath(path string) string {
@@ -141,6 +151,7 @@ func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, e
 	s.tplExt = tplExt
 
 	logger.Debug("component", "template", "msg", "Template parsing started", "dir", dataDir)
+	s.parseEmbeddedProvisioningTemplates(logger)
 
 	tplScannerDefault := func(p string, info os.FileInfo, err error) error {
 		if strings.HasPrefix(p, path.Join(dataDir, envDir)) {
@@ -177,6 +188,28 @@ func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, e
 		logger.Info("component", "template", "msg", "No overrides found")
 	}
 	logger.Debug("component", "template", "msg", "Parsing ended")
+}
+
+func (s *ShoelacesTemplates) parseEmbeddedProvisioningTemplates(logger log.Logger) {
+	defaults := shoelaces.ProvisioningDefaultsFS()
+	err := fs.WalkDir(defaults, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.HasSuffix(p, s.tplExt) {
+			logger.Info("component", "template", "msg", "Parsing embedded provisioning file", "file", p)
+			content, err := fs.ReadFile(defaults, p)
+			if err != nil {
+				return err
+			}
+			return s.addTemplateContent(logger, p, content, defaultEnvironment)
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error("component", "template", "err", err.Error())
+		os.Exit(1)
+	}
 }
 
 // RenderTemplate receives a name and a map of parameters, among other

@@ -104,6 +104,58 @@ func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {
 	assert.Empty(t, renderer.ListVariables("boot.ipxe", "missing-env"))
 }
 
+func TestRenderTemplateUsesEmbeddedProvisioningFallback(t *testing.T) {
+	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "debian.ipxe", map[string]interface{}{
+		"baseURL":      "127.0.0.1:8081",
+		"encrypt_home": false,
+		"hostname":     "embedded-host",
+		"release":      "bookworm",
+	}, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "Debian bookworm netboot")
+	assert.Contains(t, rendered, "hostname=embedded-host")
+	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
+}
+
+func TestDiskTemplateOverridesEmbeddedProvisioningTemplate(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "ipxe", "debian.ipxe.slc"), `{{define "debian.ipxe"}}#!ipxe
+echo disk override {{.hostname}}
+{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "debian.ipxe", map[string]interface{}{
+		"hostname": "disk-host",
+	}, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "disk override disk-host")
+	assert.NotContains(t, rendered, "Debian bookworm netboot")
+}
+
+func TestDiskPartialOverridesEmbeddedProvisioningPartial(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "preseed", "debian", "late_command.slc"), `{{define "preseed/debian/late_command" -}}
+d-i preseed/late_command string echo partial override for {{.hostname}}
+{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", map[string]interface{}{
+		"baseURL":      "127.0.0.1:8081",
+		"encrypt_home": false,
+		"hostname":     "partial-host",
+	}, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "echo partial override for partial-host")
+	assert.NotContains(t, rendered, "d-i preseed/late_command string true")
+}
+
 func newTestRenderer(t *testing.T) *ShoelacesTemplates {
 	t.Helper()
 
@@ -133,7 +185,16 @@ chain http://{{.baseURL}}/override
 func writeTemplate(t *testing.T, path string, content string) {
 	t.Helper()
 
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func newEmbeddedFallbackRenderer(t *testing.T, dataDir string) *ShoelacesTemplates {
+	t.Helper()
+
+	renderer := New()
+	renderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", nil, ".slc")
+	return renderer
 }
 
 type testLogWriter struct{}
