@@ -139,7 +139,7 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	defer firstFile.close()
+	defer func() { _ = firstFile.close() }()
 	readSeeker, ok := firstFile.file.(io.ReadSeeker)
 	if !ok {
 		http.Error(w, fmt.Sprintf("file %q cannot be served", firstFile.info.Name()), http.StatusInternalServerError)

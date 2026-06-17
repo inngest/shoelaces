@@ -49,11 +49,6 @@ type shoelacesTemplateEnvironment struct {
 	templateVars map[string][]string
 }
 
-type shoelacesTemplateInfo struct {
-	name      string
-	variables []string
-}
-
 // New creates and initializes a new ShoelacesTemplates instance a returns a pointer to
 // it.
 func New() *ShoelacesTemplates {
@@ -97,16 +92,16 @@ func (s *ShoelacesTemplates) addTemplateContent(logger log.Logger, source string
 
 	templateEnv := s.envTemplates[environment]
 	for _, parsedTemplate := range parsed.Templates() {
-		if parsedTemplate.Tree == nil || parsedTemplate.Tree.Root == nil {
+		if parsedTemplate.Tree == nil || parsedTemplate.Root == nil {
 			continue
 		}
-		if parsedTemplate.Name() == sourceName && strings.TrimSpace(parsedTemplate.Tree.Root.String()) == "" {
+		if parsedTemplate.Name() == sourceName && strings.TrimSpace(parsedTemplate.Root.String()) == "" {
 			continue
 		}
 		if _, err := templateEnv.templateObj.AddParseTree(parsedTemplate.Name(), parsedTemplate.Tree); err != nil {
 			return err
 		}
-		templateEnv.templateVars[parsedTemplate.Name()] = extractTemplateVariables(parsedTemplate.Tree.Root.String())
+		templateEnv.templateVars[parsedTemplate.Name()] = extractTemplateVariables(parsedTemplate.Root.String())
 	}
 	return nil
 }
