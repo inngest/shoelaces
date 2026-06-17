@@ -127,10 +127,18 @@ defaults:
         sizeMiB: 8192
 
   boot:
-    kernelArgs:
-      - console=ttyS0
-      - loglevel=6
-    grubTimeout: 5
+    firmware: uefi
+    netboot:
+      method: ipxe
+      kernelArgs:
+        - console=ttyS0
+        - loglevel=6
+    installed:
+      bootloader: grub
+      timeoutSeconds: 5
+      kernelArgs:
+        - consoleblank=0
+        - sysrq_always_enabled
 
   repos:
     osMirror: http://deb.debian.org/debian
@@ -141,6 +149,10 @@ defaults:
 targets:
   debian12:
     script: debian.ipxe
+    installer:
+      configTemplate: preseed/debian
+      configParams:
+        encrypt_home: false
     packages:
       install:
         - qemu-guest-agent
@@ -157,6 +169,29 @@ macMaps:
     storage:
       disk: /dev/nvme1n1
 #+end_src
+
+The boot fields intentionally separate netboot from installed-system boot:
+
+- =boot.firmware= describes the machine/install firmware target, such as =uefi=
+  or =bios=.
+- =boot.netboot.method= describes how Shoelaces serves the network boot path,
+  currently =ipxe=.
+- =boot.netboot.kernelArgs= replaces generic iPXE/Linux argument partials such
+  as =ipxe/linux_args=.
+- =boot.installed= describes the installed OS bootloader, such as GRUB timeout
+  and installed kernel arguments.
+
+The =installer= section describes the installer configuration served after the
+netboot stage:
+
+- =installer.configTemplate= selects the dynamic config template, such as
+  =preseed/debian=, =preseed/ubuntu-minimal=, =centos.ks=, or
+  =cloudconfig-coreos=.
+- =installer.configParams= contains explicit query/config parameters needed by
+  that installer config while templates are migrated to structured data.
+- Together with =repos= and =boot.netboot=, =installer= replaces iPXE URL
+  partials such as =ipxe/debian/preseed_url= and distro-specific kernel argument
+  partials.
 
 Structured config should replace declarative partial overrides as a breaking
 change. It should not try to model arbitrary post-install automation. Keep
@@ -506,8 +541,12 @@ Supported imperative hooks:
 *** Phase 10: Structured Provisioning Schema
 
 - [ ] Add structured =locale=, =time=, =network=, =packages=, =storage=,
-  =boot=, and =repos= schemas to mapping defaults, targets, hostname maps,
-  network maps, MAC maps, and IP maps.
+  =boot=, =installer=, and =repos= schemas to mapping defaults, targets,
+  hostname maps, network maps, MAC maps, and IP maps.
+- [ ] Split boot config into =boot.netboot= for iPXE/netboot behavior and
+  =boot.installed= for installed-system bootloader behavior.
+- [ ] Add =installer.configTemplate= and =installer.configParams= as the
+  structured replacement for installer config URL partials.
 - [ ] Define merge semantics for scalar fields, string lists, keyed maps, and
   removal/suppression where inherited structured values need to be disabled.
 - [ ] Preserve =params= as an escape hatch for low-level template-specific
@@ -527,7 +566,9 @@ Supported imperative hooks:
 - [ ] Render CoreOS/cloud-init users, files, services, and network-compatible
   common fields from structured data where cloud-init supports them.
 - [ ] Render iPXE kernel args, installer URLs, release/mirror selection, and
-  preseed/kickstart/cloud-init URLs from structured boot/repo data.
+  preseed/kickstart/cloud-init URLs from structured =boot.netboot=,
+  =installer=, and =repos= data.
+- [ ] Render installed-system bootloader settings from =boot.installed= data.
 - [ ] Keep legacy flat params as temporary projections or fallbacks where current
   templates already consume them, including =release=, =linuxargs=,
   =encrypt_home=, =vg_name=, =install_username=,
@@ -541,8 +582,9 @@ Supported imperative hooks:
 
 - [ ] Remove declarative partial hooks once the equivalent structured config
   renders by default.
-- [ ] Remove docs and examples that recommend declarative partial overrides for common
-  packages, locale, time, network, storage, boot, repo, or user configuration.
+- [ ] Remove docs and examples that recommend declarative partial overrides for
+  common packages, locale, time, network, storage, boot, installer, repo, or
+  user configuration.
 - [ ] Keep imperative hooks documented for post-install scripts, cloud-init
   units, cloud-init write_files, and full-template replacement.
 - [ ] Add tests proving common declarative provisioning renders correctly without
@@ -572,10 +614,10 @@ Supported imperative hooks:
 - [ ] Common user/account configuration no longer requires a =users.slc=
   partial override.
 - [ ] Mappings can define structured locale, time, network, packages, storage,
-  boot, and repo policy at defaults, target, and mapping levels.
+  boot, installer, and repo policy at defaults, target, and mapping levels.
 - [ ] Debian/Ubuntu preseed, CoreOS/cloud-init, CentOS kickstart, and iPXE
   defaults render common declarative provisioning behavior from structured data.
-- [ ] Common package, locale, time, network, storage, boot, and repo
+- [ ] Common package, locale, time, network, storage, boot, installer, and repo
   configuration no longer requires partial overrides.
 - [ ] Imperative post-install hooks remain available for site-specific scripts,
   files, services, and full-template replacement.
