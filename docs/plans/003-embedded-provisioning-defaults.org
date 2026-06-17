@@ -66,9 +66,110 @@ defaults.
 - Common user/account provisioning should be data-driven from mappings through a
   structured keyed =users= model instead of requiring operators to override user
   partial templates.
+- Declarative provisioning behavior such as packages, locale, time, network,
+  storage, boot arguments, and repository/mirror settings should also be
+  represented as structured mapping policy instead of requiring partial
+  overrides for common cases.
 - Site-specific firstboot and post-install orchestration are implemented as
   disk overrides, not embedded defaults.
 - Missing site mappings should remain a clear startup/configuration error.
+
+** Structured Provisioning Model
+
+Mappings should become the source of truth for common declarative provisioning
+settings. The same sections may appear in =defaults=, =targets.<name>=, and
+each mapping rule. Runtime resolution merges them in the same order as params:
+defaults, target, matched mapping, then generated/runtime values when a later
+phase explicitly supports them.
+
+Initial structured sections:
+
+#+begin_src yaml
+defaults:
+  locale:
+    language: en_US.UTF-8
+    keyboard: us
+
+  time:
+    timezone: UTC
+    utc: true
+    ntp: true
+
+  network:
+    bootproto: dhcp
+    nameservers:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  packages:
+    install:
+      - openssh-server
+      - curl
+      - ca-certificates
+      - git
+      - sudo
+    groups:
+      - core
+    updatePolicy: unattended-upgrades
+
+  storage:
+    disk: /dev/nvme0n1
+    wipe: true
+    mode: lvm
+    volumeGroup: vg0
+    filesystems:
+      root:
+        mountpoint: /
+        fstype: ext4
+        size: grow
+      swap:
+        fstype: swap
+        sizeMiB: 8192
+
+  boot:
+    kernelArgs:
+      - console=ttyS0
+      - loglevel=6
+    grubTimeout: 5
+
+  repos:
+    osMirror: http://deb.debian.org/debian
+    firmware: true
+    contrib: true
+    nonFree: true
+
+targets:
+  debian12:
+    script: debian.ipxe
+    packages:
+      install:
+        - qemu-guest-agent
+    repos:
+      release: bookworm
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: debian12
+    targets:
+      - debian12
+    network:
+      hostname: iad-1
+    storage:
+      disk: /dev/nvme1n1
+#+end_src
+
+Structured config should replace common partial overrides, but it should not try
+to model arbitrary post-install automation. Keep script/template hooks for
+imperative or site-specific behavior:
+
+- =preseed/debian/late_command=
+- =kickstart/centos/post=
+- =cloudconfig/coreos/units=
+- =cloudconfig/coreos/write_files=
+
+Those hooks can still download raw static scripts from =/configs/static/*= or
+templated scripts from =/configs/<template>=. Full-template overrides remain the
+escape hatch when a site needs behavior outside the structured model.
 
 ** Structured Users Model
 
@@ -153,11 +254,10 @@ template parameter names while templates are migrated:
 - =install_user_fullname=
 - =install_user_password_crypted=
 
-After OS templates render directly from the normalized =users= data, the
-dedicated user partial hooks should be deprecated and removed from the supported
-override contract. Generic non-user partial hooks remain useful for install
-storage, packages, post-install commands, cloud-init units, and similar
-extension points.
+After OS templates render directly from normalized structured data, the
+dedicated user, package, locale, time, network, storage, boot, and repo partial
+hooks should be deprecated and removed from the supported override contract.
+Post-install/script hooks remain useful for imperative site behavior.
 
 ** Partial Hook Model
 
@@ -282,11 +382,29 @@ Initial documented partial hooks:
 - =cloudconfig/coreos/units=
 - =cloudconfig/coreos/write_files=
 
-Transitional user hooks kept only until structured users render across supported
-OS defaults:
+Transitional declarative hooks kept only until structured config renders across
+supported OS defaults:
 
 - =preseed/common/users=
 - =cloudconfig/coreos/users=
+- =preseed/common/locale=
+- =preseed/common/network=
+- =preseed/common/time=
+- =preseed/debian/storage=
+- =preseed/debian/packages=
+- =preseed/debian/finish=
+- =ipxe/linux_args=
+- =ipxe/debian/kernel_args=
+- =ipxe/debian/preseed_url=
+- =kickstart/centos/storage=
+- =kickstart/centos/packages=
+
+Long-term supported imperative hooks:
+
+- =preseed/debian/late_command=
+- =kickstart/centos/post=
+- =cloudconfig/coreos/units=
+- =cloudconfig/coreos/write_files=
 
 ** Phased Implementation Plan
 
@@ -422,6 +540,56 @@ OS defaults:
 - [ ] Run =go test -tags=integration ./test/integ-test=.
 - [ ] Run the plan status checker.
 
+*** Phase 10: Structured Provisioning Schema
+
+- [ ] Add structured =locale=, =time=, =network=, =packages=, =storage=,
+  =boot=, and =repos= schemas to mapping defaults, targets, hostname maps,
+  network maps, MAC maps, and IP maps.
+- [ ] Define merge semantics for scalar fields, string lists, keyed maps, and
+  removal/suppression where inherited structured values need to be disabled.
+- [ ] Preserve =params= as an escape hatch for low-level template-specific
+  values while structured fields become the preferred common path.
+- [ ] Add validation for required fields and OS-support boundaries, such as
+  storage mode values, package list shapes, mirror URLs, and valid boot
+  argument lists.
+- [ ] Add tests for parsing, merge order, list merging or replacement behavior,
+  validation errors, and interaction with existing raw =params=.
+
+*** Phase 11: Structured Renderer Migration
+
+- [ ] Render Debian/Ubuntu preseed locale, time, network, users, packages,
+  storage, bootloader, and repository settings from structured data.
+- [ ] Render CentOS kickstart network, users, packages, storage, bootloader,
+  timezone, locale, and repository settings from structured data.
+- [ ] Render CoreOS/cloud-init users, files, services, and network-compatible
+  common fields from structured data where cloud-init supports them.
+- [ ] Render iPXE kernel args, installer URLs, release/mirror selection, and
+  preseed/kickstart/cloud-init URLs from structured boot/repo data.
+- [ ] Keep legacy flat params as temporary projections or fallbacks where current
+  templates already consume them, including =release=, =linuxargs=,
+  =encrypt_home=, =vg_name=, =install_username=,
+  =install_user_fullname=, and =install_user_password_crypted=.
+- [ ] Add render-validation tests for Debian/Ubuntu preseed, CoreOS
+  cloud-init, CentOS kickstart, and iPXE output generated from structured data.
+- [ ] Add integration coverage proving mapping-resolved boots render structured
+  defaults without disk partial overrides.
+
+*** Phase 12: Declarative Partial Hook Deprecation
+
+- [ ] Mark declarative partial hooks as deprecated once the equivalent
+  structured config renders by default.
+- [ ] Remove examples that recommend declarative partial overrides for common
+  packages, locale, time, network, storage, boot, repo, or user configuration.
+- [ ] Keep imperative hooks documented for post-install scripts, cloud-init
+  units, cloud-init write_files, and full-template replacement.
+- [ ] Remove deprecated declarative hooks from the documented compatibility
+  contract once structured config covers the supported OS defaults.
+- [ ] Add tests proving common declarative provisioning renders correctly without
+  disk partial overrides.
+- [ ] Run =go test ./...=.
+- [ ] Run =go test -tags=integration ./test/integ-test=.
+- [ ] Run the plan status checker.
+
 ** Acceptance Criteria
 
 - [X] Generic provisioning templates can be served from embedded defaults.
@@ -440,6 +608,14 @@ OS defaults:
   render users from structured data.
 - [ ] Common user/account configuration no longer requires a =users.slc=
   partial override.
+- [ ] Mappings can define structured locale, time, network, packages, storage,
+  boot, and repo policy at defaults, target, and mapping levels.
+- [ ] Debian/Ubuntu preseed, CoreOS/cloud-init, CentOS kickstart, and iPXE
+  defaults render common declarative provisioning behavior from structured data.
+- [ ] Common package, locale, time, network, storage, boot, and repo
+  configuration no longer requires partial overrides.
+- [ ] Imperative post-install hooks remain available for site-specific scripts,
+  files, services, and full-template replacement.
 - [X] Generic embedded templates do not trigger site-specific firstboot logic by
   default.
 - [X] =mappings.yaml= remains external runtime/site configuration.
