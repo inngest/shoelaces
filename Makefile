@@ -8,6 +8,10 @@ pkgs = ./...
 all:
 	$(GO) build ./cmd/shoelaces
 
+.PHONY: dev
+dev:
+	$(GO) run ./cmd/shoelaces --config dev/shoelaces.yaml
+
 .PHONY: lint
 lint:
 	golangci-lint run -v

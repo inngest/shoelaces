@@ -1,0 +1,67 @@
+defaults:
+  params:
+    # Keep the development profile non-destructive by default.
+    encrypt_home: "false"
+    # Serial console output is useful when exercising generated boot configs.
+    linuxargs: "console=ttyS0"
+
+targets:
+  # These targets use the embedded generic provisioning templates unless a local
+  # .slc override is added under dev/data-dir.
+  debian12:
+    script: debian.ipxe
+    label: Debian 12 Bookworm
+    params:
+      release: bookworm
+
+  debian13:
+    script: debian.ipxe
+    label: Debian 13 Trixie
+    params:
+      release: trixie
+
+  ubuntu2404:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 24.04 LTS
+    params:
+      release: noble
+
+  centos8:
+    script: centos.ipxe
+    label: CentOS 8
+    params:
+      release: "8"
+
+networkMaps:
+  - network: 127.0.0.1/32
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
+      - ubuntu2404
+      - centos8
+    params:
+      hostname: local-dev
+
+  - network: 192.0.2.0/24
+    targets:
+      - debian12
+      - debian13
+      - ubuntu2404
+      - centos8
+
+hostnameMaps:
+  - hostname: '^debian13-dev$'
+    defaultTarget: debian13
+    targets:
+      - debian13
+
+  - hostname: '^ubuntu24-dev$'
+    defaultTarget: ubuntu2404
+    targets:
+      - ubuntu2404
+
+  - hostname: '^centos8-dev$'
+    defaultTarget: centos8
+    targets:
+      - centos8
