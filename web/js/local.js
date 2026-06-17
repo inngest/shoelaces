@@ -41,14 +41,16 @@ window.setInterval(updateEventHistory, 5000);
 function updateHostnames() {
     $.getJSON('/ajax/servers', function (systems) {
         var macs = $('#mac');
-        var selection = $('select[name="mac"]').find('option:selected').text();
+        var selection = macs.val();
         systemsByMac = {};
         macs.empty();
 
         if (systems.length == 0) {
             $('#systems').fadeOut(500);
             $('#loading').fadeIn(500);
-            populateTargetOptions(defaultTargetOptions);
+            if (populateTargetOptions(defaultTargetOptions)) {
+                scriptSelection();
+            }
         } else {
             $('#loading').hide(500);
             $('#systems').removeClass('hide');
@@ -63,11 +65,8 @@ function updateHostnames() {
                 macs.append('<option class="text-primary-custom" value="' + this.Mac + '">' + system_str  +  '</option>');
             });
 
-            $('#mac option').filter(function () {
-                //may want to use $.trim in here
-                return $(this).text() == selection;
-            }).prop('selected', true);
-            serverSelection();
+            macs.val(selection);
+            refreshServerSelection();
         }
     });
 }
@@ -90,14 +89,23 @@ function readTargetOptions() {
 }
 
 function serverSelection() {
+    populateTargetsForSelectedServer();
+    scriptSelection();
+}
+
+function refreshServerSelection() {
+    if (populateTargetsForSelectedServer()) {
+        scriptSelection();
+    }
+}
+
+function populateTargetsForSelectedServer() {
     var selectedMac = $('#mac').val();
     var system = systemsByMac[selectedMac];
     if (system) {
-        populateTargetOptions(system.AllowedTargets || []);
-    } else {
-        populateTargetOptions(defaultTargetOptions);
+        return populateTargetOptions(system.AllowedTargets || []);
     }
-    scriptSelection();
+    return populateTargetOptions(defaultTargetOptions);
 }
 
 function populateTargetOptions(targets) {
@@ -122,6 +130,7 @@ function populateTargetOptions(targets) {
     if (targetSelect.val() == null) {
         targetSelect.val('');
     }
+    return previousTarget != targetSelect.val();
 }
 
 function scriptSelection() {
