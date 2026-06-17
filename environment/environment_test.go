@@ -105,6 +105,47 @@ func TestInitStaticTemplatesUsesUIDirOverrideWhenSet(t *testing.T) {
 	assert.Equal(t, "disk index", rendered.String())
 }
 
+func TestNewStartsWithMappingsOnlyAndEmbeddedProvisioningTemplates(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+targets:
+  debian12:
+    script: debian.ipxe
+    params:
+      release: bookworm
+      encrypt_home: false
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`), 0o644))
+
+	env := New(Options{
+		BindAddr: "localhost:0",
+		DataDir:  dataDir,
+	})
+	rendered, err := env.Templates.RenderTemplate(log.MakeLogger(io.Discard), "debian.ipxe", map[string]interface{}{
+		"baseURL":      "127.0.0.1:8081",
+		"encrypt_home": false,
+		"hostname":     "embedded-startup",
+		"release":      "bookworm",
+	}, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "Debian bookworm netboot")
+	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
+}
+
+func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {
+	assert.Panics(t, func() {
+		New(Options{
+			BindAddr: "localhost:0",
+			DataDir:  t.TempDir(),
+		})
+	})
+}
+
 func TestInitMappingsLoadsNetworkAndHostnameMaps(t *testing.T) {
 	env := defaultEnvironment()
 	env.Logger = log.MakeLogger(io.Discard)

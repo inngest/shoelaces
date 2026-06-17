@@ -199,7 +199,46 @@ func TestShoelacesIntegration(t *testing.T) {
 	}
 }
 
+func TestShoelacesStartsWithEmbeddedProvisioningDefaults(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+targets:
+  debian12:
+    script: debian.ipxe
+    params:
+      release: bookworm
+      encrypt_home: false
+networkMaps:
+  - network: 127.0.0.1/32
+    defaultTarget: debian12
+    targets:
+      - debian12
+`), 0o644); err != nil {
+		t.Fatalf("write mappings: %v", err)
+	}
+
+	proc := startShoelacesWithDataDir(t, dataDir)
+	defer proc.stop(t)
+
+	proc.assertGETContains(t, "/poll/1/06-66-de-ad-be-ef", nil, []string{
+		"Debian bookworm netboot",
+		"preseed/url=http://localhost:18888/configs/preseed/debian?encrypt_home=false",
+	})
+	proc.assertGETContains(t, "/configs/preseed/debian", url.Values{"encrypt_home": {"false"}}, []string{
+		"d-i user-setup/encrypt-home boolean false",
+		"d-i preseed/late_command string true",
+	})
+	proc.assertGETContains(t, "/configs/static/provisioning-default.txt", nil, []string{
+		"generic embedded provisioning static asset",
+	})
+}
+
 func startShoelaces(t *testing.T) *shoelacesProcess {
+	t.Helper()
+	return startShoelacesWithDataDir(t, "integ-test-configs")
+}
+
+func startShoelacesWithDataDir(t *testing.T, dataDir string) *shoelacesProcess {
 	t.Helper()
 
 	testDir, err := os.Getwd()
@@ -220,11 +259,11 @@ func startShoelaces(t *testing.T) *shoelacesProcess {
 
 	configPath := filepath.Join(t.TempDir(), "shoelaces.toml")
 	config := fmt.Sprintf(`bind-addr = "%s"
-data-dir = "integ-test-configs"
+data-dir = "%s"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
 debug = true
-`, apiAddr)
+`, apiAddr, dataDir)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)
 	}
@@ -340,6 +379,26 @@ func (p *shoelacesProcess) assertGETFixtureWithQuery(t *testing.T, path string, 
 	}
 	if string(expected) != string(got) {
 		t.Fatalf("GET %s response mismatch with %s\nexpected:\n%s\nactual:\n%s", path, fixture, expected, got)
+	}
+}
+
+func (p *shoelacesProcess) assertGETContains(t *testing.T, path string, query url.Values, expected []string) {
+	t.Helper()
+
+	resp := p.get(t, path, query)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET %s status = %d, want 200\n%s", path, resp.StatusCode, body)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read GET %s response: %v", path, err)
+	}
+	for _, want := range expected {
+		if !bytes.Contains(got, []byte(want)) {
+			t.Fatalf("GET %s response missing %q\nresponse:\n%s", path, want, got)
+		}
 	}
 }
 

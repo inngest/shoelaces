@@ -1,6 +1,5 @@
-<!doctype html>
-<meta name="viewport" content="width=device-width">
 <pre>
 <a href="bootstrap.sh">bootstrap.sh</a>
+<a href="provisioning-default.txt">provisioning-default.txt</a>
 <a href="rc.local-bootstrap">rc.local-bootstrap</a>
 </pre>
