@@ -128,7 +128,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 	}
 
 	// Test the template before storing the selection for the polling host.
-	if _, err = templateRenderer.RenderTemplate(logger, result.Target.Script, result.Params, result.Target.Environment); err != nil {
+	if _, err = templateRenderer.RenderTemplate(logger, result.Target.Script, mappings.ParamsWithUsers(result.Params, result.Users), result.Target.Environment); err != nil {
 		return true, err
 	}
 
@@ -138,6 +138,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 	servers[srv.Mac].Target = result.Target.Script
 	servers[srv.Mac].Environment = result.Target.Environment
 	servers[srv.Mac].Params = result.Params
+	servers[srv.Mac].Users = result.Users
 	return false, nil
 }
 
@@ -167,7 +168,7 @@ func Poll(logger log.Logger, serverStates *server.States,
 	if result.HasTarget() {
 		logger.Debug("component", "polling", "msg", "Host found", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
 		eventLog.AddEvent(event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params)
-		return genBootScript(logger, templateRenderer, result.Target.Script, result.Target.Environment, result.Params), nil
+		return genBootScript(logger, templateRenderer, result.Target.Script, result.Target.Environment, result.Params, result.Users), nil
 	}
 
 	logger.Debug("component", "polling", "msg", "Host needs manual target selection", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
@@ -185,7 +186,7 @@ func manualAction(logger log.Logger, serverStates *server.States, templateRender
 		setHostName(script.Params, srv.Mac)
 		srv.Hostname = script.Params["hostname"].(string)
 		eventLog.AddEvent(event.HostBoot, srv, event.ManualBoot, script.Name, script.Params)
-		return genBootScript(logger, templateRenderer, script.Name, script.Environment, script.Params), nil
+		return genBootScript(logger, templateRenderer, script.Name, script.Environment, script.Params, script.Users), nil
 
 	case RetryAction:
 		return genRetryScript(logger, baseURL, srv.Mac), nil
@@ -212,7 +213,8 @@ func chooseManualAction(logger log.Logger, serverStates *server.States,
 			return &mappings.Script{
 				Name:        m.Target,
 				Environment: m.Environment,
-				Params:      m.Params}, BootAction
+				Params:      m.Params,
+				Users:       m.Users}, BootAction
 		} else if m.Retry <= maxRetry {
 			m.Retry++
 			m.LastAccess = int(time.Now().UTC().Unix())
@@ -341,8 +343,8 @@ func GenStartScript(logger log.Logger, baseURL string) string {
 	return parsedTemplate.String()
 }
 
-func genBootScript(logger log.Logger, templateRenderer *templates.ShoelacesTemplates, scriptName, envName string, params map[string]interface{}) string {
-	text, err := templateRenderer.RenderTemplate(logger, scriptName, params, envName)
+func genBootScript(logger log.Logger, templateRenderer *templates.ShoelacesTemplates, scriptName, envName string, params map[string]interface{}, users map[string]mappings.ResolvedUser) string {
+	text, err := templateRenderer.RenderTemplate(logger, scriptName, mappings.ParamsWithUsers(params, users), envName)
 	if err != nil {
 		panic(err)
 	}

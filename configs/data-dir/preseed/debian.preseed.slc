@@ -107,11 +107,6 @@ d-i pkgsel/include string sudo
 {{end}}
 
 {{define "preseed/debian/finish" -}}
-# Root login is disabled in the generic default. Override this template or a
-# future users partial if a site needs direct root login.
-d-i passwd/root-login boolean false
-d-i passwd/root-password-crypted password !
-
 d-i grub-installer/timeout string 5
 d-i popularity-contest/participate boolean false
 d-i finish-install/reboot_in_progress note

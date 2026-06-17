@@ -14,7 +14,11 @@
 
 package mappings
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // UserConfig describes one username-keyed account entry from mappings.yaml.
 // Pointer booleans preserve the difference between "unset" and an explicit
@@ -66,6 +70,76 @@ type ResolvedUser struct {
 	Shell string
 	// Sudo is an optional sudoers rule for this account.
 	Sudo string
+}
+
+// TemplateUsers is the template-facing account projection. It keeps the
+// resolver output sorted and precomputes fields that text/templates cannot
+// conveniently build themselves, such as comma-separated group lists.
+type TemplateUsers struct {
+	// ByName contains users keyed by username for direct template lookup.
+	ByName map[string]TemplateUser
+	// List contains all users in deterministic username order.
+	List []TemplateUser
+	// Primary is the selected non-root install user, when configured.
+	Primary *TemplateUser
+	// Root is the root account, when configured.
+	Root *TemplateUser
+}
+
+// TemplateUser is a renderer-friendly account entry.
+type TemplateUser struct {
+	ResolvedUser
+	// GroupsCSV is the comma-separated group list used by kickstart.
+	GroupsCSV string
+	// HasSSHAuthorizedKeys is true when SSHAuthorizedKeys has at least one key.
+	HasSSHAuthorizedKeys bool
+}
+
+// ParamsWithUsers returns a copied parameter map with structured users attached
+// under the "users" key for provisioning templates.
+func ParamsWithUsers(params map[string]interface{}, users map[string]ResolvedUser) map[string]interface{} {
+	if params == nil {
+		params = make(map[string]interface{})
+	}
+	copied := make(map[string]interface{}, len(params)+1)
+	for key, value := range params {
+		copied[key] = value
+	}
+	if len(users) > 0 {
+		copied["users"] = NewTemplateUsers(users)
+	}
+	return copied
+}
+
+// NewTemplateUsers converts resolved users into deterministic template data.
+func NewTemplateUsers(users map[string]ResolvedUser) TemplateUsers {
+	data := TemplateUsers{
+		ByName: make(map[string]TemplateUser, len(users)),
+	}
+	names := make([]string, 0, len(users))
+	for name := range users {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		user := TemplateUser{
+			ResolvedUser:         users[name],
+			GroupsCSV:            strings.Join(users[name].Groups, ","),
+			HasSSHAuthorizedKeys: len(users[name].SSHAuthorizedKeys) > 0,
+		}
+		data.ByName[name] = user
+		data.List = append(data.List, user)
+		if name == "root" {
+			root := user
+			data.Root = &root
+		}
+		if name != "root" && user.Primary {
+			primary := user
+			data.Primary = &primary
+		}
+	}
+	return data
 }
 
 func mergeUserConfigMap(dst map[string]UserConfig, src map[string]UserConfig) {

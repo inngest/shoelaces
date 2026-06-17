@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,28 @@ var defaultRenderParams = map[string]interface{}{
 }
 
 var kickstartRenderParams = paramsWith(defaultRenderParams, "release", "8")
+
+var structuredRenderUsers = map[string]mappings.ResolvedUser{
+	"infra": {
+		Name:              "infra",
+		Primary:           true,
+		FullName:          "Infrastructure User",
+		PasswordCrypted:   "$6$infra",
+		SSHAuthorizedKeys: []string{"ssh-ed25519 AAAA infra"},
+		Groups:            []string{"sudo", "adm"},
+		Shell:             "/bin/bash",
+		Sudo:              "ALL=(ALL) NOPASSWD:ALL",
+	},
+	"locked": {
+		Name:   "locked",
+		Locked: true,
+	},
+	"root": {
+		Name:            "root",
+		System:          true,
+		PasswordCrypted: "$6$root",
+	},
+}
 
 var siteOnlyMarkers = []string{
 	"git@github.com:inngest/ansible.git",
@@ -263,6 +286,27 @@ func TestRenderedPreseedsApplyInstallUserParams(t *testing.T) {
 	}
 }
 
+func TestRenderedPreseedsApplyStructuredUsers(t *testing.T) {
+	renderer := newRenderer(t)
+	params := paramsWithStructuredUsers(defaultRenderParams)
+
+	for _, templateName := range []string{
+		"preseed/debian",
+		"preseed/storage",
+		"preseed/ubuntu-minimal",
+	} {
+		t.Run(templateName, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, templateName, params)
+
+			assert.Contains(t, rendered, "d-i passwd/root-login boolean true")
+			assert.Contains(t, rendered, "d-i passwd/root-password-crypted password $6$root")
+			assert.Contains(t, rendered, "d-i passwd/user-fullname string Infrastructure User")
+			assert.Contains(t, rendered, "d-i passwd/username string infra")
+			assert.Contains(t, rendered, "d-i passwd/user-password-crypted password $6$infra")
+		})
+	}
+}
+
 func TestRenderedDebianPreseedKeepsGenericNoOpLateCommand(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
 
@@ -286,6 +330,16 @@ func TestRenderedKickstartHasRequiredShape(t *testing.T) {
 	assert.Contains(t, rendered, "reboot")
 }
 
+func TestRenderedKickstartAppliesStructuredUsers(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "centos.ks", paramsWithStructuredUsers(kickstartRenderParams))
+
+	assert.Contains(t, rendered, "rootpw --iscrypted $6$root")
+	assert.Contains(t, rendered, `user --name=infra --gecos="Infrastructure User" --groups=sudo,adm --shell=/bin/bash --iscrypted --password=$6$infra`)
+	assert.Contains(t, rendered, "user --name=locked --lock")
+	assert.Contains(t, rendered, "%post --log=/root/ks-infra-ssh-keys.log")
+	assert.Contains(t, rendered, "ssh-ed25519 AAAA infra")
+}
+
 func TestRenderedCloudConfigParsesAsYAML(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "cloudconfig-coreos", defaultRenderParams)
 	withoutHeader := strings.TrimPrefix(rendered, "#cloud-config\n")
@@ -295,6 +349,25 @@ func TestRenderedCloudConfigParsesAsYAML(t *testing.T) {
 	assert.Equal(t, "render-validation-host", parsed["hostname"])
 	assert.Equal(t, false, parsed["preserve_hostname"])
 	assert.NotContains(t, parsed, "coreos")
+}
+
+func TestRenderedCloudConfigAppliesStructuredUsers(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "cloudconfig-coreos", paramsWithStructuredUsers(defaultRenderParams))
+	withoutHeader := strings.TrimPrefix(rendered, "#cloud-config\n")
+	var parsed map[string]interface{}
+
+	require.NoError(t, yaml.Unmarshal([]byte(withoutHeader), &parsed))
+	assert.Contains(t, parsed, "users")
+	assert.Contains(t, rendered, "  - name: infra")
+	assert.Contains(t, rendered, "    lock_passwd: false")
+	assert.Contains(t, rendered, `    gecos: "Infrastructure User"`)
+	assert.Contains(t, rendered, "    shell: /bin/bash")
+	assert.Contains(t, rendered, `    passwd: "$6$infra"`)
+	assert.Contains(t, rendered, "    groups:")
+	assert.Contains(t, rendered, "      - sudo")
+	assert.Contains(t, rendered, `    sudo: "ALL=(ALL) NOPASSWD:ALL"`)
+	assert.Contains(t, rendered, "    ssh_authorized_keys:")
+	assert.Contains(t, rendered, `      - "ssh-ed25519 AAAA infra"`)
 }
 
 func TestRenderedCloudConfigPassesCloudInitSchemaWhenAvailable(t *testing.T) {
@@ -447,4 +520,8 @@ func paramsWith(params map[string]interface{}, key string, value interface{}) ma
 	}
 	copied[key] = value
 	return copied
+}
+
+func paramsWithStructuredUsers(params map[string]interface{}) map[string]interface{} {
+	return mappings.ParamsWithUsers(params, structuredRenderUsers)
 }

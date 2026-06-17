@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -275,6 +276,29 @@ func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 	assert.NotContains(t, logOutput.String(), "token-value")
 	assert.Contains(t, logOutput.String(), "root_password_crypted:[REDACTED]")
 	assert.Contains(t, logOutput.String(), "bootstrap_token:[REDACTED]")
+}
+
+func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
+	renderer := newTestRenderer(t)
+	var logOutput bytes.Buffer
+	params := mappings.ParamsWithUsers(map[string]interface{}{
+		"hostname": "secure-host",
+		"baseURL":  "127.0.0.1:8081",
+	}, map[string]mappings.ResolvedUser{
+		"infra": {
+			Name:              "infra",
+			PasswordCrypted:   "secret-hash",
+			SSHAuthorizedKeys: []string{"ssh-ed25519 AAAA secret-key"},
+		},
+	})
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(&logOutput), "boot.ipxe", params, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "secure-host")
+	assert.NotContains(t, logOutput.String(), "secret-hash")
+	assert.NotContains(t, logOutput.String(), "ssh-ed25519 AAAA secret-key")
+	assert.Contains(t, logOutput.String(), "users:[REDACTED]")
 }
 
 func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {

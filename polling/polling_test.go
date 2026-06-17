@@ -208,6 +208,46 @@ func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
 	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
 }
 
+func TestPollPassesStructuredUsersToTemplates(t *testing.T) {
+	events := &event.Log{}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script: "test.ipxe",
+				Params: map[string]interface{}{
+					"role": "web",
+				},
+				Users: map[string]mappings.UserConfig{
+					"infra": {
+						Primary: boolPtr(true),
+					},
+				},
+			},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian12",
+			Targets:       []string{"debian12"},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	rendered, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		&server.States{Servers: make(map[string]*server.State)},
+		resolver,
+		events,
+		newTestTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "user infra")
+	require.Len(t, events.Events[srv.Mac], 1)
+	assert.NotContains(t, events.Events[srv.Mac][0].Params, "users")
+}
+
 func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	states := &server.States{Servers: make(map[string]*server.State)}
 	events := &event.Log{}
@@ -366,6 +406,8 @@ func newTestTemplates(t *testing.T) *templates.ShoelacesTemplates {
 boot {{.hostname}}
 base {{.baseURL}}
 role {{.role}}
+{{with $users := index . "users"}}{{with $users.Primary}}user {{.Name}}
+{{end}}{{end}}
 {{end}}
 `),
 		0o644,
@@ -398,4 +440,8 @@ func targetOptionNames(options []server.TargetOption) []string {
 		names = append(names, option.Name)
 	}
 	return names
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

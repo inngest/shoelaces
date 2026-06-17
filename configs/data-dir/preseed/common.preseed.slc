@@ -22,11 +22,44 @@ d-i clock-setup/utc boolean true
 {{end}}
 
 {{define "preseed/common/users" -}}
+# Root login is disabled by default. Structured users can enable it by setting
+# users.root.locked=false and users.root.passwordCrypted.
+{{with $users := index . "users" -}}
+{{with $root := $users.Root -}}
+{{if and (not $root.Locked) $root.PasswordCrypted -}}
+d-i passwd/root-login boolean true
+d-i passwd/root-password-crypted password {{ $root.PasswordCrypted }}
+{{else -}}
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
+{{end -}}
+{{else -}}
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
+{{end -}}
+
+# Create the primary regular user from structured users. The password is locked
+# unless passwordCrypted is set and locked is false.
+d-i user-setup/allow-password-weak boolean false
+d-i passwd/make-user boolean true
+{{with $primary := $users.Primary -}}
+d-i passwd/user-fullname string {{ if $primary.FullName }}{{ $primary.FullName }}{{ else }}{{ $primary.Name }}{{ end }}
+d-i passwd/username string {{ $primary.Name }}
+d-i passwd/user-password-crypted password {{ if $primary.Locked }}!{{ else }}{{ if $primary.PasswordCrypted }}{{ $primary.PasswordCrypted }}{{ else }}!{{ end }}{{ end }}
+{{else -}}
+d-i passwd/user-fullname string {{ if $.install_user_fullname }}{{ $.install_user_fullname }}{{ else }}Provisioning User{{ end }}
+d-i passwd/username string {{ if $.install_username }}{{ $.install_username }}{{ else }}debian{{ end }}
+d-i passwd/user-password-crypted password {{ if $.install_user_password_crypted }}{{ $.install_user_password_crypted }}{{ else }}!{{ end }}
+{{end -}}
+{{else -}}
 # Create a regular user. The default password is locked; provide
 # install_user_password_crypted from mappings or query params to enable login.
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
 d-i user-setup/allow-password-weak boolean false
 d-i passwd/make-user boolean true
 d-i passwd/user-fullname string {{ if .install_user_fullname }}{{ .install_user_fullname }}{{ else }}Provisioning User{{ end }}
 d-i passwd/username string {{ if .install_username }}{{ .install_username }}{{ else }}debian{{ end }}
 d-i passwd/user-password-crypted password {{ if .install_user_password_crypted }}{{ .install_user_password_crypted }}{{ else }}!{{ end }}
+{{end -}}
 {{end}}

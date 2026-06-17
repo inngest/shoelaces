@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
 )
 
 const (
@@ -75,6 +76,7 @@ type State struct {
 	Target      string
 	Environment string
 	Params      map[string]interface{}
+	Users       map[string]mappings.ResolvedUser
 	Retry       int
 	LastAccess  int
 }

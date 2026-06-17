@@ -32,6 +32,7 @@ func TestIsSensitiveParamKey(t *testing.T) {
 		{key: "authorized_keys", sensitive: true},
 		{key: "install_secret", sensitive: true},
 		{key: "credentials", sensitive: true},
+		{key: "users", sensitive: true},
 		{key: "hostname", sensitive: false},
 		{key: "public_key_url", sensitive: false},
 		{key: "release", sensitive: false},

@@ -6,8 +6,8 @@ url  --url="http://mirror.netcologne.de/centos/{{.release}}/os/x86_64"
 
 network --bootproto dhcp --hostname {{.hostname}}
 
-rootpw --lock
 authselect --useshadow --passalgo=sha512 --enablefingerprint
+{{template "kickstart/centos/users" .}}
 
 keyboard --vckeymap=de --xlayouts='de (nodeadkeys)'
 lang      en_US.UTF-8
@@ -15,7 +15,29 @@ timezone Europe/Berlin --utc
 {{template "kickstart/centos/storage" .}}
 {{template "kickstart/centos/packages" .}}
 {{template "kickstart/centos/post" .}}
+{{template "kickstart/centos/user_ssh_keys" .}}
 reboot
+{{end}}
+
+{{define "kickstart/centos/users" -}}
+{{with $users := index . "users" -}}
+{{with $root := $users.Root -}}
+{{if and (not $root.Locked) $root.PasswordCrypted -}}
+rootpw --iscrypted {{ $root.PasswordCrypted }}
+{{else -}}
+rootpw --lock
+{{end -}}
+{{else -}}
+rootpw --lock
+{{end -}}
+{{range $users.List -}}
+{{if ne .Name "root" -}}
+user --name={{ .Name }}{{ if .FullName }} --gecos={{ printf "%q" .FullName }}{{ end }}{{ if .GroupsCSV }} --groups={{ .GroupsCSV }}{{ end }}{{ if .Shell }} --shell={{ .Shell }}{{ end }}{{ if .Locked }} --lock{{ end }}{{ if .PasswordCrypted }} --iscrypted --password={{ .PasswordCrypted }}{{ end }}
+{{end -}}
+{{end -}}
+{{else -}}
+rootpw --lock
+{{end -}}
 {{end}}
 
 {{define "kickstart/centos/storage" -}}
@@ -43,4 +65,33 @@ logvol / --fstype="ext4" --vgname=vg0 --size=10000 --name=lv_root --grow
 # add post-install behavior.
 true
 %end
+{{end}}
+
+{{define "kickstart/centos/user_ssh_keys" -}}
+{{with $users := index . "users" -}}
+{{range $users.List -}}
+{{if .HasSSHAuthorizedKeys -}}
+%post --log=/root/ks-{{ .Name }}-ssh-keys.log
+#!/bin/bash
+set -e
+{{if eq .Name "root" -}}
+install -d -m 0700 /root/.ssh
+cat > /root/.ssh/authorized_keys <<'SHOELACES_AUTHORIZED_KEYS'
+{{else -}}
+install -d -m 0700 /home/{{ .Name }}/.ssh
+cat > /home/{{ .Name }}/.ssh/authorized_keys <<'SHOELACES_AUTHORIZED_KEYS'
+{{end -}}
+{{range .SSHAuthorizedKeys }}{{ . }}
+{{end -}}
+SHOELACES_AUTHORIZED_KEYS
+{{if eq .Name "root" -}}
+chmod 0600 /root/.ssh/authorized_keys
+{{else -}}
+chmod 0600 /home/{{ .Name }}/.ssh/authorized_keys
+chown -R {{ .Name }}:{{ .Name }} /home/{{ .Name }}/.ssh
+{{end -}}
+%end
+{{end -}}
+{{end -}}
+{{end -}}
 {{end}}

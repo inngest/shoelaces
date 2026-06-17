@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +26,7 @@ type Script struct {
 	Name        string
 	Environment string
 	Params      map[string]interface{}
+	Users       map[string]ResolvedUser
 }
 
 // NetworkMap struct contains an association between a CIDR network and a
