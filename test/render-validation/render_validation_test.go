@@ -15,6 +15,7 @@
 package rendervalidation
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -99,6 +100,106 @@ func TestRenderedIPXEScriptsHaveRequiredShape(t *testing.T) {
 				assert.Contains(t, rendered, "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false \\")
 				assert.Contains(t, findIPXECommand(t, commands, "kernel"), "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false")
 			}
+		})
+	}
+}
+
+func TestValidateIPXEScriptCases(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		rendered    string
+		expected    []string
+		expectedErr string
+	}{
+		{
+			name: "single line commands",
+			rendered: `#!ipxe
+set hostname render-validation-host
+kernel http://example.test/vmlinuz initrd=initrd.img
+initrd http://example.test/initrd.img
+boot
+`,
+			expected: []string{
+				"set hostname render-validation-host",
+				"kernel http://example.test/vmlinuz initrd=initrd.img",
+				"initrd http://example.test/initrd.img",
+				"boot",
+			},
+		},
+		{
+			name: "continued kernel command",
+			rendered: `#!ipxe
+kernel http://example.test/vmlinuz \
+  initrd=initrd.img \
+  console=ttyS0
+initrd http://example.test/initrd.img
+boot
+`,
+			expected: []string{
+				"kernel http://example.test/vmlinuz initrd=initrd.img console=ttyS0",
+				"initrd http://example.test/initrd.img",
+				"boot",
+			},
+		},
+		{
+			name: "comments labels and blanks are ignored",
+			rendered: `#!ipxe
+
+# comment
+:retry
+echo hello
+boot
+`,
+			expected: []string{"echo hello", "boot"},
+		},
+		{
+			name: "missing shebang",
+			rendered: `echo hello
+boot
+`,
+			expectedErr: "missing #!ipxe shebang",
+		},
+		{
+			name: "standalone continuation",
+			rendered: `#!ipxe
+kernel http://example.test/vmlinuz \
+\
+initrd http://example.test/initrd.img
+`,
+			expectedErr: "standalone continuation",
+		},
+		{
+			name: "empty continuation target",
+			rendered: `#!ipxe
+kernel http://example.test/vmlinuz \
+
+initrd http://example.test/initrd.img
+`,
+			expectedErr: "empty continuation target",
+		},
+		{
+			name:        "unterminated continuation",
+			rendered:    "#!ipxe\nkernel http://example.test/vmlinuz \\",
+			expectedErr: "unterminated line continuation",
+		},
+		{
+			name: "unknown command",
+			rendered: `#!ipxe
+bogus command
+`,
+			expectedErr: "unknown iPXE command",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			commands, err := validateIPXEScript(tt.rendered)
+
+			if tt.expectedErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, commands)
 		})
 	}
 }
@@ -245,6 +346,12 @@ func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name s
 func assertValidIPXEScript(t *testing.T, rendered string) []string {
 	t.Helper()
 
+	commands, err := validateIPXEScript(rendered)
+	require.NoError(t, err)
+	return commands
+}
+
+func validateIPXEScript(rendered string) ([]string, error) {
 	// This is a rendered-script lint, not a full iPXE emulator. It catches the
 	// line-continuation and command-shape failures that break before booting.
 	allowedCommands := map[string]bool{
@@ -264,16 +371,16 @@ func assertValidIPXEScript(t *testing.T, rendered string) []string {
 		lineNumber := i + 1
 		trimmed := strings.TrimSpace(line)
 		if lineNumber == 1 {
-			assert.Equal(t, "#!ipxe", trimmed)
+			if trimmed != "#!ipxe" {
+				return nil, fmt.Errorf("line %d missing #!ipxe shebang", lineNumber)
+			}
 			continue
 		}
 		if trimmed == "\\" {
-			assert.Failf(t, "standalone iPXE continuation", "line %d contains only a continuation marker", lineNumber)
-			continue
+			return nil, fmt.Errorf("line %d contains a standalone continuation marker", lineNumber)
 		}
 		if continued != "" && trimmed == "" {
-			assert.Failf(t, "empty iPXE continuation target", "line %d is empty after a continued command", lineNumber)
-			continue
+			return nil, fmt.Errorf("line %d is an empty continuation target", lineNumber)
 		}
 		if continued == "" && (trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ":")) {
 			continue
@@ -283,8 +390,7 @@ func assertValidIPXEScript(t *testing.T, rendered string) []string {
 		hasContinuation := strings.HasSuffix(withoutTrailingSpace, "\\")
 		segment := strings.TrimSpace(strings.TrimSuffix(withoutTrailingSpace, "\\"))
 		if segment == "" {
-			assert.Failf(t, "empty iPXE command segment", "line %d has no command before a continuation marker", lineNumber)
-			continue
+			return nil, fmt.Errorf("line %d has no command before a continuation marker", lineNumber)
 		}
 		if continued != "" {
 			continued += " " + segment
@@ -299,13 +405,19 @@ func assertValidIPXEScript(t *testing.T, rendered string) []string {
 
 		command := strings.Join(strings.Fields(continued), " ")
 		fields := strings.Fields(command)
-		require.NotEmpty(t, fields, "line %d produced an empty iPXE command", lineNumber)
-		assert.True(t, allowedCommands[fields[0]], "line %d uses unknown iPXE command %q", lineNumber, fields[0])
+		if len(fields) == 0 {
+			return nil, fmt.Errorf("line %d produced an empty iPXE command", lineNumber)
+		}
+		if !allowedCommands[fields[0]] {
+			return nil, fmt.Errorf("line %d uses unknown iPXE command %q", lineNumber, fields[0])
+		}
 		commands = append(commands, command)
 		continued = ""
 	}
-	assert.Empty(t, continued, "iPXE script ended with an unterminated line continuation")
-	return commands
+	if continued != "" {
+		return nil, fmt.Errorf("iPXE script ended with an unterminated line continuation")
+	}
+	return commands, nil
 }
 
 func findIPXECommand(t *testing.T, commands []string, commandName string) string {
