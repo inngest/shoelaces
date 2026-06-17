@@ -2,7 +2,7 @@
 #cloud-config
 {{template "cloudconfig/coreos/users" .}}
 
-hostname:{{.hostname}}
+hostname: {{.hostname}}
 coreos:
   update:
     reboot-strategy: off
