@@ -22,7 +22,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run unit tests
-        run: go test -race ./...
+        run: make test-race
 
   integration-test:
     name: Integration Test
@@ -36,7 +36,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run integration tests
-        run: go test -tags=integration ./test/integ-test
+        run: make integration
 
   provisioning-render-validation:
     name: Provisioning Render Validation
@@ -62,7 +62,7 @@ jobs:
           uv sync --frozen --only-dev
 
       - name: Run rendered provisioning validation
-        run: uv run go test ./test/render-validation
+        run: uv run make render-validation
         env:
           SHOELACES_REQUIRE_PROVISIONING_VALIDATORS: "1"
 

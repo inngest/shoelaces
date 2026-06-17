@@ -30,12 +30,20 @@ docs: shoelaces.8
 unit: fmt
 	$(GO) test -v -count=1 $(pkgs)
 
+.PHONY: test-race
+test-race: fmt
+	$(GO) test -v -count=1 -race $(pkgs)
+
 .PHONY: test
 test: unit integration
 
 .PHONY: integration
 integration:
 	$(GO) test -v -count=1 -tags=integration ./test/integ-test
+
+.PHONY: render-validation
+render-validation:
+	$(GO) test -v -count=1 ./test/render-validation
 
 .PHONY: binaries
 binaries: linux windows
