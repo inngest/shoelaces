@@ -1,7 +1,7 @@
 # Shoelaces at Inngest
 
 This repository is Inngest's maintained fork of [ThousandEyes Shoelaces](https://github.com/thousandeyes/shoelaces).
-Shoelaces serves iPXE, configuration, and static firstboot assets for bare-metal provisioning.
+Shoelaces serves iPXE, configuration, and static provisioning assets for bare-metal provisioning.
 At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 release artifacts, so the release workflow publishes both GitHub release artifacts and the S3 compatibility path.
 
 ## Building and testing
@@ -290,9 +290,6 @@ Example mapping:
 defaults:
   params:
     encrypt_home: "false"
-    ansible_repo_url: git@example.com:infra/ansible.git
-    ansible_branch: main
-    ansible_playbook: playbooks/baremetal.yml
     linuxargs: ""
 
 targets:

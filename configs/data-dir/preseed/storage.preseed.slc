@@ -88,9 +88,7 @@ d-i clock-setup/ntp boolean true
 d-i debian-installer/quiet boolean false
 d-i debian-installer/splash boolean false
 
-##This should be set by Puppet instead.
 d-i pkgsel/update-policy select none
-##
 
 d-i grub-installer/timeout string 5
 d-i popularity-contest/participate boolean false

@@ -6,7 +6,7 @@ url  --url="http://mirror.netcologne.de/centos/{{.release}}/os/x86_64"
 
 network --bootproto dhcp --hostname {{.hostname}}
 
-rootpw root
+rootpw --lock
 auth   --useshadow --passalgo=sha512 --enablefingerprint
 
 keyboard --vckeymap=de --xlayouts='de (nodeadkeys)'

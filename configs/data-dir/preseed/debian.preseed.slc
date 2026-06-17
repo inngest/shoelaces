@@ -95,32 +95,24 @@ d-i clock-setup/ntp boolean true
 d-i debian-installer/quiet boolean false
 d-i debian-installer/splash boolean false
 d-i pkgsel/update-policy select unattended-upgrades
-d-i pkgsel/include string openssh-server curl ca-certificates git ansible-core
+d-i pkgsel/include string openssh-server curl ca-certificates git
 d-i pkgsel/include string sudo
 
-# ---- First-boot bootstrap
-d-i preseed/late_command string \
-  set -eux; \
-  wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/static/firstboot.sh; \
-  chmod 0755 /target/usr/local/bin/firstboot.sh; \
-  wget -O /target/etc/default/firstboot \
-  "http://{{ .baseURL }}/configs/plain/firstboot.defaults?ansible_repo_url={{ .ansible_repo_url | urlquery }}&ansible_branch={{ .ansible_branch | urlquery }}&ansible_playbook={{ .ansible_playbook | urlquery }}"; \
-  mkdir -p /target/etc/systemd/system; \
-  wget -O /target/etc/systemd/system/firstboot.service http://{{ .baseURL }}/static/firstboot.service; \
-  chroot /target /bin/systemctl enable firstboot.service || \
-    ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service; \
-  mkdir -p /target/root/.ssh; \
-  chmod 0700 /target/root/.ssh; \
-  wget -O /target/root/.ssh/authorized_keys http://{{ .baseURL }}/static/authorized_keys; \
-  wget -O /target/root/.ssh/id_ansible http://{{ .baseURL }}/static/id_ansible; \
-  printf '\nUseDNS no\n' >> /target/etc/ssh/sshd_config; \
-  chroot /target /usr/sbin/usermod -aG sudo infra
+{{template "preseed/debian/late_command" .}}
 
-# Set root password (crypted# SHA-512 hash)
-d-i passwd/root-login boolean true
-d-i passwd/root-password-crypted password $6$6C2rNs/iVblJ.PbR$Qu8.kmf0MmdSrSFGAMhThqFpIOoB7UT7M1LwngRo2LRfvUE.5/EYnCYQtWD0.7dea4m7szucDuSUTnVwBuu3K/
+# Root login is disabled in the generic default. Override this template or a
+# future users partial if a site needs direct root login.
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
 
 d-i grub-installer/timeout string 5
 d-i popularity-contest/participate boolean false
 d-i finish-install/reboot_in_progress note
+{{end}}
+
+{{define "preseed/debian/late_command" -}}
+# No site orchestration is run by default. Sites can override this partial to
+# download and execute a disk-backed script from /configs/static/* or
+# /configs/<template>.
+d-i preseed/late_command string true
 {{end}}
