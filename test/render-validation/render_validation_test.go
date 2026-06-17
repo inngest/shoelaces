@@ -29,6 +29,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const requireProvisioningValidatorsEnv = "SHOELACES_REQUIRE_PROVISIONING_VALIDATORS"
+
 var defaultRenderParams = map[string]interface{}{
 	"baseURL":      "shoelaces.example.test:8081",
 	"encrypt_home": false,
@@ -146,10 +148,7 @@ func TestRenderedCloudConfigParsesAsYAML(t *testing.T) {
 }
 
 func TestRenderedCloudConfigPassesCloudInitSchemaWhenAvailable(t *testing.T) {
-	cloudInit, err := exec.LookPath("cloud-init")
-	if err != nil {
-		t.Skip("cloud-init is not installed")
-	}
+	cloudInit := validatorPath(t, "cloud-init")
 	configPath := writeRenderedFile(t, "cloud-config.yaml", renderTemplate(t, newRenderer(t), "cloudconfig-coreos", defaultRenderParams))
 
 	output, err := exec.Command(cloudInit, "schema", "--config-file", configPath).CombinedOutput()
@@ -157,14 +156,25 @@ func TestRenderedCloudConfigPassesCloudInitSchemaWhenAvailable(t *testing.T) {
 }
 
 func TestRenderedKickstartPassesKsvalidatorWhenAvailable(t *testing.T) {
-	ksvalidator, err := exec.LookPath("ksvalidator")
-	if err != nil {
-		t.Skip("ksvalidator is not installed")
-	}
+	ksvalidator := validatorPath(t, "ksvalidator")
 	kickstartPath := writeRenderedFile(t, "centos.ks", renderTemplate(t, newRenderer(t), "centos.ks", defaultRenderParams))
 
 	output, err := exec.Command(ksvalidator, kickstartPath).CombinedOutput()
 	require.NoError(t, err, string(output))
+}
+
+func validatorPath(t *testing.T, name string) string {
+	t.Helper()
+
+	path, err := exec.LookPath(name)
+	if err == nil {
+		return path
+	}
+	if os.Getenv(requireProvisioningValidatorsEnv) == "1" {
+		t.Fatalf("%s is required when %s=1", name, requireProvisioningValidatorsEnv)
+	}
+	t.Skipf("%s is not installed", name)
+	return ""
 }
 
 func newRenderer(t *testing.T) *templates.ShoelacesTemplates {
