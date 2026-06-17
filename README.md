@@ -201,7 +201,9 @@ Generic provisioning defaults are embedded in the binary, but `mappings.yaml`
 is still external site policy and must be provided through `data-dir`. See
 [Provisioning Defaults And Overrides](docs/provisioning-overrides.md) for the
 disk overlay model, full-template overrides, partial hooks, and late-command
-script examples.
+script examples. Variables referenced by partial hooks are included in manual
+template parameter prompts; the override guide also documents the shared preseed
+install-user parameters.
 
 Example TOML config:
 

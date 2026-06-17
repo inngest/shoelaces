@@ -21,6 +21,8 @@ Dynamic templates are loaded in this order:
 
 If a later layer defines the same template name as an earlier layer, the later
 definition wins. This works for complete templates and for named partial hooks.
+Variables referenced by partial hooks are included when Shoelaces reports
+required template parameters for manual rendering in the web UI.
 
 Provisioning static files are served from `/configs/static/*` in this order:
 
@@ -74,6 +76,40 @@ data-dir/
       preseed/
         debian/
           late_command.slc
+```
+
+## Shared Preseed User Parameters
+
+The embedded preseed defaults call `preseed/common/users` from Debian, Ubuntu
+minimal, and storage preseeds. By default, they create a regular user with a
+locked password:
+
+```text
+d-i passwd/user-fullname string Provisioning User
+d-i passwd/username string debian
+d-i passwd/user-password-crypted password !
+```
+
+Set these parameters from `mappings.yaml`, manual request parameters, or query
+parameters to customize that user:
+
+- `install_user_fullname`: full name for the regular install user.
+- `install_username`: username for the regular install user.
+- `install_user_password_crypted`: crypted password hash. Leave unset to keep
+  the account locked.
+
+For example:
+
+```yaml
+targets:
+  debian12:
+    script: debian.ipxe
+    params:
+      release: bookworm
+      encrypt_home: false
+      install_username: infra
+      install_user_fullname: Infrastructure User
+      install_user_password_crypted: "$6$rounds=4096$example$salthash"
 ```
 
 ## Late Command Scripts
