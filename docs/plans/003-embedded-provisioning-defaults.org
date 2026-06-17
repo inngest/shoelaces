@@ -91,6 +91,60 @@ d-i preseed/late_command string \
 {{end}}
 #+end_src
 
+For larger =late_command= behavior, operators should avoid inlining long shell
+programs into the preseed partial. The partial can download a script supplied by
+the site instead.
+
+For a raw static script, place the script under disk-backed
+=data-dir/static=:
+
+#+begin_src text
+data-dir/
+  static/
+    late-command.sh
+#+end_src
+
+Then reference it through =/configs/static/*=:
+
+#+begin_src gotemplate
+{{define "preseed/debian/late_command" -}}
+d-i preseed/late_command string \
+  wget -O /target/usr/local/sbin/late-command.sh http://{{ .baseURL }}/configs/static/late-command.sh; \
+  chmod 0755 /target/usr/local/sbin/late-command.sh; \
+  in-target /usr/local/sbin/late-command.sh
+{{end}}
+#+end_src
+
+For a script that needs Shoelaces template params, place a dynamic template under
+=data-dir=:
+
+#+begin_src text
+data-dir/
+  scripts/
+    late-command.sh.slc
+#+end_src
+
+#+begin_src gotemplate
+{{define "scripts/late-command.sh" -}}
+#!/bin/sh
+set -eux
+
+hostnamectl set-hostname {{ .hostname }}
+{{end}}
+#+end_src
+
+Then reference it through =/configs/<template>= and pass the required query
+params explicitly:
+
+#+begin_src gotemplate
+{{define "preseed/debian/late_command" -}}
+d-i preseed/late_command string \
+  wget -O /target/usr/local/sbin/late-command.sh "http://{{ .baseURL }}/configs/scripts/late-command.sh?hostname={{ .hostname | urlquery }}"; \
+  chmod 0755 /target/usr/local/sbin/late-command.sh; \
+  in-target /usr/local/sbin/late-command.sh
+{{end}}
+#+end_src
+
 Environment-specific partials use the existing environment override tree and the
 same template name:
 
@@ -214,6 +268,8 @@ Initial documented partial hooks:
 - [ ] Document the default no-op =preseed/debian/late_command= behavior and show
   an example site override that installs/enables firstboot from
   =/configs/static/*=.
+- [ ] Document how a =late_command= partial can delegate to a disk-backed static
+  script under =data-dir/static= or a templated script under =data-dir=.
 - [ ] Document that =mappings.yaml= remains external site policy.
 - [ ] Document that embedded defaults intentionally do not ship site firstboot
   orchestration or credentials.
