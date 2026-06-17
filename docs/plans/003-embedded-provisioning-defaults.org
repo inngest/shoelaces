@@ -72,6 +72,51 @@ Embedded templates should support both full template replacement and targeted
 partial replacement. A disk template that defines the same template name as an
 embedded template replaces that definition during parse/overlay.
 
+Partial overrides are provided as normal Shoelaces =.slc= templates under
+=data-dir=. The file path is for operator organization and template discovery;
+the ={{define "..."}= name is the contract that decides what is overridden.
+Recommended convention is to mirror the hook name in the path:
+
+#+begin_src text
+data-dir/
+  preseed/
+    debian/
+      late_command.slc
+#+end_src
+
+#+begin_src gotemplate
+{{define "preseed/debian/late_command" -}}
+d-i preseed/late_command string \
+  in-target /bin/sh -c 'echo site late_command override'
+{{end}}
+#+end_src
+
+Environment-specific partials use the existing environment override tree and the
+same template name:
+
+#+begin_src text
+data-dir/
+  env_overrides/
+    production/
+      preseed/
+        debian/
+          late_command.slc
+#+end_src
+
+#+begin_src gotemplate
+{{define "preseed/debian/late_command" -}}
+d-i preseed/late_command string \
+  wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/configs/static/firstboot.sh; \
+  chmod 0755 /target/usr/local/bin/firstboot.sh
+{{end}}
+#+end_src
+
+Full-template overrides work the same way but define the top-level template name
+instead, such as ={{define "preseed/debian"}}...{{end}}=. A full-template
+override should be used when a site needs to replace the whole install template;
+a partial override should be used when the embedded template exposes a suitable
+hook.
+
 Initial documented partial hooks:
 
 - =preseed/common/locale=
@@ -126,6 +171,8 @@ Initial documented partial hooks:
 - [ ] Overlay disk templates from =data-dir= on top of embedded defaults.
 - [ ] Preserve environment override behavior for disk files.
 - [ ] Preserve direct =/configs/<template>= query-param rendering behavior.
+- [ ] Define and test the disk partial override contract: any parsed disk =.slc=
+  file can replace an embedded partial by defining the same template name.
 - [ ] Refactor embedded provisioning templates around documented partial hooks:
   preseed users, packages, storage, late command, finish; iPXE kernel args and
   preseed URL; kickstart packages, storage, post; cloud-init users, units, and
@@ -162,6 +209,8 @@ Initial documented partial hooks:
 
 - [ ] Document the embedded-default plus disk-overlay model.
 - [ ] Document full template overrides versus documented partial hook overrides.
+- [ ] Document where to place partial override files and show the required
+  ={{define "hook/name"}}...{{end}}= shape.
 - [ ] Document the default no-op =preseed/debian/late_command= behavior and show
   an example site override that installs/enables firstboot from
   =/configs/static/*=.
@@ -179,6 +228,8 @@ Initial documented partial hooks:
 - [ ] Disk =data-dir= files override embedded provisioning defaults.
 - [ ] Disk templates can override documented partial hooks without replacing a
   full OS install template.
+- [ ] Partial override documentation shows both the disk path convention and the
+  required template =define= name.
 - [ ] Generic embedded templates do not trigger site-specific firstboot logic by
   default.
 - [ ] =mappings.yaml= remains external runtime/site configuration.
