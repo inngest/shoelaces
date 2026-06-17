@@ -1,5 +1,5 @@
 {{define "preseed/storage" -}}
-{{template "preseed/common"}}
+{{template "preseed/common" .}}
 
 # The method should be set to "raid".
 d-i     partman-auto/method string raid

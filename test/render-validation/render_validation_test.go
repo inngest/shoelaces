@@ -62,6 +62,7 @@ func TestEmbeddedProvisioningTemplatesRenderWithoutMissingValues(t *testing.T) {
 		"coreos.ipxe",
 		"debian.ipxe",
 		"preseed/debian",
+		"preseed/storage",
 		"preseed/ubuntu-minimal",
 		"ubuntu-minimal.ipxe",
 	} {
@@ -93,6 +94,9 @@ func TestRenderedIPXEScriptsHaveRequiredShape(t *testing.T) {
 			assert.Contains(t, rendered, "\nkernel ")
 			assert.Contains(t, rendered, "\ninitrd ")
 			assert.Contains(t, rendered, "\nboot")
+			if templateName == "debian.ipxe" {
+				assert.Contains(t, rendered, "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false \\")
+			}
 			assertNoDanglingLineContinuations(t, rendered)
 		})
 	}
@@ -102,6 +106,7 @@ func TestRenderedPreseedsHaveRequiredShape(t *testing.T) {
 	renderer := newRenderer(t)
 	for _, templateName := range []string{
 		"preseed/debian",
+		"preseed/storage",
 		"preseed/ubuntu-minimal",
 	} {
 		t.Run(templateName, func(t *testing.T) {
@@ -111,6 +116,27 @@ func TestRenderedPreseedsHaveRequiredShape(t *testing.T) {
 			assert.Contains(t, rendered, "d-i debian-installer/locale string en_US.UTF-8")
 			assert.Contains(t, rendered, "d-i passwd/user-password-crypted password !")
 			assert.Contains(t, rendered, "d-i finish-install/reboot_in_progress note")
+		})
+	}
+}
+
+func TestRenderedPreseedsApplyInstallUserParams(t *testing.T) {
+	renderer := newRenderer(t)
+	params := paramsWith(defaultRenderParams, "install_username", "alice")
+	params = paramsWith(params, "install_user_fullname", "Alice Example")
+	params = paramsWith(params, "install_user_password_crypted", "$6$rounds=4096$testsalt$testhash")
+
+	for _, templateName := range []string{
+		"preseed/debian",
+		"preseed/storage",
+		"preseed/ubuntu-minimal",
+	} {
+		t.Run(templateName, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, templateName, params)
+
+			assert.Contains(t, rendered, "d-i passwd/user-fullname string Alice Example")
+			assert.Contains(t, rendered, "d-i passwd/username string alice")
+			assert.Contains(t, rendered, "d-i passwd/user-password-crypted password $6$rounds=4096$testsalt$testhash")
 		})
 	}
 }

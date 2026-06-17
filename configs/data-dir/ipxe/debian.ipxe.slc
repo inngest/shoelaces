@@ -35,9 +35,7 @@ boot
   {{template "ipxe/linux_args" .}}
 {{end}}
 
-{{define "ipxe/debian/preseed_url" -}}
-http://{{ .baseURL }}/configs/preseed/debian?encrypt_home={{ .encrypt_home }}
-{{end}}
+{{define "ipxe/debian/preseed_url" -}}http://{{ .baseURL }}/configs/preseed/debian?encrypt_home={{ .encrypt_home }}{{- end}}
 
 {{define "ipxe/linux_args" -}}
 {{if .linuxargs}}{{ .linuxargs }}{{end}}
