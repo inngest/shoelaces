@@ -273,19 +273,107 @@ flexibility for configuring it, you can always re-compile the iPXE executable fo
 ### Script discoverability
 
 The purpose of Shoelaces is automation. The less input it receives from the
-user, the better. When a server boots, Shoelaces needs the user to select the
-booting script to use, but there are certain cases where we can automate even
-that.
+user, the better. When a server boots, Shoelaces resolves a named boot target
+from `mappings.yaml`. A target points at an iPXE template, an optional
+environment override, a UI label, and target-specific template parameters.
 
-* You can preload Shoelaces with mappings from **IPs to boot scripts**.
-* You can preload Shoelaces with mappings from **hostnames to boot scripts**. When a
-  server boots, Shoelaces will make a reverse DNS query to get the hostname for
-  the IP that made the request, and will match the result to a series of regular
-  expressions.
+Mappings can select targets by MAC address, exact IP address, hostname regular
+expression, or CIDR network. Match precedence is manual selection, MAC, IP,
+hostname, network, then unmatched/manual queue. If a mapping has
+`defaultTarget`, Shoelaces boots it automatically. If a mapping only has
+`targets`, the host is queued in the UI and operators can choose from that
+restricted target list. Unmatched hosts can choose from all configured targets.
 
-Shoelaces will read these mappings from a YAML file that can be passed as a
-program parameter. Refer to the [example mappings
-file](configs/data-dir/mappings.yaml) for more information.
+Example mapping:
+
+```yaml
+defaults:
+  params:
+    encrypt_home: "false"
+    ansible_repo_url: git@github.com:inngest/ansible.git
+    ansible_branch: main
+    ansible_playbook: baremetal.yml
+    linuxargs: ""
+
+targets:
+  debian12:
+    script: debian.ipxe
+    label: Debian 12 Bookworm
+    params:
+      release: bookworm
+
+  debian13:
+    script: debian.ipxe
+    label: Debian 13 Trixie
+    params:
+      release: trixie
+
+  ubuntu2404:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 24.04 LTS
+    params:
+      release: noble
+
+  ubuntu2604:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 26.04 LTS
+    params:
+      release: resolute
+
+networkMaps:
+  - network: 104.225.9.96/27
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
+      - ubuntu2404
+      - ubuntu2604
+    params:
+      hostnamePrefix: iad-
+
+hostnameMaps:
+  - hostname: '^debian13-[0-9]+\.example\.com$'
+    defaultTarget: debian13
+    targets:
+      - debian13
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: ubuntu2604
+    targets:
+      - ubuntu2604
+    params:
+      hostname: ubuntu2604-example
+
+ipMaps:
+  - ip: 2001:db8::10
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
+```
+
+Parameter merge order is global `defaults.params`, selected target `params`,
+matched mapping `params`, manual/request params, then generated values such as
+`hostname` and `baseURL`. Raw scalar values can be placed directly in params.
+Sensitive values can also come from the Shoelaces process environment using an
+explicit reference:
+
+```yaml
+params:
+  root_password_crypted:
+    env: SHOELACES_ROOT_PASSWORD_CRYPTED
+```
+
+This uses the environment of the running Shoelaces process, so systemd service
+environment variables work without a separate env file. Missing referenced
+environment variables fail the boot render clearly.
+
+Shoelaces will read these mappings from the YAML file configured by
+`mappings-file`, relative to `data-dir`. Refer to the [example mappings
+file](configs/data-dir/mappings.yaml) for a complete example. The old
+`networkMaps[].script` and `hostnameMaps[].script` schema is no longer
+supported; define named `targets` and reference them from mapping rules instead.
 
 ### Environments
 
@@ -310,8 +398,8 @@ Consider the following `data-dir` directory structure:
     └── rc.local-bootstrap
 ```
 
-In this case, hosts that have `environment: testing` set in the `mappings.yaml`
-will be assigned the `testing` environment and they'll use the
+In this case, hosts that resolve to a target with `environment: testing` in
+`mappings.yaml` will be assigned the `testing` environment and they'll use the
 `coreos-cloud-config.yaml.slc` template from the `env_overrides/testing
 directory`, while the rest of the templates will be served from the base
 directory. Everything except `mappings.yaml` can be put in `env_overrides/$env`

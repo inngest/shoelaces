@@ -4,6 +4,7 @@ defaults:
     ansible_repo_url: git@github.com:inngest/ansible.git
     ansible_branch: main
     ansible_playbook: baremetal.yml
+    linuxargs: ""
 
 targets:
   debian12:
@@ -18,11 +19,17 @@ targets:
     params:
       release: trixie
 
-  ubuntu1404:
+  ubuntu2404:
     script: ubuntu-minimal.ipxe
-    label: Ubuntu 14.04 Trusty
+    label: Ubuntu 24.04 LTS
     params:
-      release: trusty
+      release: noble
+
+  ubuntu2604:
+    script: ubuntu-minimal.ipxe
+    label: Ubuntu 26.04 LTS
+    params:
+      release: resolute
 
 networkMaps:
   - network: 104.225.9.96/27
@@ -30,15 +37,40 @@ networkMaps:
     targets:
       - debian12
       - debian13
+      - ubuntu2404
+      - ubuntu2604
+    params:
+      hostnamePrefix: iad-
 
   - network: 198.51.100.0/24
-    defaultTarget: debian13
     targets:
       - debian12
       - debian13
+      - ubuntu2404
+      - ubuntu2604
 
 hostnameMaps:
-  - hostname: msc1.example.com
-    defaultTarget: ubuntu1404
+  - hostname: '^debian13-[0-9]+\.example\.com$'
+    defaultTarget: debian13
     targets:
-      - ubuntu1404
+      - debian13
+
+  - hostname: '^ubuntu24-[0-9]+\.example\.com$'
+    defaultTarget: ubuntu2404
+    targets:
+      - ubuntu2404
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: ubuntu2604
+    targets:
+      - ubuntu2604
+    params:
+      hostname: ubuntu2604-example
+
+ipMaps:
+  - ip: 2001:db8::10
+    defaultTarget: debian12
+    targets:
+      - debian12
+      - debian13
