@@ -142,7 +142,7 @@ func walkTemplateNode(node parse.Node, addVariable func(string), addRef func(str
 	}
 	// Optional branches and pipes can arrive as typed nil parse nodes.
 	value := reflect.ValueOf(node)
-	if value.Kind() == reflect.Ptr && value.IsNil() {
+	if value.Kind() == reflect.Pointer && value.IsNil() {
 		return
 	}
 	switch n := node.(type) {
