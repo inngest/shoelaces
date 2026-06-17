@@ -210,14 +210,14 @@ Initial documented partial hooks:
 
 *** Phase 2: Embedded Provisioning Filesystem
 
-- [ ] Add an embedded provisioning filesystem helper for generic
+- [X] Add an embedded provisioning filesystem helper for generic
   provisioning default contents.
-- [ ] Exclude =mappings.yaml= from production runtime defaults.
-- [ ] Exclude site-specific =static/firstboot.sh=,
+- [X] Exclude =mappings.yaml= from production runtime defaults.
+- [X] Exclude site-specific =static/firstboot.sh=,
   =static/firstboot.service=, =static/authorized_keys=, =static/id_ansible=, and
   similar bootstrap artifacts from embedded runtime defaults.
-- [ ] Add tests proving representative embedded provisioning files exist.
-- [ ] Add tests proving excluded site-only files are not available from the
+- [X] Add tests proving representative embedded provisioning files exist.
+- [X] Add tests proving excluded site-only files are not available from the
   embedded runtime defaults.
 
 *** Phase 3: Dynamic Template Overlay
