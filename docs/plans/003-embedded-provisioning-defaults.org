@@ -537,18 +537,18 @@ operator's responsibility.
 
 *** Phase 8: OS Template Rendering From Structured Users
 
-- [ ] Render Debian/Ubuntu preseed user settings from structured users,
+- [X] Render Debian/Ubuntu preseed user settings from structured users,
   including root lock/password and the primary regular install user.
-- [ ] Render CoreOS/cloud-init users from structured users, including SSH keys,
+- [X] Render CoreOS/cloud-init users from structured users, including SSH keys,
   groups, shell, sudo, locked state, and password hashes where supported.
-- [ ] Render CentOS kickstart users from structured users, including root
+- [X] Render CentOS kickstart users from structured users, including root
   password state, regular users, groups, and SSH key setup where required.
-- [ ] Keep the legacy flat params =install_username=,
+- [X] Keep the legacy flat params =install_username=,
   =install_user_fullname=, and =install_user_password_crypted= as a temporary
   projection or fallback while documentation and callers migrate.
-- [ ] Add render-validation tests proving Debian/Ubuntu preseed, CoreOS
+- [X] Add render-validation tests proving Debian/Ubuntu preseed, CoreOS
   cloud-init, and CentOS kickstart output valid user/account syntax.
-- [ ] Add tests proving sensitive user fields are redacted from logs/events.
+- [X] Add tests proving sensitive user fields are redacted from logs/events.
 
 *** Phase 9: Remove User Partial Hooks
 
