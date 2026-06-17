@@ -161,6 +161,10 @@ func walkTemplateNode(node parse.Node, addVariable func(string), addRef func(str
 		}
 	case *parse.FieldNode:
 		addVariable(normalizeVariableName(strings.Join(n.Ident, ".")))
+	case *parse.IfNode:
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+		walkTemplateNode(n.List, addVariable, addRef)
+		walkTemplateNode(n.ElseList, addVariable, addRef)
 	case *parse.ListNode:
 		for _, child := range n.Nodes {
 			walkTemplateNode(child, addVariable, addRef)

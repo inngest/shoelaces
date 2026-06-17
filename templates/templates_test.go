@@ -110,6 +110,154 @@ echo {{.hostname}}
 	assert.Contains(t, err.Error(), "Missing variables in request: partial_required")
 }
 
+func TestListVariablesPartialDependencyCases(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		files     map[string]string
+		template  string
+		env       string
+		expected  []string
+		notExpect []string
+	}{
+		{
+			name: "nested partial dependency",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{.hostname}}{{template "boot/args" .}}{{end}}
+{{define "boot/args"}}{{template "boot/deep" .}}{{end}}
+{{define "boot/deep"}}{{.deep_required}}{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			expected: []string{"hostname", "deep_required"},
+		},
+		{
+			name: "shared partial dependencies are deduped",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{template "boot/first" .}}{{template "boot/second" .}}{{end}}
+{{define "boot/first"}}{{.hostname}}{{.shared_required}}{{end}}
+{{define "boot/second"}}{{.hostname}}{{.shared_required}}{{.second_required}}{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			expected: []string{"hostname", "shared_required", "second_required"},
+		},
+		{
+			name: "cyclic partial dependencies terminate",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{.hostname}}{{template "boot/a" .}}{{end}}
+{{define "boot/a"}}{{.from_a}}{{template "boot/b" .}}{{end}}
+{{define "boot/b"}}{{.from_b}}{{template "boot/a" .}}{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			expected: []string{"hostname", "from_a", "from_b"},
+		},
+		{
+			name: "template call argument variables are collected",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{template "boot/arg" .hostname}}{{template "boot/chain" .network.interface}}{{end}}
+{{define "boot/arg"}}literal{{end}}
+{{define "boot/chain"}}literal{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			expected: []string{"hostname", "network.interface"},
+		},
+		{
+			name: "conditional branch variables are collected",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{if .install_enabled}}{{.enabled_value}}{{else}}{{.disabled_value}}{{end}}{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			expected: []string{"install_enabled", "enabled_value", "disabled_value"},
+		},
+		{
+			name: "range and with variables are collected",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{range .items}}{{.name}}{{else}}{{.empty_items}}{{end}}{{with .metadata}}{{.owner}}{{else}}{{.missing_metadata}}{{end}}{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			expected: []string{"items", "name", "empty_items", "metadata", "owner", "missing_metadata"},
+		},
+		{
+			name: "environment override inherits default partial",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{template "boot/args" .}}{{end}}
+{{define "boot/args"}}{{.default_partial_required}}{{end}}
+`,
+				filepath.Join("env_overrides", "testing", "boot.ipxe.slc"): `{{define "boot.ipxe"}}{{.override_required}}{{template "boot/args" .}}{{end}}
+`,
+			},
+			template: "boot.ipxe",
+			env:      "testing",
+			expected: []string{"override_required", "default_partial_required"},
+		},
+		{
+			name: "environment partial override replaces default partial vars",
+			files: map[string]string{
+				"boot.ipxe.slc": `{{define "boot.ipxe"}}{{.hostname}}{{template "boot/args" .}}{{end}}
+{{define "boot/args"}}{{.default_partial_required}}{{end}}
+`,
+				filepath.Join("env_overrides", "testing", "boot_args.slc"): `{{define "boot/args"}}{{.override_partial_required}}{{end}}
+`,
+			},
+			template:  "boot.ipxe",
+			env:       "testing",
+			expected:  []string{"hostname", "override_partial_required"},
+			notExpect: []string{"default_partial_required"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			for path, content := range tt.files {
+				writeTemplate(t, filepath.Join(dataDir, path), content)
+			}
+
+			renderer := New()
+			renderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", []string{"testing"}, ".slc")
+			variables := renderer.ListVariables(tt.template, tt.env)
+
+			assert.ElementsMatch(t, tt.expected, variables)
+			for _, unexpected := range tt.notExpect {
+				assert.NotContains(t, variables, unexpected)
+			}
+		})
+	}
+}
+
+func TestRenderTemplateReturnsNestedPartialMissingVariableErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		template    string
+		params      map[string]interface{}
+		expectedErr string
+	}{
+		{
+			name: "deep partial variable",
+			template: `{{define "boot.ipxe"}}{{.hostname}}{{template "boot/args" .}}{{end}}
+{{define "boot/args"}}{{template "boot/deep" .}}{{end}}
+{{define "boot/deep"}}{{.deep_required}}{{end}}
+`,
+			params:      map[string]interface{}{"hostname": "missing-deep"},
+			expectedErr: "deep_required",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			writeTemplate(t, filepath.Join(dataDir, "boot.ipxe.slc"), tt.template)
+			renderer := newEmbeddedFallbackRenderer(t, dataDir)
+
+			rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "boot.ipxe", tt.params, "")
+
+			assert.Empty(t, rendered)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "Missing variables in request: "+tt.expectedErr)
+		})
+	}
+}
+
 func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 	renderer := newTestRenderer(t)
 	var logOutput bytes.Buffer
