@@ -1,6 +1,6 @@
 #+title: Embedded Provisioning Defaults
 #+author: Darwin D. Wu
-#+status: Draft
+#+status: Done
 #+date: <2026-06-16 Tue>
 
 * Embedded Provisioning Defaults
@@ -241,61 +241,61 @@ Initial documented partial hooks:
 
 *** Phase 4: Static Provisioning Overlay
 
-- [ ] Update =/configs/static/*= serving to use disk =data-dir/static= first and
+- [X] Update =/configs/static/*= serving to use disk =data-dir/static= first and
   embedded static provisioning files second.
-- [ ] Preserve directory index behavior where existing tests rely on it.
-- [ ] Add tests for embedded fallback, disk override, and missing file behavior.
-- [ ] Add tests proving =/static/*= remains UI-only and does not serve embedded
+- [X] Preserve directory index behavior where existing tests rely on it.
+- [X] Add tests for embedded fallback, disk override, and missing file behavior.
+- [X] Add tests proving =/static/*= remains UI-only and does not serve embedded
   provisioning defaults.
 
 *** Phase 5: Startup Without Disk Templates
 
-- [ ] Allow Shoelaces to start with external mappings/config but without any
+- [X] Allow Shoelaces to start with external mappings/config but without any
   disk provisioning template tree when selected targets reference embedded
   defaults.
-- [ ] Keep clear errors when required site configuration, such as mappings, is
+- [X] Keep clear errors when required site configuration, such as mappings, is
   missing.
-- [ ] Add a smoke/integration test for running with no disk provisioning
+- [X] Add a smoke/integration test for running with no disk provisioning
   templates.
-- [ ] Add an integration test proving a target from external =mappings.yaml= can
+- [X] Add an integration test proving a target from external =mappings.yaml= can
   render an embedded iPXE template and embedded follow-on config template.
 
 *** Phase 6: Documentation And Verification
 
-- [ ] Document the embedded-default plus disk-overlay model.
-- [ ] Document full template overrides versus documented partial hook overrides.
-- [ ] Document where to place partial override files and show the required
+- [X] Document the embedded-default plus disk-overlay model.
+- [X] Document full template overrides versus documented partial hook overrides.
+- [X] Document where to place partial override files and show the required
   ={{define "hook/name"}}...{{end}}= shape.
-- [ ] Document the default no-op =preseed/debian/late_command= behavior and show
+- [X] Document the default no-op =preseed/debian/late_command= behavior and show
   an example site override that installs/enables firstboot from
   =/configs/static/*=.
-- [ ] Document how a =late_command= partial can delegate to a disk-backed static
+- [X] Document how a =late_command= partial can delegate to a disk-backed static
   script under =data-dir/static= or a templated script under =data-dir=.
-- [ ] Document that =mappings.yaml= remains external site policy.
-- [ ] Document that embedded defaults intentionally do not ship site firstboot
+- [X] Document that =mappings.yaml= remains external site policy.
+- [X] Document that embedded defaults intentionally do not ship site firstboot
   orchestration or credentials.
-- [ ] Run =go test ./...=.
-- [ ] Run =go test -tags=integration ./test/integ-test=.
-- [ ] Run the plan status checker.
+- [X] Run =go test ./...=.
+- [X] Run =go test -tags=integration ./test/integ-test=.
+- [X] Run the plan status checker.
 
 ** Acceptance Criteria
 
-- [ ] Generic provisioning templates can be served from embedded defaults.
-- [ ] Generic static provisioning files can be served from embedded defaults.
-- [ ] Disk =data-dir= files override embedded provisioning defaults.
-- [ ] Disk templates can override documented partial hooks without replacing a
+- [X] Generic provisioning templates can be served from embedded defaults.
+- [X] Generic static provisioning files can be served from embedded defaults.
+- [X] Disk =data-dir= files override embedded provisioning defaults.
+- [X] Disk templates can override documented partial hooks without replacing a
   full OS install template.
-- [ ] Partial override documentation shows both the disk path convention and the
+- [X] Partial override documentation shows both the disk path convention and the
   required template =define= name.
-- [ ] Generic embedded templates do not trigger site-specific firstboot logic by
+- [X] Generic embedded templates do not trigger site-specific firstboot logic by
   default.
-- [ ] =mappings.yaml= remains external runtime/site configuration.
-- [ ] =/static/*= remains UI-only and =/configs/static/*= remains provisioning
+- [X] =mappings.yaml= remains external runtime/site configuration.
+- [X] =/static/*= remains UI-only and =/configs/static/*= remains provisioning
   static only.
-- [ ] Existing direct =/configs/<template>= query-param behavior remains
+- [X] Existing direct =/configs/<template>= query-param behavior remains
   unchanged.
-- [ ] =go test ./...= passes.
-- [ ] =go test -tags=integration ./test/integ-test= passes.
+- [X] =go test ./...= passes.
+- [X] =go test -tags=integration ./test/integ-test= passes.
 
 ** Notes And Risks
 
