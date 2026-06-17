@@ -43,9 +43,11 @@ defaults.
   =configs/data-dir/static/firstboot.service=, SSH key references, and Ansible
   bootstrap behavior are site-shaped examples and must not become embedded
   generic defaults.
-- The Debian preseed late_command is now a documented no-op hook by default.
-- A site can restore firstboot behavior by overriding the late_command partial
-  and serving its scripts from disk-backed =/configs/static/*=.
+- The generic installer extra snippet is planned as an embedded no-op by
+  default.
+- A site can restore firstboot behavior by selecting an
+  =installer.extraTemplate= snippet and serving its scripts from disk-backed
+  =/configs/static/*=.
 - Template references to provisioning static files should use =/configs/static/*=,
   not UI =/static/*=.
 
@@ -60,9 +62,9 @@ defaults.
   embedded generic static defaults.
 - =data-dir= remains the site override root.
 - Environment overrides remain supported for disk-backed site files.
-- Generic embedded templates expose only imperative extension hooks for
-  post-install scripts, cloud-init units, cloud-init files, and full-template
-  replacement.
+- Generic embedded templates expose a single native installer extra-snippet
+  escape hatch plus full-template replacement for behavior outside structured
+  config.
 - Common user/account provisioning should be data-driven from mappings through a
   structured keyed =users= model instead of requiring operators to override user
   partial templates.
@@ -151,6 +153,7 @@ targets:
     script: debian.ipxe
     installer:
       configTemplate: preseed/debian
+      extraTemplate: provisioning/extra
       configParams:
         encrypt_home: false
     packages:
@@ -189,29 +192,29 @@ netboot stage:
   =cloudconfig-coreos=.
 - =installer.configParams= contains explicit query/config parameters needed by
   that installer config while templates are migrated to structured data.
+- =installer.extraTemplate= selects a native installer snippet template rendered
+  near the end of the installer config. The embedded default is
+  =provisioning/extra=, which is a no-op.
 - Together with =repos= and =boot.netboot=, =installer= replaces iPXE URL
   partials such as =ipxe/debian/preseed_url= and distro-specific kernel argument
   partials.
 
 Structured config should replace declarative partial overrides as a breaking
 change. It should not try to model arbitrary post-install automation. Keep
-script/template hooks for imperative or site-specific behavior:
+=installer.extraTemplate= as the unstructured escape hatch for imperative or
+site-specific behavior.
 
-- =preseed/debian/late_command=
-- =kickstart/centos/post=
-- =cloudconfig/coreos/runcmd=
-- =cloudconfig/coreos/units=
-- =cloudconfig/coreos/write_files=
+The selected extra template is intentionally installer-native. A Debian target
+can include =d-i preseed/late_command= or any other preseed lines; a kickstart
+target can include =%post= or other kickstart sections; a cloud-init target can
+include =runcmd:=, =write_files:=, =units:=, or other valid cloud-init YAML.
+Shoelaces should not parse, validate, normalize, or make correctness guarantees
+for the extra snippet beyond normal Go template rendering. Operators own the
+installer-specific syntax they place there.
 
-Those hooks are intentionally unstructured. The embedded defaults should provide
-no-op hook definitions, and a disk override should be rendered verbatim into the
-installer config. Shoelaces should not try to parse, validate, normalize, or
-make correctness guarantees for the hook body beyond normal Go template
-rendering. Operators own the installer-specific syntax they place there.
-
-The hooks can download raw static scripts from =/configs/static/*= or templated
-scripts from =/configs/<template>=. Full-template overrides remain the broader
-escape hatch when a site needs behavior outside the structured model.
+The extra snippet can download raw static scripts from =/configs/static/*= or
+templated scripts from =/configs/<template>=. Full-template overrides remain the
+broader escape hatch when a site needs behavior outside the structured model.
 
 ** Structured Users Model
 
@@ -299,36 +302,58 @@ template parameter names while templates are migrated:
 After OS templates render directly from normalized structured data, the
 dedicated user, package, locale, time, network, storage, boot, and repo partial
 hooks should be removed from the supported override contract. Post-install and
-script hooks remain useful for imperative site behavior.
+script snippets remain useful through =installer.extraTemplate=.
 
 ** Override Model
 
-Embedded templates should support full template replacement and a narrow set of
-imperative hooks. A disk template that defines the same top-level template name
-as an embedded template replaces that definition during parse/overlay.
+Embedded templates should support full template replacement and target-selected
+native installer extra snippets. A disk template that defines the same top-level
+template name as an embedded template replaces that definition during
+parse/overlay.
 
-Imperative hooks are provided as normal Shoelaces =.slc= templates under
-=data-dir=. The file path is for operator organization and template discovery;
-the ={{define "..."}= name is the contract that decides what is overridden.
-Recommended convention is to mirror the hook name in the path:
+Extra snippets are provided as normal Shoelaces =.slc= templates under
+=data-dir=. The file path is for operator organization and template discovery.
+The selected =installer.extraTemplate= value is the template ={{define "..."}=
+name to render. The default is =provisioning/extra=.
 
 #+begin_src text
 data-dir/
-  preseed/
-    debian/
-      late_command.slc
+  provisioning/
+    extra.slc
 #+end_src
 
 #+begin_src gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/extra" -}}
 d-i preseed/late_command string \
   in-target /bin/sh -c 'echo site late_command override'
 {{end}}
 #+end_src
 
-For larger =late_command= behavior, operators should avoid inlining long shell
-programs into the preseed partial. The partial can download a script supplied by
-the site instead.
+This content is rendered verbatim into the installer config. For a Debian
+target, the snippet can include preseed lines. For a kickstart target, use a
+different target-selected template containing kickstart-native syntax:
+
+#+begin_src yaml
+targets:
+  centos8:
+    script: centos.ipxe
+    installer:
+      configTemplate: centos.ks
+      extraTemplate: provisioning/centos-extra
+#+end_src
+
+#+begin_src gotemplate
+{{define "provisioning/centos-extra" -}}
+%post
+#!/bin/bash
+echo site post install
+%end
+{{end}}
+#+end_src
+
+For larger behavior, operators should avoid inlining long shell programs into
+the installer config. The extra snippet can download a script supplied by the
+site instead.
 
 For a raw static script, place the script under disk-backed
 =data-dir/static=:
@@ -342,7 +367,7 @@ data-dir/
 Then reference it through =/configs/static/*=:
 
 #+begin_src gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/extra" -}}
 d-i preseed/late_command string \
   wget -O /target/usr/local/sbin/late-command.sh http://{{ .baseURL }}/configs/static/late-command.sh; \
   chmod 0755 /target/usr/local/sbin/late-command.sh; \
@@ -372,7 +397,7 @@ Then reference it through =/configs/<template>= and pass the required query
 params explicitly:
 
 #+begin_src gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/extra" -}}
 d-i preseed/late_command string \
   wget -O /target/usr/local/sbin/late-command.sh "http://{{ .baseURL }}/configs/scripts/late-command.sh?hostname={{ .hostname | urlquery }}"; \
   chmod 0755 /target/usr/local/sbin/late-command.sh; \
@@ -387,13 +412,12 @@ same template name:
 data-dir/
   env_overrides/
     production/
-      preseed/
-        debian/
-          late_command.slc
+      provisioning/
+        extra.slc
 #+end_src
 
 #+begin_src gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/extra" -}}
 d-i preseed/late_command string \
   wget -O /target/usr/local/bin/firstboot.sh http://{{ .baseURL }}/configs/static/firstboot.sh; \
   chmod 0755 /target/usr/local/bin/firstboot.sh
@@ -404,17 +428,11 @@ Full-template overrides work the same way but define the top-level template name
 instead, such as ={{define "preseed/debian"}}...{{end}}=. A full-template
 override should be used when a site needs to replace the whole install template.
 
-Supported imperative hooks:
-
-- =preseed/debian/late_command=
-- =kickstart/centos/post=
-- =cloudconfig/coreos/runcmd=
-- =cloudconfig/coreos/units=
-- =cloudconfig/coreos/write_files=
-
-Each supported imperative hook should have an embedded no-op default. Disk
-overrides for these names are rendered verbatim, so their syntax is deliberately
-the operator's responsibility.
+The embedded defaults should define =provisioning/extra= as an empty/no-op
+template. Targets that need installer-specific snippets can set
+=installer.extraTemplate= to another template name. Disk overrides for selected
+extra template names are rendered verbatim, so their syntax is deliberately the
+operator's responsibility.
 
 ** Phased Implementation Plan
 
@@ -425,8 +443,8 @@ the operator's responsibility.
 - [X] Remove or isolate site-specific behavior from candidates for embedded
   defaults, including firstboot scripts, Ansible checkout defaults, SSH key
   fetches, and hard-coded credentials.
-- [X] Rewrite default Debian late_command behavior to a documented no-op partial
-  hook.
+- [X] Rewrite default post-install behavior to avoid embedded site-specific
+  firstboot actions.
 - [X] Update provisioning static URL examples to use =/configs/static/*= instead
   of UI =/static/*=.
 - [X] Add tests or static checks proving embedded-default candidates do not
@@ -450,12 +468,11 @@ the operator's responsibility.
 - [X] Overlay disk templates from =data-dir= on top of embedded defaults.
 - [X] Preserve environment override behavior for disk files.
 - [X] Preserve direct =/configs/<template>= query-param rendering behavior.
-- [X] Define and test the disk partial override contract: any parsed disk =.slc=
-  file can replace an embedded partial by defining the same template name.
-- [X] Refactor embedded provisioning templates around documented partial hooks:
-  preseed users, packages, storage, late command, finish; iPXE kernel args and
-  preseed URL; kickstart packages, storage, post; cloud-init users, units, and
-  write files.
+- [X] Define and test the disk template overlay contract: any parsed disk =.slc=
+  file can replace an embedded definition by defining the same template name.
+- [X] Refactor embedded provisioning templates around documented hooks before
+  the later structured mapping plan narrowed declarative customization to
+  structured fields and =installer.extraTemplate=.
 - [X] Add default no-op post-install hooks where generic installs should not run
   site-specific firstboot logic.
 - [X] Add tests for embedded fallback, full-template disk override precedence,
@@ -487,13 +504,12 @@ the operator's responsibility.
 *** Phase 6: Documentation And Verification
 
 - [X] Document the embedded-default plus disk-overlay model.
-- [X] Document full template overrides versus documented partial hook overrides.
-- [X] Document where to place partial override files and show the required
-  ={{define "hook/name"}}...{{end}}= shape.
-- [X] Document the default no-op =preseed/debian/late_command= behavior and show
-  an example site override that installs/enables firstboot from
-  =/configs/static/*=.
-- [X] Document how a =late_command= partial can delegate to a disk-backed static
+- [X] Document full template overrides and disk template overlay behavior.
+- [X] Document where to place disk override files and show the required
+  ={{define "template/name"}}...{{end}}= shape.
+- [X] Document the default no-op post-install behavior and show an example site
+  override that installs/enables firstboot from =/configs/static/*=.
+- [X] Document how a post-install snippet can delegate to a disk-backed static
   script under =data-dir/static= or a templated script under =data-dir=.
 - [X] Document that =mappings.yaml= remains external site policy.
 - [X] Document that embedded defaults intentionally do not ship site firstboot
@@ -557,8 +573,9 @@ the operator's responsibility.
   hostname maps, network maps, MAC maps, and IP maps.
 - [ ] Split boot config into =boot.netboot= for iPXE/netboot behavior and
   =boot.installed= for installed-system bootloader behavior.
-- [ ] Add =installer.configTemplate= and =installer.configParams= as the
-  structured replacement for installer config URL partials.
+- [ ] Add =installer.configTemplate=, =installer.configParams=, and
+  =installer.extraTemplate= as the structured replacement for installer config
+  URL partials and the native installer snippet escape hatch.
 - [ ] Define merge semantics for scalar fields, string lists, keyed maps, and
   removal/suppression where inherited structured values need to be disabled.
 - [ ] Preserve =params= as an escape hatch for low-level template-specific
@@ -581,8 +598,8 @@ the operator's responsibility.
   preseed/kickstart/cloud-init URLs from structured =boot.netboot=,
   =installer=, and =repos= data.
 - [ ] Render installed-system bootloader settings from =boot.installed= data.
-- [ ] Render supported imperative hooks verbatim after structured sections and
-  keep embedded no-op defaults for each hook.
+- [ ] Render the selected =installer.extraTemplate= verbatim after structured
+  sections and keep =provisioning/extra= as an embedded no-op default.
 - [ ] Keep legacy flat params as temporary projections or fallbacks where current
   templates already consume them, including =release=, =linuxargs=,
   =encrypt_home=, =vg_name=, =install_username=,
@@ -599,10 +616,9 @@ the operator's responsibility.
 - [ ] Remove docs and examples that recommend declarative partial overrides for
   common packages, locale, time, network, storage, boot, installer, repo, or
   user configuration.
-- [ ] Keep imperative hooks documented for post-install scripts, cloud-init
-  runcmd, cloud-init units, cloud-init write_files, and full-template
-  replacement.
-- [ ] Document that supported imperative hook overrides are rendered verbatim and
+- [ ] Keep =installer.extraTemplate= documented for native installer snippets
+  and full-template replacement.
+- [ ] Document that selected extra template overrides are rendered verbatim and
   are not syntax-validated beyond template rendering.
 - [ ] Add tests proving common declarative provisioning renders correctly without
   disk partial overrides.
@@ -619,8 +635,8 @@ the operator's responsibility.
 - [X] Disk =data-dir= files override embedded provisioning defaults.
 - [ ] Declarative provisioning fields are configured through structured mappings
   rather than partial hooks.
-- [ ] Disk templates can still use full-template replacement and supported
-  imperative hooks for site-specific behavior.
+- [ ] Disk templates can still use full-template replacement and selected native
+  installer extra snippets for site-specific behavior.
 - [ ] Mappings can define structured keyed users at defaults, target, and
   mapping levels.
 - [ ] =users.root= is rendered as the OS root account without requiring a
@@ -636,10 +652,10 @@ the operator's responsibility.
   defaults render common declarative provisioning behavior from structured data.
 - [ ] Common package, locale, time, network, storage, boot, installer, and repo
   configuration no longer requires partial overrides.
-- [ ] Imperative post-install hooks remain available for site-specific scripts,
-  files, services, and full-template replacement.
-- [ ] Supported imperative hooks have embedded no-op defaults and render disk
-  overrides verbatim.
+- [ ] =installer.extraTemplate= remains available for site-specific native
+  installer snippets and full-template replacement.
+- [ ] =provisioning/extra= is an embedded no-op default, and selected disk extra
+  templates render verbatim.
 - [X] Generic embedded templates do not trigger site-specific firstboot logic by
   default.
 - [X] =mappings.yaml= remains external runtime/site configuration.
