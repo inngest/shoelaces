@@ -1,6 +1,6 @@
 #+title: Embedded Provisioning Defaults
 #+author: Darwin D. Wu
-#+status: Done
+#+status: Active
 #+date: <2026-06-16 Tue>
 
 * Embedded Provisioning Defaults
@@ -63,9 +63,101 @@ defaults.
 - Generic embedded templates expose a small documented set of partial hooks so
   sites can override common extension points without replacing whole OS install
   templates.
+- Common user/account provisioning should be data-driven from mappings through a
+  structured keyed =users= model instead of requiring operators to override user
+  partial templates.
 - Site-specific firstboot and post-install orchestration are implemented as
   disk overrides, not embedded defaults.
 - Missing site mappings should remain a clear startup/configuration error.
+
+** Structured Users Model
+
+User and account provisioning should be represented as structured runtime
+mapping policy. The common path should not require a =users.slc= partial
+override.
+
+Users are keyed by username so defaults, targets, and matched mappings can merge
+deterministically. =root= is not a separate schema branch; it is the normal
+=users.root= account key with OS-specific rendering behavior.
+
+#+begin_src yaml
+defaults:
+  users:
+    root:
+      system: true
+      locked: true
+      passwordCrypted:
+        env: SHOELACES_ROOT_PASSWORD_CRYPTED
+
+    infra:
+      primary: true
+      fullName: Infrastructure User
+      locked: false
+      passwordCrypted:
+        env: SHOELACES_INFRA_PASSWORD_CRYPTED
+      sshAuthorizedKeys:
+        - env: SHOELACES_INFRA_SSH_KEY
+        - "ssh-ed25519 AAAA... example"
+      groups:
+        - sudo
+      shell: /bin/bash
+      sudo: "ALL=(ALL) NOPASSWD:ALL"
+
+targets:
+  debian12:
+    script: debian.ipxe
+    users:
+      infra:
+        fullName: Debian Infrastructure User
+
+macMaps:
+  - mac: "0c:42:a1:c3:52:96"
+    defaultTarget: debian12
+    targets:
+      - debian12
+    users:
+      infra:
+        sshAuthorizedKeys:
+          - env: SHOELACES_HOST_INFRA_SSH_KEY
+      breakglass:
+        locked: true
+#+end_src
+
+Initial fields:
+
+- =primary=: marks the account used for installer-specific single-user fields,
+  such as Debian preseed's regular install user.
+- =system=: marks system accounts. =root= should normally set this implicitly.
+- =locked=: disables password login when true.
+- =absent=: removes or suppresses an inherited user from the resolved account
+  set.
+- =fullName=: human-readable display name.
+- =passwordCrypted=: crypted password hash as either a raw value or ={ env:
+  ENV_VAR }=.
+- =sshAuthorizedKeys=: list of raw or environment-backed public keys.
+- =groups=: supplementary groups.
+- =shell=: login shell.
+- =sudo=: sudoers rule text for renderers that support it.
+
+Merge order should match parameter resolution: =defaults.users=,
+=targets.<name>.users=, matched mapping =users=, then generated/runtime values
+if a later phase explicitly supports them. User maps merge by username. Fields
+for the same username merge by key, =absent: true= suppresses inherited users,
+and exactly one non-root account should resolve as =primary= for preseed
+rendering.
+
+The structured user resolver should project common user data into the existing
+template parameter names while templates are migrated:
+
+- =install_username=
+- =install_user_fullname=
+- =install_user_password_crypted=
+
+After OS templates render directly from the normalized =users= data, the
+dedicated user partial hooks should be deprecated and removed from the supported
+override contract. Generic non-user partial hooks remain useful for install
+storage, packages, post-install commands, cloud-init units, and similar
+extension points.
 
 ** Partial Hook Model
 
@@ -177,7 +269,6 @@ Initial documented partial hooks:
 - =preseed/common/locale=
 - =preseed/common/network=
 - =preseed/common/time=
-- =preseed/common/users=
 - =preseed/debian/storage=
 - =preseed/debian/packages=
 - =preseed/debian/late_command=
@@ -188,9 +279,14 @@ Initial documented partial hooks:
 - =kickstart/centos/storage=
 - =kickstart/centos/packages=
 - =kickstart/centos/post=
-- =cloudconfig/coreos/users=
 - =cloudconfig/coreos/units=
 - =cloudconfig/coreos/write_files=
+
+Transitional user hooks kept only until structured users render across supported
+OS defaults:
+
+- =preseed/common/users=
+- =cloudconfig/coreos/users=
 
 ** Phased Implementation Plan
 
@@ -278,6 +374,54 @@ Initial documented partial hooks:
 - [X] Run =go test -tags=integration ./test/integ-test=.
 - [X] Run the plan status checker.
 
+*** Phase 7: Structured User Schema And Resolver
+
+- [ ] Add a keyed =users= schema to mapping defaults, targets, hostname maps,
+  network maps, MAC maps, and IP maps.
+- [ ] Treat =users.root= as the root account by username rather than a separate
+  root-only schema branch.
+- [ ] Support raw and ={ env: ENV_VAR }= values for sensitive user fields,
+  including =passwordCrypted= and =sshAuthorizedKeys=.
+- [ ] Define deterministic user merge semantics by username across defaults,
+  target, and matched mapping policy.
+- [ ] Support =absent: true= for suppressing inherited users.
+- [ ] Validate that at most one non-root user resolves with =primary: true= for
+  installer flows that need a single install user.
+- [ ] Add tests for keyed user parsing, merge order, =root= handling, inherited
+  user suppression, raw values, environment-backed values, and missing
+  environment variables.
+
+*** Phase 8: OS Template Rendering From Structured Users
+
+- [ ] Render Debian/Ubuntu preseed user settings from structured users,
+  including root lock/password and the primary regular install user.
+- [ ] Render CoreOS/cloud-init users from structured users, including SSH keys,
+  groups, shell, sudo, locked state, and password hashes where supported.
+- [ ] Render CentOS kickstart users from structured users, including root
+  password state, regular users, groups, and SSH key setup where required.
+- [ ] Keep the legacy flat params =install_username=,
+  =install_user_fullname=, and =install_user_password_crypted= as a temporary
+  projection or fallback while documentation and callers migrate.
+- [ ] Add render-validation tests proving Debian/Ubuntu preseed, CoreOS
+  cloud-init, and CentOS kickstart output valid user/account syntax.
+- [ ] Add tests proving sensitive user fields are redacted from logs/events.
+
+*** Phase 9: User Partial Hook Deprecation
+
+- [ ] Mark =preseed/common/users= and =cloudconfig/coreos/users= as deprecated
+  transitional hooks in docs after structured users are rendered by default.
+- [ ] Remove examples that recommend user partial overrides for common account,
+  password, SSH key, sudo, shell, or root-lock configuration.
+- [ ] Keep full-template overrides available for uncommon site-specific account
+  flows that structured users intentionally do not model.
+- [ ] Remove the dedicated user partial hooks from the documented compatibility
+  contract once structured users cover the supported OS defaults.
+- [ ] Add tests proving default user rendering works without a disk user partial
+  override.
+- [ ] Run =go test ./...=.
+- [ ] Run =go test -tags=integration ./test/integ-test=.
+- [ ] Run the plan status checker.
+
 ** Acceptance Criteria
 
 - [X] Generic provisioning templates can be served from embedded defaults.
@@ -287,6 +431,15 @@ Initial documented partial hooks:
   full OS install template.
 - [X] Partial override documentation shows both the disk path convention and the
   required template =define= name.
+- [ ] Mappings can define structured keyed users at defaults, target, and
+  mapping levels.
+- [ ] =users.root= is rendered as the OS root account without requiring a
+  separate root schema branch.
+- [ ] User secrets can be raw values or explicit environment-backed references.
+- [ ] Debian/Ubuntu preseed, CoreOS/cloud-init, and CentOS kickstart defaults
+  render users from structured data.
+- [ ] Common user/account configuration no longer requires a =users.slc=
+  partial override.
 - [X] Generic embedded templates do not trigger site-specific firstboot logic by
   default.
 - [X] =mappings.yaml= remains external runtime/site configuration.
