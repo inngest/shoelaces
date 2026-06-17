@@ -48,6 +48,8 @@ type Mappings struct {
 type DefaultsMap struct {
 	// Params is the global parameter map merged before target and mapping params.
 	Params map[string]any `koanf:"params"`
+	// Users contains keyed account defaults merged before target and mapping users.
+	Users map[string]UserConfig `koanf:"users"`
 }
 
 // Target describes a named boot target.
@@ -60,6 +62,8 @@ type Target struct {
 	Environment string `koanf:"environment"`
 	// Params is the target-specific parameter map merged after defaults.
 	Params map[string]any `koanf:"params"`
+	// Users contains target-specific account settings merged after defaults.
+	Users map[string]UserConfig `koanf:"users"`
 }
 
 // NetworkMapConfig maps a CIDR network to one or more targets.
@@ -74,6 +78,8 @@ type NetworkMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
 }
 
 // HostnameMapConfig maps a hostname regular expression to one or more targets.
@@ -86,6 +92,8 @@ type HostnameMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
 }
 
 // MacMapConfig maps an exact MAC address to one or more targets.
@@ -98,6 +106,8 @@ type MacMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
 }
 
 // IPMapConfig maps an exact IP address to one or more targets.
@@ -110,6 +120,8 @@ type IPMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
 }
 
 var knownTopLevelMappingKeys = map[string]struct{}{

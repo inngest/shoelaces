@@ -30,6 +30,21 @@ func TestParseMappingsLoadsNewSchema(t *testing.T) {
 defaults:
   params:
     install_username: infra
+  users:
+    root:
+      locked: true
+      passwordCrypted:
+        env: SHOELACES_ROOT_PASSWORD_CRYPTED
+    infra:
+      primary: true
+      fullName: Infrastructure User
+      sshAuthorizedKeys:
+        - "ssh-ed25519 AAAA example"
+        - env: SHOELACES_INFRA_SSH_KEY
+      groups:
+        - sudo
+      shell: /bin/bash
+      sudo: "ALL=(ALL) NOPASSWD:ALL"
 targets:
   debian12:
     script: debian.ipxe
@@ -37,6 +52,9 @@ targets:
     environment: testing
     params:
       release: bookworm
+    users:
+      infra:
+        fullName: Debian Infrastructure User
   debian13:
     script: debian.ipxe
     params:
@@ -49,6 +67,9 @@ networkMaps:
       - debian13
     params:
       role: network
+    users:
+      breakglass:
+        locked: true
 hostnameMaps:
   - hostname: '^host-\d+$'
     defaultTarget: debian12
@@ -71,13 +92,26 @@ ipMaps:
 	require.NoError(t, err)
 	require.Len(t, parsed.Targets, 2)
 	assert.Equal(t, "infra", parsed.Defaults.Params["install_username"])
+	require.NotNil(t, parsed.Defaults.Users["root"].Locked)
+	assert.True(t, *parsed.Defaults.Users["root"].Locked)
+	assert.Equal(t, map[string]any{"env": "SHOELACES_ROOT_PASSWORD_CRYPTED"}, parsed.Defaults.Users["root"].PasswordCrypted)
+	require.NotNil(t, parsed.Defaults.Users["infra"].Primary)
+	assert.True(t, *parsed.Defaults.Users["infra"].Primary)
+	assert.Equal(t, "Infrastructure User", parsed.Defaults.Users["infra"].FullName)
+	assert.Equal(t, []any{"ssh-ed25519 AAAA example", map[string]any{"env": "SHOELACES_INFRA_SSH_KEY"}}, parsed.Defaults.Users["infra"].SSHAuthorizedKeys)
+	assert.Equal(t, []string{"sudo"}, parsed.Defaults.Users["infra"].Groups)
+	assert.Equal(t, "/bin/bash", parsed.Defaults.Users["infra"].Shell)
+	assert.Equal(t, "ALL=(ALL) NOPASSWD:ALL", parsed.Defaults.Users["infra"].Sudo)
 	assert.Equal(t, "debian.ipxe", parsed.Targets["debian12"].Script)
 	assert.Equal(t, "Debian 12 Bookworm", parsed.Targets["debian12"].Label)
 	assert.Equal(t, "testing", parsed.Targets["debian12"].Environment)
 	assert.Equal(t, "bookworm", parsed.Targets["debian12"].Params["release"])
+	assert.Equal(t, "Debian Infrastructure User", parsed.Targets["debian12"].Users["infra"].FullName)
 	require.Len(t, parsed.NetworkMaps, 1)
 	assert.Equal(t, "debian12", parsed.NetworkMaps[0].DefaultTarget)
 	assert.Equal(t, []string{"debian12", "debian13"}, parsed.NetworkMaps[0].Targets)
+	require.NotNil(t, parsed.NetworkMaps[0].Users["breakglass"].Locked)
+	assert.True(t, *parsed.NetworkMaps[0].Users["breakglass"].Locked)
 	require.Len(t, parsed.HostnameMaps, 1)
 	require.Len(t, parsed.MacMaps, 1)
 	require.Len(t, parsed.IPMaps, 1)

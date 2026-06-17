@@ -294,6 +294,215 @@ func TestResolverDoesNotLeakResolvedParamsBetweenBoots(t *testing.T) {
 	assert.Equal(t, "$6$second", second.Params["root_password_crypted"])
 }
 
+func TestResolverResolvesStructuredUsersInMergeOrder(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Users: map[string]UserConfig{
+				"root": {
+					Locked:            boolPtr(true),
+					PasswordCrypted:   map[string]any{"env": "ROOT_PASSWORD_CRYPTED"},
+					SSHAuthorizedKeys: []any{"ssh-ed25519 root-default"},
+				},
+				"infra": {
+					Primary:           boolPtr(true),
+					FullName:          "Default Infrastructure User",
+					Locked:            boolPtr(true),
+					PasswordCrypted:   "default-hash",
+					SSHAuthorizedKeys: []any{"ssh-ed25519 default"},
+					Groups:            []string{"sudo"},
+				},
+				"breakglass": {
+					Locked: boolPtr(true),
+				},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"infra": {
+						FullName:        "Target Infrastructure User",
+						Locked:          boolPtr(false),
+						PasswordCrypted: map[string]any{"env": "INFRA_PASSWORD_CRYPTED"},
+						Groups:          []string{"sudo", "adm"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+				Users: map[string]UserConfig{
+					"infra": {
+						SSHAuthorizedKeys: []any{map[string]any{"env": "INFRA_SSH_KEY"}},
+						Shell:             "/bin/bash",
+					},
+					"breakglass": {
+						Absent: boolPtr(true),
+					},
+					"siteadmin": {
+						FullName: "Site Admin",
+						Locked:   boolPtr(true),
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			values := map[string]string{
+				"ROOT_PASSWORD_CRYPTED":  "$6$root",
+				"INFRA_PASSWORD_CRYPTED": "$6$infra",
+				"INFRA_SSH_KEY":          "ssh-ed25519 host",
+			}
+			value, ok := values[key]
+			return value, ok
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]ResolvedUser{
+		"root": {
+			Name:              "root",
+			System:            true,
+			Locked:            true,
+			PasswordCrypted:   "$6$root",
+			SSHAuthorizedKeys: []string{"ssh-ed25519 root-default"},
+		},
+		"infra": {
+			Name:              "infra",
+			Primary:           true,
+			FullName:          "Target Infrastructure User",
+			PasswordCrypted:   "$6$infra",
+			SSHAuthorizedKeys: []string{"ssh-ed25519 host"},
+			Groups:            []string{"sudo", "adm"},
+			Shell:             "/bin/bash",
+		},
+		"siteadmin": {
+			Name:     "siteadmin",
+			FullName: "Site Admin",
+			Locked:   true,
+		},
+	}, result.Users)
+	assert.NotContains(t, result.Users, "breakglass")
+}
+
+func TestResolverReturnsMissingEnvironmentVariableErrorForStructuredUsers(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"infra": {
+						PasswordCrypted: map[string]any{"env": "INFRA_PASSWORD_CRYPTED"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "", false
+		},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `parameter "user \"infra\" passwordCrypted" references missing environment variable "INFRA_PASSWORD_CRYPTED"`)
+}
+
+func TestResolverRejectsMultiplePrimaryNonRootUsers(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Users: map[string]UserConfig{
+				"infra": {Primary: boolPtr(true)},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"ops": {Primary: boolPtr(true)},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{Mac: "0c:42:a1:c3:52:96"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `multiple primary non-root users configured: [infra ops]`)
+}
+
+func TestResolverDoesNotLeakResolvedUsersBetweenBoots(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"infra": {
+						FullName:        "Infrastructure User",
+						PasswordCrypted: map[string]any{"env": "INFRA_PASSWORD_CRYPTED"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	first, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "$6$first", true
+		},
+	})
+	require.NoError(t, err)
+	mutated := first.Users["infra"]
+	mutated.FullName = "mutated"
+	mutated.PasswordCrypted = "mutated"
+	first.Users["infra"] = mutated
+
+	second, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "$6$second", true
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "Infrastructure User", second.Users["infra"].FullName)
+	assert.Equal(t, "$6$second", second.Users["infra"].PasswordCrypted)
+}
+
 func newTestResolver(t *testing.T) *Resolver {
 	t.Helper()
 
@@ -393,4 +602,8 @@ func newEnvTestResolver(t *testing.T) *Resolver {
 	})
 	require.NoError(t, err)
 	return resolver
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

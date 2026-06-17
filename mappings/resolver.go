@@ -75,6 +75,8 @@ type TargetCandidate struct {
 	Environment string
 	// Params is a copied target parameter map.
 	Params map[string]any
+	// Users is a copied target user map.
+	Users map[string]UserConfig
 }
 
 // ResolveResult describes the selected target or the manual choice set.
@@ -92,6 +94,8 @@ type ResolveResult struct {
 	MappingParams map[string]any
 	// Params is the fully merged and normalized runtime template parameter map.
 	Params map[string]any
+	// Users is the fully merged and normalized runtime account map.
+	Users map[string]ResolvedUser
 	// RequiresManualSelection is true when no default target was selected.
 	RequiresManualSelection bool
 }
@@ -114,6 +118,8 @@ func (r ResolveResult) AllowedTargetNames() []string {
 type Resolver struct {
 	// defaults stores copied global default params from mappings.yaml.
 	defaults map[string]any
+	// defaultUsers stores copied global user defaults from mappings.yaml.
+	defaultUsers map[string]UserConfig
 	// targets stores copied target definitions by name.
 	targets map[string]Target
 	// targetOrder gives deterministic ordering for unrestricted manual choices.
@@ -132,6 +138,7 @@ type compiledPolicy struct {
 	defaultTarget string
 	targets       []string
 	params        map[string]any
+	users         map[string]UserConfig
 }
 
 type compiledMACMap struct {
@@ -164,8 +171,9 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 	}
 
 	resolver := &Resolver{
-		defaults: copyParamMap(mappings.Defaults.Params),
-		targets:  make(map[string]Target, len(mappings.Targets)),
+		defaults:     copyParamMap(mappings.Defaults.Params),
+		defaultUsers: copyUserConfigMap(mappings.Defaults.Users),
+		targets:      make(map[string]Target, len(mappings.Targets)),
 	}
 	for name, target := range mappings.Targets {
 		resolver.targets[name] = copyTarget(target)
@@ -180,14 +188,14 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 		}
 		resolver.macMaps = append(resolver.macMaps, compiledMACMap{
 			mac:    mac.String(),
-			policy: compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params),
+			policy: compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params, mapping.Users),
 		})
 	}
 
 	for _, mapping := range mappings.IPMaps {
 		resolver.ipMaps = append(resolver.ipMaps, compiledIPMap{
 			ip:     net.ParseIP(mapping.IP),
-			policy: compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params),
+			policy: compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params, mapping.Users),
 		})
 	}
 
@@ -198,7 +206,7 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 		}
 		resolver.hostnameMaps = append(resolver.hostnameMaps, compiledHostnameMap{
 			hostname: hostname,
-			policy:   compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params),
+			policy:   compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params, mapping.Users),
 		})
 	}
 
@@ -209,7 +217,7 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 		}
 		resolver.networkMaps = append(resolver.networkMaps, compiledNetworkMap{
 			network: network,
-			policy:  compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params),
+			policy:  compilePolicy(mapping.DefaultTarget, mapping.Targets, mapping.Params, mapping.Users),
 		})
 	}
 
@@ -251,6 +259,10 @@ func (r *Resolver) Resolve(request ResolveRequest) (ResolveResult, error) {
 	if err != nil {
 		return ResolveResult{}, err
 	}
+	result.Users, err = r.resolveUsers(target.Users, policy.users, request)
+	if err != nil {
+		return ResolveResult{}, err
+	}
 	return result, nil
 }
 
@@ -278,6 +290,14 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 		MappingParams:  mappingParams,
 	}
 	result.Params, err = r.resolveParams(target, mappingParams, request)
+	if err != nil {
+		return ResolveResult{}, err
+	}
+	var policyUsers map[string]UserConfig
+	if policy != nil {
+		policyUsers = policy.users
+	}
+	result.Users, err = r.resolveUsers(target.Users, policyUsers, request)
 	if err != nil {
 		return ResolveResult{}, err
 	}
@@ -394,6 +414,39 @@ func (r *Resolver) resolveParams(target TargetCandidate, mappingParams map[strin
 	return merged, nil
 }
 
+func (r *Resolver) resolveUsers(targetUsers map[string]UserConfig, mappingUsers map[string]UserConfig, request ResolveRequest) (map[string]ResolvedUser, error) {
+	merged := make(map[string]UserConfig)
+	mergeUserConfigMap(merged, r.defaultUsers)
+	mergeUserConfigMap(merged, targetUsers)
+	mergeUserConfigMap(merged, mappingUsers)
+
+	lookup := request.EnvLookup
+	if lookup == nil {
+		lookup = os.LookupEnv
+	}
+
+	resolved := make(map[string]ResolvedUser)
+	primaryUsers := make([]string, 0)
+	for name, user := range merged {
+		if boolValue(user.Absent) {
+			continue
+		}
+		resolvedUser, err := resolveUser(name, user, lookup)
+		if err != nil {
+			return nil, err
+		}
+		if name != "root" && resolvedUser.Primary {
+			primaryUsers = append(primaryUsers, name)
+		}
+		resolved[name] = resolvedUser
+	}
+	sort.Strings(primaryUsers)
+	if len(primaryUsers) > 1 {
+		return nil, fmt.Errorf("multiple primary non-root users configured: %v", primaryUsers)
+	}
+	return resolved, nil
+}
+
 func mergeParamMap(dst map[string]any, src map[string]any) {
 	for key, value := range src {
 		dst[key] = value
@@ -439,11 +492,12 @@ func envReferenceFromMap(value map[string]any) (string, bool, error) {
 	return env, true, nil
 }
 
-func compilePolicy(defaultTarget string, targets []string, params map[string]any) compiledPolicy {
+func compilePolicy(defaultTarget string, targets []string, params map[string]any, users map[string]UserConfig) compiledPolicy {
 	return compiledPolicy{
 		defaultTarget: defaultTarget,
 		targets:       append([]string(nil), targets...),
 		params:        copyParamMap(params),
+		users:         copyUserConfigMap(users),
 	}
 }
 
@@ -454,11 +508,13 @@ func targetCandidate(name string, target Target) TargetCandidate {
 		Label:       target.Label,
 		Environment: target.Environment,
 		Params:      copyParamMap(target.Params),
+		Users:       copyUserConfigMap(target.Users),
 	}
 }
 
 func copyTarget(target Target) Target {
 	target.Params = copyParamMap(target.Params)
+	target.Users = copyUserConfigMap(target.Users)
 	return target
 }
 
