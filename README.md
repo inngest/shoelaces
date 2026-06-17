@@ -290,9 +290,9 @@ Example mapping:
 defaults:
   params:
     encrypt_home: "false"
-    ansible_repo_url: git@github.com:inngest/ansible.git
+    ansible_repo_url: git@example.com:infra/ansible.git
     ansible_branch: main
-    ansible_playbook: baremetal.yml
+    ansible_playbook: playbooks/baremetal.yml
     linuxargs: ""
 
 targets:
