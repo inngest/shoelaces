@@ -78,6 +78,38 @@ func TestRenderTemplateReturnsMissingVariableError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Missing variables in request: baseURL")
 }
 
+func TestListVariablesIncludesPartialDependencies(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "boot.ipxe.slc"), `{{define "boot.ipxe"}}#!ipxe
+echo {{.hostname}}
+{{template "boot/args" .}}
+{{end}}
+{{define "boot/args"}}args {{.partial_required}}{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+
+	assert.ElementsMatch(t, []string{"hostname", "partial_required"}, renderer.ListVariables("boot.ipxe", ""))
+}
+
+func TestRenderTemplateReturnsPartialMissingVariableError(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "boot.ipxe.slc"), `{{define "boot.ipxe"}}#!ipxe
+echo {{.hostname}}
+{{template "boot/args" .}}
+{{end}}
+{{define "boot/args"}}args {{.partial_required}}{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "boot.ipxe", map[string]interface{}{
+		"hostname": "partial-host",
+	}, "")
+
+	assert.Empty(t, rendered)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Missing variables in request: partial_required")
+}
+
 func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 	renderer := newTestRenderer(t)
 	var logOutput bytes.Buffer
@@ -118,6 +150,13 @@ func TestRenderTemplateUsesEmbeddedProvisioningFallback(t *testing.T) {
 	assert.Contains(t, rendered, "Debian bookworm netboot")
 	assert.Contains(t, rendered, "hostname=embedded-host")
 	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
+}
+
+func TestListVariablesIncludesEmbeddedProvisioningPartialDependencies(t *testing.T) {
+	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+
+	assert.Contains(t, renderer.ListVariables("debian.ipxe", ""), "encrypt_home")
+	assert.Contains(t, renderer.ListVariables("preseed/debian", ""), "encrypt_home")
 }
 
 func TestDiskTemplateOverridesEmbeddedProvisioningTemplate(t *testing.T) {
