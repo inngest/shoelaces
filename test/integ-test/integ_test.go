@@ -231,6 +231,25 @@ networkMaps:
 	proc.assertGETContains(t, "/configs/static/provisioning-default.txt", nil, []string{
 		"generic embedded provisioning static asset",
 	})
+
+	for _, tt := range []struct {
+		script   string
+		expected []string
+	}{
+		{script: "debian.ipxe", expected: []string{"encrypt_home"}},
+		{script: "preseed/debian", expected: []string{"encrypt_home"}},
+	} {
+		t.Run("embedded template variables "+tt.script, func(t *testing.T) {
+			var got []string
+			proc.getJSONWithQuery(t, "/ajax/script/params", url.Values{
+				"script": {tt.script},
+			}, &got)
+
+			for _, expected := range tt.expected {
+				assertStringInSlice(t, got, expected)
+			}
+		})
+	}
 }
 
 func startShoelaces(t *testing.T) *shoelacesProcess {
@@ -419,6 +438,16 @@ func (p *shoelacesProcess) getJSONWithQuery(t *testing.T, path string, query url
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		t.Fatalf("decode GET %s JSON: %v", path, err)
 	}
+}
+
+func assertStringInSlice(t *testing.T, got []string, expected string) {
+	t.Helper()
+	for _, item := range got {
+		if item == expected {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %#v", expected, got)
 }
 
 func (p *shoelacesProcess) get(t *testing.T, path string, query url.Values) *http.Response {

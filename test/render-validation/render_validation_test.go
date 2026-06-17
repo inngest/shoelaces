@@ -94,10 +94,11 @@ func TestRenderedIPXEScriptsHaveRequiredShape(t *testing.T) {
 			assert.Contains(t, rendered, "\nkernel ")
 			assert.Contains(t, rendered, "\ninitrd ")
 			assert.Contains(t, rendered, "\nboot")
+			commands := assertValidIPXEScript(t, rendered)
 			if templateName == "debian.ipxe" {
 				assert.Contains(t, rendered, "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false \\")
+				assert.Contains(t, findIPXECommand(t, commands, "kernel"), "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false")
 			}
-			assertNoDanglingLineContinuations(t, rendered)
 		})
 	}
 }
@@ -116,6 +117,24 @@ func TestRenderedPreseedsHaveRequiredShape(t *testing.T) {
 			assert.Contains(t, rendered, "d-i debian-installer/locale string en_US.UTF-8")
 			assert.Contains(t, rendered, "d-i passwd/user-password-crypted password !")
 			assert.Contains(t, rendered, "d-i finish-install/reboot_in_progress note")
+		})
+	}
+}
+
+func TestRenderedPreseedsPassDebconfSetSelectionsWhenAvailable(t *testing.T) {
+	debconfSetSelections := validatorPath(t, "debconf-set-selections")
+	renderer := newRenderer(t)
+
+	for _, templateName := range []string{
+		"preseed/debian",
+		"preseed/storage",
+		"preseed/ubuntu-minimal",
+	} {
+		t.Run(templateName, func(t *testing.T) {
+			preseedPath := writeRenderedFile(t, "preseed.cfg", renderTemplate(t, renderer, templateName, defaultRenderParams))
+
+			output, err := exec.Command(debconfSetSelections, "--checkonly", preseedPath).CombinedOutput()
+			require.NoError(t, err, string(output))
 		})
 	}
 }
@@ -221,17 +240,78 @@ func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name s
 	return rendered
 }
 
-func assertNoDanglingLineContinuations(t *testing.T, rendered string) {
+func assertValidIPXEScript(t *testing.T, rendered string) []string {
 	t.Helper()
 
+	allowedCommands := map[string]bool{
+		"boot":    true,
+		"chain":   true,
+		"echo":    true,
+		"imgfree": true,
+		"initrd":  true,
+		"kernel":  true,
+		"set":     true,
+	}
+
+	var commands []string
+	var continued string
 	lines := strings.Split(rendered, "\n")
-	for i, line := range lines[:len(lines)-1] {
-		if !strings.HasSuffix(strings.TrimRight(line, " \t"), "\\") {
+	for i, line := range lines {
+		lineNumber := i + 1
+		trimmed := strings.TrimSpace(line)
+		if lineNumber == 1 {
+			assert.Equal(t, "#!ipxe", trimmed)
 			continue
 		}
-		next := strings.TrimSpace(lines[i+1])
-		assert.NotEmpty(t, next, "line %d has a dangling continuation", i+1)
+		if trimmed == "\\" {
+			assert.Failf(t, "standalone iPXE continuation", "line %d contains only a continuation marker", lineNumber)
+			continue
+		}
+		if continued != "" && trimmed == "" {
+			assert.Failf(t, "empty iPXE continuation target", "line %d is empty after a continued command", lineNumber)
+			continue
+		}
+		if continued == "" && (trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ":")) {
+			continue
+		}
+
+		withoutTrailingSpace := strings.TrimRight(line, " \t")
+		hasContinuation := strings.HasSuffix(withoutTrailingSpace, "\\")
+		segment := strings.TrimSpace(strings.TrimSuffix(withoutTrailingSpace, "\\"))
+		if segment == "" {
+			assert.Failf(t, "empty iPXE command segment", "line %d has no command before a continuation marker", lineNumber)
+			continue
+		}
+		if continued != "" {
+			continued += " " + segment
+		} else {
+			continued = segment
+		}
+		if hasContinuation {
+			continue
+		}
+
+		command := strings.Join(strings.Fields(continued), " ")
+		fields := strings.Fields(command)
+		require.NotEmpty(t, fields, "line %d produced an empty iPXE command", lineNumber)
+		assert.True(t, allowedCommands[fields[0]], "line %d uses unknown iPXE command %q", lineNumber, fields[0])
+		commands = append(commands, command)
+		continued = ""
 	}
+	assert.Empty(t, continued, "iPXE script ended with an unterminated line continuation")
+	return commands
+}
+
+func findIPXECommand(t *testing.T, commands []string, commandName string) string {
+	t.Helper()
+	prefix := commandName + " "
+	for _, command := range commands {
+		if strings.HasPrefix(command, prefix) {
+			return command
+		}
+	}
+	t.Fatalf("missing iPXE command %q in %#v", commandName, commands)
+	return ""
 }
 
 func writeRenderedFile(t *testing.T, name string, content string) string {

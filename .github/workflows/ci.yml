@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y cloud-init
+          sudo apt-get install -y cloud-init debconf
           uv sync --frozen --only-dev
 
       - name: Run rendered provisioning validation
