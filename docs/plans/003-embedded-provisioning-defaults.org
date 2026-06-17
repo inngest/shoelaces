@@ -222,21 +222,21 @@ Initial documented partial hooks:
 
 *** Phase 3: Dynamic Template Overlay
 
-- [ ] Update dynamic template parsing to load embedded provisioning templates.
-- [ ] Overlay disk templates from =data-dir= on top of embedded defaults.
-- [ ] Preserve environment override behavior for disk files.
-- [ ] Preserve direct =/configs/<template>= query-param rendering behavior.
-- [ ] Define and test the disk partial override contract: any parsed disk =.slc=
+- [X] Update dynamic template parsing to load embedded provisioning templates.
+- [X] Overlay disk templates from =data-dir= on top of embedded defaults.
+- [X] Preserve environment override behavior for disk files.
+- [X] Preserve direct =/configs/<template>= query-param rendering behavior.
+- [X] Define and test the disk partial override contract: any parsed disk =.slc=
   file can replace an embedded partial by defining the same template name.
-- [ ] Refactor embedded provisioning templates around documented partial hooks:
+- [X] Refactor embedded provisioning templates around documented partial hooks:
   preseed users, packages, storage, late command, finish; iPXE kernel args and
   preseed URL; kickstart packages, storage, post; cloud-init users, units, and
   write files.
-- [ ] Add default no-op post-install hooks where generic installs should not run
+- [X] Add default no-op post-install hooks where generic installs should not run
   site-specific firstboot logic.
-- [ ] Add tests for embedded fallback, full-template disk override precedence,
+- [X] Add tests for embedded fallback, full-template disk override precedence,
   and partial disk override precedence.
-- [ ] Add tests proving mapping-resolved boot renders can use embedded templates
+- [X] Add tests proving mapping-resolved boot renders can use embedded templates
   when the selected target references an embedded template name.
 
 *** Phase 4: Static Provisioning Overlay
