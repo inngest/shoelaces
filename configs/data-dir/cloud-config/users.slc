@@ -1,4 +1,2 @@
 {{define "cloudconfig/coreos/users" -}}
-users: []
-ssh_authorized_keys: []
 {{end}}

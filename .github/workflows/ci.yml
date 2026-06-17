@@ -49,16 +49,20 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install provisioning validators
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y cloud-init python3-pip
-          python3 -m pip install --user pykickstart
-          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          sudo apt-get install -y cloud-init
+          uv sync --frozen --only-dev
 
       - name: Run rendered provisioning validation
-        run: go test ./test/render-validation
+        run: uv run go test ./test/render-validation
         env:
           SHOELACES_REQUIRE_PROVISIONING_VALIDATORS: "1"
 

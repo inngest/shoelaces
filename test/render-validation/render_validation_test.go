@@ -39,6 +39,8 @@ var defaultRenderParams = map[string]interface{}{
 	"release":      "bookworm",
 }
 
+var kickstartRenderParams = paramsWith(defaultRenderParams, "release", "8")
+
 var siteOnlyMarkers = []string{
 	"git@github.com:inngest/ansible.git",
 	"/static/firstboot",
@@ -122,12 +124,13 @@ func TestRenderedDebianPreseedKeepsGenericNoOpLateCommand(t *testing.T) {
 }
 
 func TestRenderedKickstartHasRequiredShape(t *testing.T) {
-	rendered := renderTemplate(t, newRenderer(t), "centos.ks", defaultRenderParams)
+	rendered := renderTemplate(t, newRenderer(t), "centos.ks", kickstartRenderParams)
 
 	assert.Contains(t, rendered, "cmdline")
-	assert.Contains(t, rendered, `url  --url="http://mirror.netcologne.de/centos/bookworm/os/x86_64"`)
+	assert.Contains(t, rendered, `url  --url="http://mirror.netcologne.de/centos/8/os/x86_64"`)
 	assert.Contains(t, rendered, "network --bootproto dhcp --hostname render-validation-host")
 	assert.Contains(t, rendered, "rootpw --lock")
+	assert.Contains(t, rendered, "authselect --useshadow --passalgo=sha512 --enablefingerprint")
 	assert.Contains(t, rendered, "%packages")
 	assert.Contains(t, rendered, "@core")
 	assert.Contains(t, rendered, "%post")
@@ -142,9 +145,8 @@ func TestRenderedCloudConfigParsesAsYAML(t *testing.T) {
 
 	require.NoError(t, yaml.Unmarshal([]byte(withoutHeader), &parsed))
 	assert.Equal(t, "render-validation-host", parsed["hostname"])
-	assert.Contains(t, parsed, "users")
-	assert.Contains(t, parsed, "ssh_authorized_keys")
-	assert.Contains(t, parsed, "coreos")
+	assert.Equal(t, false, parsed["preserve_hostname"])
+	assert.NotContains(t, parsed, "coreos")
 }
 
 func TestRenderedCloudConfigPassesCloudInitSchemaWhenAvailable(t *testing.T) {
@@ -157,23 +159,23 @@ func TestRenderedCloudConfigPassesCloudInitSchemaWhenAvailable(t *testing.T) {
 
 func TestRenderedKickstartPassesKsvalidatorWhenAvailable(t *testing.T) {
 	ksvalidator := validatorPath(t, "ksvalidator")
-	kickstartPath := writeRenderedFile(t, "centos.ks", renderTemplate(t, newRenderer(t), "centos.ks", defaultRenderParams))
+	kickstartPath := writeRenderedFile(t, "centos.ks", renderTemplate(t, newRenderer(t), "centos.ks", kickstartRenderParams))
 
-	output, err := exec.Command(ksvalidator, kickstartPath).CombinedOutput()
+	output, err := exec.Command(ksvalidator, "--version", "RHEL8", kickstartPath).CombinedOutput()
 	require.NoError(t, err, string(output))
 }
 
 func validatorPath(t *testing.T, name string) string {
 	t.Helper()
 
+	if os.Getenv(requireProvisioningValidatorsEnv) != "1" {
+		t.Skipf("%s validation requires %s=1", name, requireProvisioningValidatorsEnv)
+	}
 	path, err := exec.LookPath(name)
 	if err == nil {
 		return path
 	}
-	if os.Getenv(requireProvisioningValidatorsEnv) == "1" {
-		t.Fatalf("%s is required when %s=1", name, requireProvisioningValidatorsEnv)
-	}
-	t.Skipf("%s is not installed", name)
+	t.Fatalf("%s is required when %s=1", name, requireProvisioningValidatorsEnv)
 	return ""
 }
 
@@ -212,4 +214,13 @@ func writeRenderedFile(t *testing.T, name string, content string) string {
 	path := filepath.Join(t.TempDir(), name)
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
+}
+
+func paramsWith(params map[string]interface{}, key string, value interface{}) map[string]interface{} {
+	copied := make(map[string]interface{}, len(params)+1)
+	for k, v := range params {
+		copied[k] = v
+	}
+	copied[key] = value
+	return copied
 }
