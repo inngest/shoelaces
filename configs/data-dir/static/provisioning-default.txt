@@ -1,0 +1,6 @@
+Copyright 2026 Inngest Inc.
+
+This file is a generic embedded provisioning static asset.
+
+Site-specific scripts, credentials, SSH keys, and firstboot orchestration should
+be supplied from disk-backed data-dir/static overrides.

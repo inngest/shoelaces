@@ -92,6 +92,51 @@ func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
 	assert.Equal(t, "from data dir\n", rr.Body.String())
 }
 
+func TestConfigsStaticRouteServesEmbeddedProvisioningAsset(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "generic embedded provisioning static asset")
+}
+
+func TestConfigsStaticRouteDiskOverridesEmbeddedProvisioningAsset(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "provisioning-default.txt"), []byte("from disk\n"), 0o644))
+	handler := newTestRouter(t, dataDir)
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "from disk\n", rr.Body.String())
+}
+
+func TestConfigsStaticRouteMissingFileReturnsNotFound(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/missing.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestStaticRouteDoesNotServeProvisioningDefaults(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/static/provisioning-default.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+}
+
 func TestConfigTemplateRouteUsesQueryParamsWithoutMappingDefaults(t *testing.T) {
 	dataDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.ipxe.slc"), []byte(`{{define "install.ipxe"}}release={{.release}}
