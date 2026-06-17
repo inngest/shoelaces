@@ -162,6 +162,52 @@ targets:
 	assert.Equal(t, "host", env.HostnameMaps[0].Script.Params["role"])
 }
 
+func TestInitMappingsRendersMappingsTemplateWithNonStringDefaultTargetParams(t *testing.T) {
+	env := defaultEnvironment()
+	env.Logger = log.MakeLogger(io.Discard)
+	env.initStaticTemplates()
+	mappingsPath := filepath.Join(t.TempDir(), "mappings.yaml")
+	require.NoError(t, os.WriteFile(mappingsPath, []byte(`
+defaults:
+  params:
+    install_retries: 3
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+    params:
+      install_token:
+        env: INSTALL_TOKEN
+hostnameMaps:
+  - hostname: '^host-\d+$'
+    defaultTarget: debian12
+    targets:
+      - debian12
+targets:
+  debian12:
+    script: network.ipxe
+    params:
+      secure_boot: true
+`), 0o644))
+
+	require.NoError(t, env.initMappings(mappingsPath))
+
+	tplVars := struct {
+		HostnameMaps *[]mappings.HostnameMap
+		NetworkMaps  *[]mappings.NetworkMap
+	}{
+		&env.HostnameMaps,
+		&env.NetworkMaps,
+	}
+	var rendered bytes.Buffer
+	require.NoError(t, env.StaticTemplates.ExecuteTemplate(&rendered, "mappings", tplVars))
+	assert.Contains(t, rendered.String(), "network.ipxe")
+	assert.Contains(t, rendered.String(), "install_retries: 3")
+	assert.Contains(t, rendered.String(), "secure_boot: true")
+	assert.Contains(t, rendered.String(), "install_token: map[env:INSTALL_TOKEN]")
+}
+
 func TestInitMappingsReturnsInvalidCIDRError(t *testing.T) {
 	env := defaultEnvironment()
 	env.Logger = log.MakeLogger(io.Discard)

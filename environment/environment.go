@@ -220,13 +220,13 @@ func initScriptForTarget(configMappings *mappings.Mappings, targetName string, m
 		Params:      make(map[string]interface{}),
 	}
 	for key, value := range configMappings.Defaults.Params {
-		mappingScript.Params[key] = value
+		mappingScript.Params[key] = fmt.Sprint(value)
 	}
 	for key, value := range target.Params {
-		mappingScript.Params[key] = value
+		mappingScript.Params[key] = fmt.Sprint(value)
 	}
 	for key, value := range mappingParams {
-		mappingScript.Params[key] = value
+		mappingScript.Params[key] = fmt.Sprint(value)
 	}
 
 	return mappingScript, nil
