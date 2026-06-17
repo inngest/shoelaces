@@ -157,11 +157,11 @@ macMaps:
 
 *** Phase 5: Sensitive Value Handling
 
-- [ ] Add parameter redaction for logs and event output where sensitive values
+- [X] Add parameter redaction for logs and event output where sensitive values
   may appear.
-- [ ] Redact keys matching password, password_crypted, passphrase, secret,
+- [X] Redact keys matching password, password_crypted, passphrase, secret,
   token, private key, authorized keys, and similar names.
-- [ ] Add tests proving sensitive values do not appear in logs/events that use
+- [X] Add tests proving sensitive values do not appear in logs/events that use
   redacted parameter rendering.
 
 *** Phase 6: Documentation And Verification
@@ -183,7 +183,7 @@ macMaps:
 - [ ] Raw and environment-backed params render into provisioning templates.
 - [ ] Runtime boot rendering uses fresh resolved parameter maps and does not
   mutate shared mapping configuration.
-- [ ] Sensitive params are redacted from logs/events.
+- [X] Sensitive params are redacted from logs/events.
 - [ ] =/static/*= and =/configs/static/*= remain separate from mapping
   behavior.
 - [ ] =go test ./...= passes.
