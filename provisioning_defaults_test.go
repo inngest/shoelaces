@@ -15,6 +15,7 @@
 package shoelaces
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,8 +41,10 @@ var genericProvisioningDefaultCandidates = []string{
 var siteOnlyProvisioningFiles = []string{
 	"mappings.yaml",
 	"plain/firstboot.defaults.slc",
+	"static/authorized_keys",
 	"static/firstboot.service",
 	"static/firstboot.sh",
+	"static/id_ansible",
 	"static/test-script",
 }
 
@@ -78,6 +81,35 @@ func TestGenericProvisioningDefaultCandidatesDoNotContainSiteOnlyMarkers(t *test
 				if strings.Contains(content, marker) {
 					t.Fatalf("generic provisioning default candidate %q contains site-only marker %q", candidate, marker)
 				}
+			}
+		})
+	}
+}
+
+func TestEmbeddedProvisioningDefaultFilesExist(t *testing.T) {
+	defaults := ProvisioningDefaultsFS()
+	for _, candidate := range genericProvisioningDefaultCandidates {
+		t.Run(candidate, func(t *testing.T) {
+			info, err := fs.Stat(defaults, candidate)
+			if err != nil {
+				t.Fatalf("expected %q in embedded provisioning defaults: %v", candidate, err)
+			}
+			if info.IsDir() {
+				t.Fatalf("expected %q to be a file", candidate)
+			}
+			if info.Size() == 0 {
+				t.Fatalf("expected %q to be non-empty", candidate)
+			}
+		})
+	}
+}
+
+func TestEmbeddedProvisioningDefaultsExcludeSiteOnlyFiles(t *testing.T) {
+	defaults := ProvisioningDefaultsFS()
+	for _, excluded := range siteOnlyProvisioningFiles {
+		t.Run(excluded, func(t *testing.T) {
+			if _, err := fs.Stat(defaults, excluded); err == nil {
+				t.Fatalf("site-only provisioning file %q must not be embedded", excluded)
 			}
 		})
 	}
