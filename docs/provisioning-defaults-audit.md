@@ -48,5 +48,6 @@ disk. They should not become embedded generic defaults:
 | `static/test-script`           | Static-file serving example fixture.             |
 
 Operators that need firstboot behavior should provide their own disk-backed
-late-command partial and scripts under `data-dir`, usually fetched through
-`/configs/static/*` for raw files or `/configs/<template>` for templated scripts.
+`installer.extraTemplate` snippet and scripts under `data-dir`, usually fetched
+through `/configs/static/*` for raw files or `/configs/<template>` for templated
+scripts.

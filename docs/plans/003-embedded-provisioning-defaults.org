@@ -1,6 +1,6 @@
 #+title: Embedded Provisioning Defaults
 #+author: Darwin D. Wu
-#+status: Active
+#+status: Done
 #+date: <2026-06-16 Tue>
 
 * Embedded Provisioning Defaults
@@ -621,50 +621,50 @@ operator's responsibility.
 
 *** Phase 12: Remove Declarative Partial Hooks
 
-- [ ] Remove declarative partial hooks once the equivalent structured config
+- [X] Remove declarative partial hooks once the equivalent structured config
   renders by default.
-- [ ] Remove docs and examples that recommend declarative partial overrides for
+- [X] Remove docs and examples that recommend declarative partial overrides for
   common packages, locale, time, network, storage, boot, installer, repo, or
   user configuration.
-- [ ] Keep =installer.extraTemplate= documented for native installer snippets
+- [X] Keep =installer.extraTemplate= documented for native installer snippets
   and full-template replacement.
-- [ ] Document that selected extra template overrides are rendered verbatim and
+- [X] Document that selected extra template overrides are rendered verbatim and
   are not syntax-validated beyond template rendering.
-- [ ] Add tests proving common declarative provisioning renders correctly without
+- [X] Add tests proving common declarative provisioning renders correctly without
   disk partial overrides.
-- [ ] Add tests proving disk overrides for removed declarative hook names no
+- [X] Add tests proving disk overrides for removed declarative hook names no
   longer affect embedded default rendering.
-- [ ] Run =go test ./...=.
-- [ ] Run =go test -tags=integration ./test/integ-test=.
-- [ ] Run the plan status checker.
+- [X] Run =go test ./...=.
+- [X] Run =go test -tags=integration ./test/integ-test=.
+- [X] Run the plan status checker.
 
 ** Acceptance Criteria
 
 - [X] Generic provisioning templates can be served from embedded defaults.
 - [X] Generic static provisioning files can be served from embedded defaults.
 - [X] Disk =data-dir= files override embedded provisioning defaults.
-- [ ] Declarative provisioning fields are configured through structured mappings
+- [X] Declarative provisioning fields are configured through structured mappings
   rather than partial hooks.
-- [ ] Disk templates can still use full-template replacement and selected native
+- [X] Disk templates can still use full-template replacement and selected native
   installer extra snippets for site-specific behavior.
-- [ ] Mappings can define structured keyed users at defaults, target, and
+- [X] Mappings can define structured keyed users at defaults, target, and
   mapping levels.
-- [ ] =users.root= is rendered as the OS root account without requiring a
+- [X] =users.root= is rendered as the OS root account without requiring a
   separate root schema branch.
-- [ ] User secrets can be raw values or explicit environment-backed references.
-- [ ] Debian/Ubuntu preseed, CoreOS/cloud-init, and CentOS kickstart defaults
+- [X] User secrets can be raw values or explicit environment-backed references.
+- [X] Debian/Ubuntu preseed, CoreOS/cloud-init, and CentOS kickstart defaults
   render users from structured data.
-- [ ] Common user/account configuration no longer requires a =users.slc=
+- [X] Common user/account configuration no longer requires a =users.slc=
   partial override.
-- [ ] Mappings can define structured locale, time, network, packages, storage,
+- [X] Mappings can define structured locale, time, network, packages, storage,
   boot, installer, and repo policy at defaults, target, and mapping levels.
-- [ ] Debian/Ubuntu preseed, CoreOS/cloud-init, CentOS kickstart, and iPXE
+- [X] Debian/Ubuntu preseed, CoreOS/cloud-init, CentOS kickstart, and iPXE
   defaults render common declarative provisioning behavior from structured data.
-- [ ] Common package, locale, time, network, storage, boot, installer, and repo
+- [X] Common package, locale, time, network, storage, boot, installer, and repo
   configuration no longer requires partial overrides.
-- [ ] =installer.extraTemplate= remains available for site-specific native
+- [X] =installer.extraTemplate= remains available for site-specific native
   installer snippets and full-template replacement.
-- [ ] =provisioning/extra= is an embedded no-op default, and selected disk extra
+- [X] =provisioning/extra= is an embedded no-op default, and selected disk extra
   templates render verbatim.
 - [X] Generic embedded templates do not trigger site-specific firstboot logic by
   default.

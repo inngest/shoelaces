@@ -14,7 +14,6 @@ lang      {{.locale_language}}
 timezone {{.time_timezone}} {{.kickstart_utc_flag}}
 {{template "kickstart/centos/storage" .}}
 {{template "kickstart/centos/packages" .}}
-{{template "kickstart/centos/post" .}}
 {{template "kickstart/centos/user_ssh_keys" .}}
 {{.installerExtra}}
 reboot
@@ -57,15 +56,6 @@ logvol / --fstype="ext4" --vgname={{.vg_name}} --size=10000 --name=lv_root --gro
 %packages
 {{.kickstart_package_groups}}
 {{.kickstart_packages}}
-%end
-{{end}}
-
-{{define "kickstart/centos/post" -}}
-%post
-#!/bin/bash
-# No site orchestration is run by default. Sites can override this partial to
-# add post-install behavior.
-true
 %end
 {{end}}
 

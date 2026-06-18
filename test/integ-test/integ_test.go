@@ -238,7 +238,7 @@ networkMaps:
 	})
 	proc.assertGETContains(t, "/configs/preseed/debian", url.Values{"encrypt_home": {"false"}}, []string{
 		"d-i user-setup/encrypt-home boolean false",
-		"d-i preseed/late_command string true",
+		"d-i finish-install/reboot_in_progress note",
 	})
 	proc.assertGETContains(t, "/configs/static/provisioning-default.txt", nil, []string{
 		"generic embedded provisioning static asset",

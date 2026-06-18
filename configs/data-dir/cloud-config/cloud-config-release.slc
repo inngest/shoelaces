@@ -27,13 +27,5 @@ users:
 {{end -}}
 {{end -}}
 {{end -}}
-{{template "cloudconfig/coreos/write_files" .}}
-{{template "cloudconfig/coreos/units" .}}
 {{.installerExtra}}
-{{end}}
-
-{{define "cloudconfig/coreos/write_files" -}}
-{{end}}
-
-{{define "cloudconfig/coreos/units" -}}
 {{end}}

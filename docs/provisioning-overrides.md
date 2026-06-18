@@ -20,11 +20,9 @@ Dynamic templates are loaded in this order:
 3. disk environment overrides under `data-dir/env_overrides/<env>`
 
 If a later layer defines the same template name as an earlier layer, the later
-definition wins. This works for complete templates and for the remaining named
-partial hooks. User and account settings are rendered from structured
-`mappings.yaml` policy instead of user partial hooks.
-Variables referenced by partial hooks are included when Shoelaces reports
-required template parameters for manual rendering in the web UI.
+definition wins. This works for complete templates. Common provisioning
+settings are rendered from structured `mappings.yaml` policy instead of partial
+hooks.
 
 Provisioning static files are served from `/configs/static/*` in this order:
 
@@ -49,36 +47,41 @@ echo site Debian boot
 The file path is only for organization and discovery. The `define` name is the
 override contract.
 
-## Partial Overrides
+## Native Installer Extra Templates
 
-Embedded templates expose named hooks for common site customizations. A disk
-file can override a hook by defining the same partial name:
+For site-specific native installer snippets, set `installer.extraTemplate` on
+the selected target or mapping. Shoelaces renders that template verbatim near
+the end of the installer config. The embedded default `provisioning/extra` is a
+no-op.
+
+```yaml
+targets:
+  debian12:
+    script: debian.ipxe
+    installer:
+      configTemplate: preseed/debian
+      extraTemplate: provisioning/debian-extra
+```
+
+Then provide the selected template on disk:
 
 ```text
 data-dir/
-  preseed/
-    debian/
-      late_command.slc
+  provisioning/
+    debian-extra.slc
 ```
 
 ```gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/debian-extra" -}}
 d-i preseed/late_command string \
   in-target /bin/sh -c 'echo site late_command override'
 {{end}}
 ```
 
-Environment-specific partials use the same `define` name under the environment
-override tree:
-
-```text
-data-dir/
-  env_overrides/
-    production/
-      preseed/
-        debian/
-          late_command.slc
-```
+The snippet is installer-native and Shoelaces does not parse or validate its
+syntax beyond normal Go template rendering. A Debian target can emit preseed
+lines, a kickstart target can emit `%post`, and a cloud-init target can emit
+valid cloud-init YAML such as `runcmd`, `write_files`, or `units`.
 
 ## Structured Users
 
@@ -246,14 +249,8 @@ macMaps:
 
 ## Late Command Scripts
 
-The embedded Debian `preseed/debian/late_command` hook is a no-op:
-
-```gotemplate
-d-i preseed/late_command string true
-```
-
 For larger site behavior, keep shell scripts out of the preseed body and serve
-them through Shoelaces.
+them through Shoelaces from an `installer.extraTemplate` snippet.
 
 For a raw script, place it under disk-backed `data-dir/static`:
 
@@ -266,7 +263,7 @@ data-dir/
 Then reference it through `/configs/static/*`:
 
 ```gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/debian-extra" -}}
 d-i preseed/late_command string \
   wget -O /target/usr/local/sbin/late-command.sh http://{{ .baseURL }}/configs/static/late-command.sh; \
   chmod 0755 /target/usr/local/sbin/late-command.sh; \
@@ -295,7 +292,7 @@ hostnamectl set-hostname {{ .hostname }}
 Then fetch it through `/configs/<template>` and pass required query parameters:
 
 ```gotemplate
-{{define "preseed/debian/late_command" -}}
+{{define "provisioning/debian-extra" -}}
 d-i preseed/late_command string \
   wget -O /target/usr/local/sbin/late-command.sh "http://{{ .baseURL }}/configs/scripts/late-command.sh?hostname={{ .hostname | urlquery }}"; \
   chmod 0755 /target/usr/local/sbin/late-command.sh; \
@@ -303,26 +300,21 @@ d-i preseed/late_command string \
 {{end}}
 ```
 
-## Hook Names
+## Removed Partial Hooks
 
-Initial embedded partial hooks:
+The embedded defaults no longer support named partial hooks for common
+provisioning behavior. Configure packages, locale, time, network, storage,
+boot, installer URLs, repositories, and users through structured `mappings.yaml`
+fields. Disk files that define old hook names such as
+`preseed/debian/late_command`, `ipxe/linux_args`, `ipxe/debian/preseed_url`,
+`kickstart/centos/post`, or `cloudconfig/coreos/units` are parsed but are not
+called by embedded defaults.
 
-- `preseed/common/locale`
-- `preseed/common/network`
-- `preseed/common/time`
-- `preseed/debian/storage`
-- `preseed/debian/packages`
-- `preseed/debian/late_command`
-- `preseed/debian/finish`
-- `ipxe/linux_args`
-- `ipxe/debian/kernel_args`
-- `ipxe/debian/preseed_url`
-- `kickstart/centos/storage`
-- `kickstart/centos/packages`
-- `kickstart/centos/post`
-- `cloudconfig/coreos/units`
-- `cloudconfig/coreos/write_files`
+Use full-template replacement when a site needs to replace an entire embedded
+template. Use `installer.extraTemplate` when a site needs native installer
+snippets or arbitrary imperative behavior.
 
 Embedded defaults do not include site firstboot orchestration, SSH keys,
 credentials, Ansible repository URLs, or host enrollment logic. Supply those
-from disk-backed overrides or external automation.
+from disk-backed extra templates, full-template overrides, or external
+automation.

@@ -337,10 +337,10 @@ func TestRenderedPreseedsApplyStructuredUsers(t *testing.T) {
 	}
 }
 
-func TestRenderedDebianPreseedKeepsGenericNoOpLateCommand(t *testing.T) {
+func TestRenderedDebianPreseedDoesNotIncludeSitePostInstallLogicByDefault(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
 
-	assert.Contains(t, rendered, "d-i preseed/late_command string true")
+	assert.NotContains(t, rendered, "d-i preseed/late_command")
 	assert.NotContains(t, rendered, "firstboot")
 	assert.NotContains(t, rendered, "ansible")
 }
@@ -405,8 +405,6 @@ func TestRenderedKickstartHasRequiredShape(t *testing.T) {
 	assert.Contains(t, rendered, "authselect --useshadow --passalgo=sha512 --enablefingerprint")
 	assert.Contains(t, rendered, "%packages")
 	assert.Contains(t, rendered, "@core")
-	assert.Contains(t, rendered, "%post")
-	assert.Contains(t, rendered, "true")
 	assert.Contains(t, rendered, "reboot")
 }
 

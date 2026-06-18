@@ -371,23 +371,57 @@ echo disk override {{.hostname}}
 	assert.NotContains(t, rendered, "Debian bookworm netboot")
 }
 
-func TestDiskPartialOverridesEmbeddedProvisioningPartial(t *testing.T) {
+func TestRemovedDeclarativeHookPartialsDoNotAffectEmbeddedProvisioningTemplates(t *testing.T) {
 	dataDir := t.TempDir()
 	writeTemplate(t, filepath.Join(dataDir, "preseed", "debian", "late_command.slc"), `{{define "preseed/debian/late_command" -}}
-d-i preseed/late_command string echo partial override for {{.hostname}}
+d-i preseed/late_command string echo removed preseed hook for {{.hostname}}
+{{end}}
+`)
+	writeTemplate(t, filepath.Join(dataDir, "ipxe", "linux_args.slc"), `{{define "ipxe/linux_args" -}}
+removed-linux-args
+{{end}}
+`)
+	writeTemplate(t, filepath.Join(dataDir, "ipxe", "debian", "preseed_url.slc"), `{{define "ipxe/debian/preseed_url" -}}
+http://removed.example/preseed
+{{end}}
+`)
+	writeTemplate(t, filepath.Join(dataDir, "kickstart", "centos", "post.slc"), `{{define "kickstart/centos/post" -}}
+%post
+echo removed kickstart hook
+%end
+{{end}}
+`)
+	writeTemplate(t, filepath.Join(dataDir, "cloud-config", "units.slc"), `{{define "cloudconfig/coreos/units" -}}
+removed-cloudconfig-units: true
 {{end}}
 `)
 	renderer := newEmbeddedFallbackRenderer(t, dataDir)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", map[string]interface{}{
+	params := map[string]interface{}{
 		"baseURL":      "127.0.0.1:8081",
 		"encrypt_home": false,
 		"hostname":     "partial-host",
-	}, "")
+		"release":      "bookworm",
+	}
 
+	preseed, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
 	require.NoError(t, err)
-	assert.Contains(t, rendered, "echo partial override for partial-host")
-	assert.NotContains(t, rendered, "d-i preseed/late_command string true")
+	assert.NotContains(t, preseed, "removed preseed hook")
+	assert.NotContains(t, preseed, "d-i preseed/late_command string true")
+
+	ipxe, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "debian.ipxe", params, "")
+	require.NoError(t, err)
+	assert.NotContains(t, ipxe, "removed-linux-args")
+	assert.NotContains(t, ipxe, "removed.example")
+	assert.Contains(t, ipxe, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
+
+	kickstart, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "centos.ks", params, "")
+	require.NoError(t, err)
+	assert.NotContains(t, kickstart, "removed kickstart hook")
+
+	cloudConfig, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "cloudconfig-coreos", params, "")
+	require.NoError(t, err)
+	assert.NotContains(t, cloudConfig, "removed-cloudconfig-units")
 }
 
 func TestRenderTemplateAppliesInstallerExtraWithDefaultedParams(t *testing.T) {

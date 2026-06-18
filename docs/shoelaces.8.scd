@@ -118,10 +118,9 @@ provisioning files.
 
 "mappings.yaml" remains external site policy. It is not embedded and must be
 provided through *--data-dir*. See "docs/provisioning-overrides.md" in the
-source tree for full-template override, partial hook, and late-command script
-examples. Variables referenced by partial hooks are included in manual template
-parameter prompts; the override guide also documents shared preseed install-user
-parameters.
+source tree for full-template overrides, structured provisioning fields, and
+*installer.extraTemplate* snippets for native installer behavior such as Debian
+late_command, kickstart %post, or cloud-init runcmd.
 
 Here is an example TOML config file:
 

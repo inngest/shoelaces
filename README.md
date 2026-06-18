@@ -200,10 +200,9 @@ settings use a `tftp` object/table and map to the `tftp-*` CLI flags, such as
 Generic provisioning defaults are embedded in the binary, but `mappings.yaml`
 is still external site policy and must be provided through `data-dir`. See
 [Provisioning Defaults And Overrides](docs/provisioning-overrides.md) for the
-disk overlay model, full-template overrides, partial hooks, and late-command
-script examples. Variables referenced by partial hooks are included in manual
-template parameter prompts; the override guide also documents the shared preseed
-install-user parameters.
+disk overlay model, full-template overrides, structured provisioning fields,
+and `installer.extraTemplate` snippets for native installer behavior such as
+Debian `late_command`, kickstart `%post`, or cloud-init `runcmd`.
 
 Example TOML config:
 

@@ -184,7 +184,8 @@ func TestConfigTemplateRouteRendersEmbeddedProvisioningTemplate(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "d-i user-setup/encrypt-home boolean false")
-	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string true")
+	assert.Contains(t, rr.Body.String(), "d-i finish-install/reboot_in_progress note")
+	assert.NotContains(t, rr.Body.String(), "d-i preseed/late_command")
 }
 
 func newTestRouter(t *testing.T, dataDir string) http.Handler {

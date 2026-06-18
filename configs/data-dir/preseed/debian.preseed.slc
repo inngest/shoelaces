@@ -9,7 +9,6 @@ d-i apt-setup/contrib boolean {{.repo_contrib}}
 
 {{template "preseed/debian/storage" .}}
 {{template "preseed/debian/packages" .}}
-{{template "preseed/debian/late_command" .}}
 {{.installerExtra}}
 {{template "preseed/debian/finish" .}}
 {{end}}
@@ -111,11 +110,4 @@ d-i pkgsel/include string sudo
 d-i grub-installer/timeout string {{.boot_timeout_seconds}}
 d-i popularity-contest/participate boolean false
 d-i finish-install/reboot_in_progress note
-{{end}}
-
-{{define "preseed/debian/late_command" -}}
-# No site orchestration is run by default. Sites can override this partial to
-# download and execute a disk-backed script from /configs/static/* or
-# /configs/<template>.
-d-i preseed/late_command string true
 {{end}}
