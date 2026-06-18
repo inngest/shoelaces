@@ -1,3 +1,12 @@
+## [1.6.0] - 2026-06-18
+
+### 🚀 Features
+
+- *(mappings)* Add structured wipe disk selectors (#40)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(go)* Update toolchain and docs (#39)
 ## [1.5.0] - 2026-06-18
 
 ### 🚀 Features
@@ -21,6 +30,7 @@
 
 - Change dry run to only run on release PRs (#28)
 - *(release)* Restore semver release flow (#35)
+- *(release)* V1.5.0 (#29)
 ## [1.4.7] - 2026-06-12
 
 ### ⚙️ Miscellaneous Tasks
