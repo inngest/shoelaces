@@ -87,13 +87,13 @@ persistence:
 
 - [ ] Add =persistence= config fields to CLI/config parsing and
   =environment.Options=.
-- [ ] Default to SQLite at =data-dir/runtime/shoelaces.db=.
-- [ ] Add an explicit =memory= backend for tests and local throwaway runs.
-- [ ] Create a =persistence= package with repository interfaces for events,
+- [X] Default to SQLite at =data-dir/runtime/shoelaces.db=.
+- [X] Add an explicit =memory= backend for tests and local throwaway runs.
+- [X] Create a =persistence= package with repository interfaces for events,
   server state, and boot/config references.
-- [ ] Split persistence contracts into command/write interfaces and query/read
+- [X] Split persistence contracts into command/write interfaces and query/read
   interfaces instead of one catch-all repository API.
-- [ ] Define backend-neutral domain structs at the persistence boundary so
+- [X] Define backend-neutral domain structs at the persistence boundary so
   SQLite-generated row types do not leak into handlers, polling, or templates.
 - [ ] Add =sqlc= configuration for the SQLite backend.
 - [ ] Add checked-in SQL schema and query files for the initial persistence
@@ -107,13 +107,13 @@ persistence:
   configured persistence backends.
 - [ ] Add a =Makefile= check target, or extend an existing check target, so CI
   verifies generated sqlc files are up to date after =make gen=.
-- [ ] Ensure database directories are created with restrictive permissions.
+- [X] Ensure database directories are created with restrictive permissions.
 - [ ] Add unit tests for config parsing, default path resolution, absolute path
   handling, invalid backend values, and directory creation failures.
 - [ ] Add SQLite migration tests that create an empty database and verify the
   expected tables/indexes exist.
 - [ ] Add generation drift checks so CI fails when sqlc outputs are stale.
-- [ ] Add memory backend tests that prove the repository contracts can be
+- [X] Add memory backend tests that prove the repository contracts can be
   exercised without disk.
 - [ ] Add interface compliance tests that run the same command/query contract
   tests against memory and SQLite backends.
