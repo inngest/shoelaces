@@ -54,13 +54,14 @@ type serverInfo struct {
 }
 
 type eventInfo struct {
-	EventType int               `json:"eventType"`
-	Date      string            `json:"date"`
-	Server    serverInfo        `json:"server"`
-	BootType  string            `json:"bootType"`
-	Script    string            `json:"script"`
-	Message   string            `json:"message"`
-	Params    map[string]string `json:"params"`
+	ID         string         `json:"id"`
+	EventType  int            `json:"eventType"`
+	OccurredAt string         `json:"occurred_at"`
+	Server     serverInfo     `json:"server"`
+	BootType   string         `json:"bootType"`
+	Script     string         `json:"script"`
+	Message    string         `json:"message"`
+	Params     map[string]any `json:"params"`
 }
 
 func TestShoelacesIntegration(t *testing.T) {
@@ -139,10 +140,14 @@ func TestShoelacesIntegration(t *testing.T) {
 			t.Fatalf("expected 4 events for unknown server, got %d: %#v", len(hostEvents), hostEvents)
 		}
 		first := hostEvents[0]
-		if _, err := time.Parse(time.RFC3339Nano, first.Date); err != nil {
-			t.Fatalf("event date %q is not RFC3339: %v", first.Date, err)
+		if first.ID == "" {
+			t.Fatal("event id is empty")
 		}
-		first.Date = ""
+		if _, err := time.Parse(time.RFC3339Nano, first.OccurredAt); err != nil {
+			t.Fatalf("event occurred_at %q is not RFC3339: %v", first.OccurredAt, err)
+		}
+		first.ID = ""
+		first.OccurredAt = ""
 
 		expected := eventInfo{
 			EventType: 0,
@@ -267,12 +272,62 @@ networkMaps:
 	}
 }
 
+func TestShoelacesPersistsEventsAcrossRestarts(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+targets:
+  debian12:
+    script: debian.ipxe
+    params:
+      encrypt_home: false
+      release: bookworm
+networkMaps:
+  - network: 127.0.0.1/32
+    defaultTarget: debian12
+    targets:
+      - debian12
+`), 0o644); err != nil {
+		t.Fatalf("write mappings: %v", err)
+	}
+
+	const mac = "06:66:de:ad:be:ef"
+	proc := startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	proc.assertGETStatus(t, "/poll/1/06-66-de-ad-be-ef", http.StatusOK)
+	var firstEvents map[string][]eventInfo
+	proc.getJSON(t, "/ajax/events", &firstEvents)
+	if len(firstEvents[mac]) != 1 {
+		proc.stop(t)
+		t.Fatalf("expected one event before restart, got %#v", firstEvents[mac])
+	}
+	firstEventID := firstEvents[mac][0].ID
+	proc.stop(t)
+
+	proc = startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	defer proc.stop(t)
+	var restartedEvents map[string][]eventInfo
+	proc.getJSON(t, "/ajax/events", &restartedEvents)
+	if len(restartedEvents[mac]) != 1 {
+		t.Fatalf("expected one event after restart, got %#v", restartedEvents[mac])
+	}
+	if restartedEvents[mac][0].ID != firstEventID {
+		t.Fatalf("event id changed across restart: before=%q after=%q", firstEventID, restartedEvents[mac][0].ID)
+	}
+	if restartedEvents[mac][0].EventType != 2 {
+		t.Fatalf("expected persisted HostBoot event, got %#v", restartedEvents[mac][0])
+	}
+}
+
 func startShoelaces(t *testing.T) *shoelacesProcess {
 	t.Helper()
 	return startShoelacesWithDataDir(t, "integ-test-configs")
 }
 
 func startShoelacesWithDataDir(t *testing.T, dataDir string) *shoelacesProcess {
+	t.Helper()
+	return startShoelacesWithDataDirAndPersistence(t, dataDir, "memory")
+}
+
+func startShoelacesWithDataDirAndPersistence(t *testing.T, dataDir string, persistenceBackend string) *shoelacesProcess {
 	t.Helper()
 
 	testDir, err := os.Getwd()
@@ -308,8 +363,8 @@ file = "mappings.yaml"
 level = "debug"
 
 [persistence]
-backend = "memory"
-`, apiAddr, dataDir)
+backend = "%s"
+`, apiAddr, dataDir, persistenceBackend)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)
 	}

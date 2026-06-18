@@ -16,6 +16,8 @@
 package router
 
 import (
+	"context"
+	"encoding/json"
 	"html/template"
 	"io"
 	"net/http"
@@ -32,6 +34,7 @@ import (
 	"github.com/inngest/shoelaces/handlers"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/persistence/memory"
 	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
@@ -64,6 +67,27 @@ func TestStaticRouteServesEmbeddedUIAsset(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "jQuery")
+}
+
+func TestAjaxEventsReturnsGroupedEventShape(t *testing.T) {
+	var eventLog *event.Log
+	handler := newTestRouterWithEnvironment(t, t.TempDir(), func(env *environment.Environment) {
+		eventLog = env.EventLog
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "test-host")
+	require.NoError(t, eventLog.AppendEvent(context.Background(), event.HostBoot, srv, event.SubnetMatchBoot, "debian.ipxe", map[string]any{"role": "web"}))
+	req := httptest.NewRequest(http.MethodGet, "/ajax/events", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var events map[string][]event.Event
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &events))
+	require.Len(t, events[srv.Mac], 1)
+	assert.Equal(t, event.HostBoot, events[srv.Mac][0].Type)
+	assert.Equal(t, "debian.ipxe", events[srv.Mac][0].Script)
+	assert.Equal(t, "web", events[srv.Mac][0].Params["role"])
 }
 
 func TestStaticRouteServesUIDirOverrideAsset(t *testing.T) {
@@ -154,7 +178,7 @@ baseURL={{.baseURL}}
 		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 		env.MappingResolver = mustMappingResolver(t, &mappings.Mappings{
 			Defaults: mappings.DefaultsMap{
-				Params: map[string]interface{}{
+				Params: map[string]any{
 					"release": "mapping-release",
 					"secret":  "mapping-secret",
 				},
@@ -205,7 +229,7 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
 		env.Templates = templates.New(env.Logger)
 		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
-		params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		params := mappings.ParamsWithProvisioning(map[string]any{
 			"baseURL":  env.BaseURL,
 			"hostname": "boot-host",
 		}, map[string]mappings.ResolvedUser{
@@ -270,6 +294,7 @@ func newTestRouterWithEnvironment(t *testing.T, dataDir string, configure func(*
 		"mappings.html",
 		"footer.html",
 	))
+	store := memory.New()
 	env := &environment.Environment{
 		BaseURL:           "localhost:8081",
 		DataDir:           dataDir,
@@ -279,7 +304,8 @@ func newTestRouterWithEnvironment(t *testing.T, dataDir string, configure func(*
 		StaticTemplates:   staticTemplates,
 		Logger:            log.MakeLogger(io.Discard),
 		ServerStates:      &server.States{Servers: make(map[string]*server.State)},
-		EventLog:          &event.Log{},
+		RuntimeStore:      store,
+		EventLog:          event.NewLog(store, store),
 	}
 	env.Templates = templates.New(env.Logger)
 	if configure != nil {
