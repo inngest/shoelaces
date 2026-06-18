@@ -3,7 +3,7 @@ module github.com/inngest/shoelaces
 go 1.26
 
 require (
-	github.com/gorilla/mux v1.8.0
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/justinas/alice v1.2.0
 	github.com/knadh/koanf/parsers/json v1.0.0
 	github.com/knadh/koanf/parsers/toml v0.1.0
