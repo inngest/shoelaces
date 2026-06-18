@@ -230,7 +230,10 @@ func Poll(logger log.Logger, serverStates *server.States,
 func (s *Service) manualAction(srv server.Server, allowedTargets []server.TargetOption) (scriptText string, err error) {
 	logger := s.logger.With("mac", srv.Mac)
 
-	script, action := s.chooseManualAction(srv, allowedTargets)
+	script, action, err := s.chooseManualAction(srv, allowedTargets)
+	if err != nil {
+		return "", err
+	}
 	logger.Debug("Manual action selected", "target-script-name", script, "action", action)
 
 	switch action {
@@ -254,19 +257,19 @@ func (s *Service) manualAction(srv server.Server, allowedTargets []server.Target
 	}
 }
 
-func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction) {
+func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction, error) {
 	logger := s.logger.With("mac", srv.Mac)
 
 	m, err := s.serverStates.GetState(context.Background(), srv.Mac)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		logger.Error("Failed to load manual state", "err", err)
-		return nil, TimeoutAction
+		return nil, TimeoutAction, err
 	}
 	if m != nil {
 		if m.Target != server.InitTarget {
 			if err := s.serverStates.DeleteState(context.Background(), srv.Mac); err != nil {
 				logger.Error("Failed to delete selected server state", "err", err)
-				return nil, TimeoutAction
+				return nil, TimeoutAction, err
 			}
 			logger.Debug("Server boot")
 			return &mappings.Script{
@@ -274,36 +277,36 @@ func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.
 				Environment:  m.Environment,
 				Params:       m.Params,
 				Users:        m.Users,
-				Provisioning: m.Provisioning}, BootAction
+				Provisioning: m.Provisioning}, BootAction, nil
 		} else if m.Retry <= maxRetry {
 			m.Retry++
 			m.LastAccess = int(time.Now().UTC().Unix())
 			if err := s.serverStates.SaveState(context.Background(), m); err != nil {
 				logger.Error("Failed to persist retry state", "err", err)
-				return nil, TimeoutAction
+				return nil, TimeoutAction, err
 			}
 			logger.Debug("Retrying reboot")
-			return nil, RetryAction
+			return nil, RetryAction, nil
 		} else {
 			if err := s.serverStates.DeleteState(context.Background(), srv.Mac); err != nil {
 				logger.Error("Failed to delete timed-out server state", "err", err)
-				return nil, TimeoutAction
+				return nil, TimeoutAction, err
 			}
 			logger.Debug("Timing out server")
-			return nil, TimeoutAction
+			return nil, TimeoutAction, nil
 		}
 	}
 
 	if err := s.serverStates.QueueServer(context.Background(), srv, allowedTargets); err != nil {
 		logger.Error("Failed to persist new server state", "err", err)
-		return nil, TimeoutAction
+		return nil, TimeoutAction, err
 	}
 	logger.Debug("New server")
 	if err := s.eventLog.AppendEvent(context.Background(), event.HostPoll, srv, "", "", nil); err != nil {
 		logger.Error("Failed to record host poll event", "err", err)
 	}
 
-	return nil, RetryAction
+	return nil, RetryAction, nil
 }
 
 func resolveBootTarget(resolver *mappings.Resolver, request mappings.ResolveRequest,

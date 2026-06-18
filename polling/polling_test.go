@@ -17,10 +17,12 @@ package polling
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
@@ -74,6 +76,23 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 
 	assert.Equal(t, timeoutScript, script)
 	assert.Nil(t, states.Servers[srv.Mac])
+}
+
+func TestPollReturnsStateStoreErrors(t *testing.T) {
+	stateErr := errors.New("state store unavailable")
+	service := NewService(
+		log.MakeLogger(testLogWriter{}),
+		failingStateStore{err: stateErr},
+		nil,
+		newEventLog(),
+		templates.New(log.MakeLogger(testLogWriter{})),
+		"127.0.0.1:8081",
+	)
+
+	script, err := service.Poll(server.New("06:66:de:ad:be:ef", "192.0.2.10", ""))
+
+	require.ErrorIs(t, err, stateErr)
+	assert.Empty(t, script)
 }
 
 func TestPollBootsAutomaticMatches(t *testing.T) {
@@ -201,6 +220,34 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			assert.Equal(t, tt.wantParams, got.Params)
 		})
 	}
+}
+
+type failingStateStore struct {
+	err error
+}
+
+func (s failingStateStore) QueueServer(context.Context, server.Server, []server.TargetOption) error {
+	return s.err
+}
+
+func (s failingStateStore) GetState(context.Context, string) (*server.State, error) {
+	return nil, s.err
+}
+
+func (s failingStateStore) SaveState(context.Context, *server.State) error {
+	return s.err
+}
+
+func (s failingStateStore) DeleteState(context.Context, string) error {
+	return s.err
+}
+
+func (s failingStateStore) ListWaiting(context.Context) (server.Servers, error) {
+	return nil, s.err
+}
+
+func (s failingStateStore) DeleteStatesBefore(context.Context, time.Time) (int64, error) {
+	return 0, s.err
 }
 
 func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
