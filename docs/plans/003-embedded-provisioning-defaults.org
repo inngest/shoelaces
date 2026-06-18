@@ -592,26 +592,32 @@ operator's responsibility.
 
 *** Phase 11: Structured Renderer Migration
 
-- [ ] Render Debian/Ubuntu preseed locale, time, network, users, packages,
+- [X] Render Debian/Ubuntu preseed locale, time, network, users, packages,
   storage, bootloader, and repository settings from structured data.
-- [ ] Render CentOS kickstart network, users, packages, storage, bootloader,
+- [X] Render CentOS kickstart network, users, packages, storage, bootloader,
   timezone, locale, and repository settings from structured data.
-- [ ] Render CoreOS/cloud-init users, files, services, and network-compatible
+- [X] Render CoreOS/cloud-init users, files, services, and network-compatible
   common fields from structured data where cloud-init supports them.
-- [ ] Render iPXE kernel args, installer URLs, release/mirror selection, and
+- [X] Render iPXE kernel args, installer URLs, release/mirror selection, and
   preseed/kickstart/cloud-init URLs from structured =boot.netboot=,
   =installer=, and =repos= data.
-- [ ] Render installed-system bootloader settings from =boot.installed= data.
-- [ ] Render the selected =installer.extraTemplate= verbatim after structured
+- [X] Render installed-system bootloader settings from =boot.installed= data.
+- [X] Render the selected =installer.extraTemplate= verbatim after structured
   sections and keep =provisioning/extra= as an embedded no-op default.
-- [ ] Keep legacy flat params as temporary projections or fallbacks where current
+- [X] Keep legacy flat params as temporary projections or fallbacks where current
   templates already consume them, including =release=, =linuxargs=,
   =encrypt_home=, =vg_name=, =install_username=,
   =install_user_fullname=, and =install_user_password_crypted=.
-- [ ] Add render-validation tests for Debian/Ubuntu preseed, CoreOS
+- [X] Add render-validation tests for Debian/Ubuntu preseed, CoreOS
   cloud-init, CentOS kickstart, and iPXE output generated from structured data.
-- [ ] Add integration coverage proving mapping-resolved boots render structured
+- [X] Add integration coverage proving mapping-resolved boots render structured
   defaults without disk partial overrides.
+
+  Note: renderer migration uses a projected parameter layer. Explicit
+  =/configs/*= query params win first, structured mapping provisioning fills
+  missing fields second, and built-in generic defaults fill the remaining
+  fields last. This keeps built-in templates mostly free of defaulting
+  conditionals while preserving stateless direct-render behavior.
 
 *** Phase 12: Remove Declarative Partial Hooks
 

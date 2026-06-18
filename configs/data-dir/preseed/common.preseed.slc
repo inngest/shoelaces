@@ -46,16 +46,19 @@ d-i passwd/user-password-crypted password {{ if .install_user_password_crypted }
 
 {{define "preseed/common/locale" -}}
 d-i auto-install/enable boolean true
-d-i debian-installer/locale string en_US.UTF-8
+d-i debian-installer/locale string {{.locale_language}}
 d-i console-setup/ask_detect boolean false
-d-i console-keymaps-at/keymap select us
-d-i keyboard-configuration/xkb-keymap select us
+d-i console-keymaps-at/keymap select {{.locale_keyboard}}
+d-i keyboard-configuration/xkb-keymap select {{.locale_keyboard}}
 {{end}}
 
 {{define "preseed/common/network" -}}
+{{if .nameservers -}}
+d-i netcfg/get_nameservers string {{.nameservers}}
+{{end -}}
 {{end}}
 
 {{define "preseed/common/time" -}}
-d-i time/zone string UTC
-d-i clock-setup/utc boolean true
+d-i time/zone string {{.time_timezone}}
+d-i clock-setup/utc boolean {{.time_utc}}
 {{end}}

@@ -11,5 +11,5 @@
 # We probably want ncq for harddrives, but we don't have many of those.
 # queued trim is broken with our 850PRO/Linux combo, or maybe entirely on the Samsung 850 PRO SSDs
 
-set linuxargs hostname={{.hostname}} console=tty0 console=ttyS0,115200n8 console=ttyS1,115200n8 vga=normal biosdevname=0 nomodeset interface=auto libata.force=noncq consoleblank=0
+set linuxargs hostname={{.hostname}} {{.linux_cfg_args}}
 {{end}}

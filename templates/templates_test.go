@@ -301,6 +301,29 @@ func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 	assert.Contains(t, logOutput.String(), "users:[REDACTED]")
 }
 
+func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
+	renderer := newTestRenderer(t)
+	var logOutput bytes.Buffer
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"hostname": "secure-host",
+		"baseURL":  "127.0.0.1:8081",
+	}, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			ConfigParams: map[string]any{
+				"bootstrap_token": "secret-token",
+			},
+		},
+	})
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(&logOutput), "boot.ipxe", params, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "secure-host")
+	assert.NotContains(t, logOutput.String(), "secret-token")
+	assert.Contains(t, logOutput.String(), "provisioning:[REDACTED]")
+	assert.Contains(t, logOutput.String(), "installer_config_query:[REDACTED]")
+}
+
 func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {
 	renderer := newTestRenderer(t)
 
@@ -365,6 +388,29 @@ d-i preseed/late_command string echo partial override for {{.hostname}}
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "echo partial override for partial-host")
 	assert.NotContains(t, rendered, "d-i preseed/late_command string true")
+}
+
+func TestRenderTemplateAppliesInstallerExtraWithDefaultedParams(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTemplate(t, filepath.Join(dataDir, "provisioning", "extra.slc"), `{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
+{{end}}
+`)
+	renderer := newEmbeddedFallbackRenderer(t, dataDir)
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "127.0.0.1:8081",
+		"hostname": "extra-host",
+	}, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			ExtraTemplate: "provisioning/extra",
+		},
+	})
+
+	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "d-i preseed/late_command string echo extra extra-host /dev/nvme0n1")
+	assert.NotContains(t, rendered, "<no value>")
 }
 
 func TestEmbeddedUserRenderingDoesNotRequireDiskUserPartials(t *testing.T) {

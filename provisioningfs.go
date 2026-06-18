@@ -19,7 +19,7 @@ import (
 	"io/fs"
 )
 
-//go:embed configs/data-dir/cloud-config configs/data-dir/ipxe configs/data-dir/kickstart configs/data-dir/preseed configs/data-dir/static/provisioning-default.txt
+//go:embed configs/data-dir/cloud-config configs/data-dir/ipxe configs/data-dir/kickstart configs/data-dir/preseed configs/data-dir/provisioning configs/data-dir/static/provisioning-default.txt
 var embeddedProvisioningDefaults embed.FS
 
 // ProvisioningDefaultsFS returns the embedded generic provisioning defaults.

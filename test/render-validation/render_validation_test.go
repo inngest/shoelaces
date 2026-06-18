@@ -127,6 +127,36 @@ func TestRenderedIPXEScriptsHaveRequiredShape(t *testing.T) {
 	}
 }
 
+func TestRenderedDebianIPXEAppliesStructuredProvisioning(t *testing.T) {
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "shoelaces.example.test:8081",
+		"hostname": "structured-host",
+	}, nil, mappings.ProvisioningConfig{
+		Boot: mappings.BootConfig{
+			Netboot: mappings.NetbootConfig{
+				KernelArgs: []string{"console=ttyS1"},
+			},
+		},
+		Repos: mappings.ReposConfig{
+			OSMirror: "https://deb.example/debian",
+			Release:  "trixie",
+		},
+		Installer: mappings.InstallerConfig{
+			ConfigTemplate: "preseed/debian",
+			ConfigParams: map[string]any{
+				"site": "iad",
+			},
+		},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "debian.ipxe", params)
+
+	assert.Contains(t, rendered, "Debian trixie netboot")
+	assert.Contains(t, rendered, "set mirror https://deb.example/debian/dists/trixie/")
+	assert.Contains(t, rendered, "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false&site=iad")
+	assert.Contains(t, rendered, "console=ttyS1")
+}
+
 func TestValidateIPXEScriptCases(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -315,6 +345,56 @@ func TestRenderedDebianPreseedKeepsGenericNoOpLateCommand(t *testing.T) {
 	assert.NotContains(t, rendered, "ansible")
 }
 
+func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
+	utc := false
+	ntp := false
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "shoelaces.example.test:8081",
+		"hostname": "structured-preseed",
+	}, nil, mappings.ProvisioningConfig{
+		Locale: mappings.LocaleConfig{
+			Language: "en_GB.UTF-8",
+			Keyboard: "gb",
+		},
+		Time: mappings.TimeConfig{
+			Timezone: "Europe/London",
+			UTC:      &utc,
+			NTP:      &ntp,
+		},
+		Packages: mappings.PackagesConfig{
+			Install:      []string{"curl", "vim"},
+			UpdatePolicy: "none",
+		},
+		Storage: mappings.StorageConfig{
+			Disk:        "/dev/vda",
+			Mode:        "regular",
+			VolumeGroup: "vgtest",
+		},
+		Boot: mappings.BootConfig{
+			Installed: mappings.InstalledBootConfig{
+				KernelArgs: []string{"panic=30"},
+			},
+		},
+		Repos: mappings.ReposConfig{
+			Release: "trixie",
+		},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i debian-installer/locale string en_GB.UTF-8")
+	assert.Contains(t, rendered, "d-i keyboard-configuration/xkb-keymap select gb")
+	assert.Contains(t, rendered, "d-i time/zone string Europe/London")
+	assert.Contains(t, rendered, "d-i clock-setup/utc boolean false")
+	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/vda")
+	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
+	assert.Contains(t, rendered, "vg_name{ vgtest }")
+	assert.Contains(t, rendered, "d-i grub2/linux_cmdline string panic=30")
+	assert.Contains(t, rendered, "d-i clock-setup/ntp boolean false")
+	assert.Contains(t, rendered, "d-i pkgsel/update-policy select none")
+	assert.Contains(t, rendered, "d-i pkgsel/include string curl vim")
+}
+
 func TestRenderedKickstartHasRequiredShape(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "centos.ks", kickstartRenderParams)
 
@@ -328,6 +408,49 @@ func TestRenderedKickstartHasRequiredShape(t *testing.T) {
 	assert.Contains(t, rendered, "%post")
 	assert.Contains(t, rendered, "true")
 	assert.Contains(t, rendered, "reboot")
+}
+
+func TestRenderedKickstartAppliesStructuredProvisioning(t *testing.T) {
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "shoelaces.example.test:8081",
+		"hostname": "structured-centos",
+	}, nil, mappings.ProvisioningConfig{
+		Locale: mappings.LocaleConfig{
+			Language: "en_GB.UTF-8",
+			Keyboard: "gb",
+		},
+		Network: mappings.NetworkConfig{
+			Bootproto: "dhcp",
+		},
+		Packages: mappings.PackagesConfig{
+			Groups:  []string{"core", "minimal-environment"},
+			Install: []string{"curl", "vim"},
+		},
+		Storage: mappings.StorageConfig{
+			Disk:        "/dev/vda",
+			VolumeGroup: "vgks",
+		},
+		Boot: mappings.BootConfig{
+			Installed: mappings.InstalledBootConfig{
+				KernelArgs: []string{"panic=30"},
+			},
+		},
+		Repos: mappings.ReposConfig{
+			OSMirror: "https://centos.example/centos",
+			Release:  "9-stream",
+		},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "centos.ks", params)
+
+	assert.Contains(t, rendered, `url  --url="https://centos.example/centos/9-stream/os/x86_64"`)
+	assert.Contains(t, rendered, "network --bootproto dhcp --hostname structured-centos")
+	assert.Contains(t, rendered, "keyboard --vckeymap=gb --xlayouts='gb'")
+	assert.Contains(t, rendered, "lang      en_GB.UTF-8")
+	assert.Contains(t, rendered, "clearpart --drives=vda --all --disklabel=gpt")
+	assert.Contains(t, rendered, `bootloader --append="panic=30" --location=mbr`)
+	assert.Contains(t, rendered, "volgroup vgks pv.01")
+	assert.Contains(t, rendered, "@core\n@minimal-environment\ncurl\nvim")
 }
 
 func TestRenderedKickstartAppliesStructuredUsers(t *testing.T) {

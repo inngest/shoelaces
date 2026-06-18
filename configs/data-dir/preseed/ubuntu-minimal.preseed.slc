@@ -1,7 +1,7 @@
 {{define "preseed/ubuntu-minimal" -}}
 {{template "preseed/common" .}}
 
-d-i partman-auto/method string regular
+d-i partman-auto/method string {{.ubuntu_minimal_storage_mode}}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-lvm/confirm boolean true
@@ -19,18 +19,19 @@ d-i user-setup/encrypt-home boolean false
 
 d-i base-installer/install-recommends boolean true
 
-d-i clock-setup/utc boolean true
-d-i time/zone string America/Los_Angeles
+d-i clock-setup/utc boolean {{.time_utc}}
+d-i time/zone string {{.ubuntu_minimal_timezone}}
 
-d-i clock-setup/ntp boolean true
+d-i clock-setup/ntp boolean {{.time_ntp}}
 
 d-i debian-installer/quiet boolean false
 d-i debian-installer/splash boolean false
 
-d-i pkgsel/update-policy select unattended-upgrades
+d-i pkgsel/update-policy select {{.packages_update_policy}}
 
-d-i grub-installer/timeout string 5
+d-i grub-installer/timeout string {{.boot_timeout_seconds}}
 d-i popularity-contest/participate boolean false
 
+{{.installerExtra}}
 d-i finish-install/reboot_in_progress note
 {{end}}

@@ -206,8 +206,18 @@ targets:
   debian12:
     script: debian.ipxe
     params:
-      release: bookworm
       encrypt_home: false
+    boot:
+      netboot:
+        kernelArgs:
+          - console=ttyS1
+    installer:
+      configTemplate: preseed/debian
+      configParams:
+        site: integ
+    repos:
+      osMirror: https://deb.example/debian
+      release: bookworm
 networkMaps:
   - network: 127.0.0.1/32
     defaultTarget: debian12
@@ -222,7 +232,9 @@ networkMaps:
 
 	proc.assertGETContains(t, "/poll/1/06-66-de-ad-be-ef", nil, []string{
 		"Debian bookworm netboot",
-		"preseed/url=http://localhost:18888/configs/preseed/debian?encrypt_home=false",
+		"set mirror https://deb.example/debian/dists/bookworm/",
+		"preseed/url=http://localhost:18888/configs/preseed/debian?encrypt_home=false&site=integ",
+		"console=ttyS1",
 	})
 	proc.assertGETContains(t, "/configs/preseed/debian", url.Values{"encrypt_home": {"false"}}, []string{
 		"d-i user-setup/encrypt-home boolean false",

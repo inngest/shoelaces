@@ -35,6 +35,7 @@ var genericProvisioningDefaultCandidates = []string{
 	"preseed/debian.preseed.slc",
 	"preseed/storage.preseed.slc",
 	"preseed/ubuntu-minimal.preseed.slc",
+	"provisioning/extra.slc",
 	"static/provisioning-default.txt",
 }
 

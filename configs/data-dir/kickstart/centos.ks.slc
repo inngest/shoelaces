@@ -2,20 +2,21 @@
 logging --level=info
 cmdline
 
-url  --url="http://mirror.netcologne.de/centos/{{.release}}/os/x86_64"
+url  --url="{{.kickstart_centos_mirror}}/{{.release}}/os/x86_64"
 
-network --bootproto dhcp --hostname {{.hostname}}
+network --bootproto {{.network_bootproto}} --hostname {{.hostname}}
 
 authselect --useshadow --passalgo=sha512 --enablefingerprint
 {{template "kickstart/centos/users" .}}
 
-keyboard --vckeymap=de --xlayouts='de (nodeadkeys)'
-lang      en_US.UTF-8
-timezone Europe/Berlin --utc
+keyboard --vckeymap={{.locale_keyboard}} --xlayouts='{{.locale_keyboard}}'
+lang      {{.locale_language}}
+timezone {{.time_timezone}} {{.kickstart_utc_flag}}
 {{template "kickstart/centos/storage" .}}
 {{template "kickstart/centos/packages" .}}
 {{template "kickstart/centos/post" .}}
 {{template "kickstart/centos/user_ssh_keys" .}}
+{{.installerExtra}}
 reboot
 {{end}}
 
@@ -42,19 +43,20 @@ rootpw --lock
 
 {{define "kickstart/centos/storage" -}}
 zerombr
-clearpart --drives=sda --all --disklabel=gpt
-bootloader --append="crashkernel=auto panic=60" --location=mbr
+clearpart --drives={{.kickstart_storage_drive}} --all --disklabel=gpt
+bootloader --append="{{.kickstart_boot_args}}" --location=mbr
 part biosboot --fstype=biosboot --size=1
-part /boot --fstype="ext4" --ondisk=sda --size=500 --label=/boot
-part swap --fstype="swap" --ondisk=sda --size=8000
-part pv.01 --size=1000 --grow --ondisk=sda
-volgroup vg0 pv.01
-logvol / --fstype="ext4" --vgname=vg0 --size=10000 --name=lv_root --grow
+part /boot --fstype="ext4" --ondisk={{.kickstart_storage_drive}} --size=500 --label=/boot
+part swap --fstype="swap" --ondisk={{.kickstart_storage_drive}} --size=8000
+part pv.01 --size=1000 --grow --ondisk={{.kickstart_storage_drive}}
+volgroup {{.vg_name}} pv.01
+logvol / --fstype="ext4" --vgname={{.vg_name}} --size=10000 --name=lv_root --grow
 {{end}}
 
 {{define "kickstart/centos/packages" -}}
 %packages
-@core
+{{.kickstart_package_groups}}
+{{.kickstart_packages}}
 %end
 {{end}}
 
