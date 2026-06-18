@@ -84,7 +84,7 @@ func ServerListHandler(w http.ResponseWriter, r *http.Request) {
 
 	servers, err := json.Marshal(polling.ListServers(env.ServerStates))
 	if err != nil {
-		env.Logger.Error("component", "handler", "err", err)
+		env.Logger.Error("Failed to marshal server list", "component", "handler", "err", err)
 		os.Exit(1)
 	}
 
@@ -148,16 +148,16 @@ func parsePostForm(form map[string][]string) (mac, scriptName, environment strin
 
 func validateMACAndIP(logger log.Logger, mac string, ip string) (err error) {
 	if !utils.IsValidMAC(mac) {
-		logger.Error("component", "polling", "msg", "Invalid MAC", "mac", mac)
+		logger.Error("Invalid MAC", "component", "polling", "mac", mac)
 		return errors.New("invalid MAC")
 	}
 
 	if !utils.IsValidIP(ip) {
-		logger.Error("component", "polling", "msg", "Invalid IP", "ip", ip)
+		logger.Error("Invalid IP", "component", "polling", "ip", ip)
 		return errors.New("invalid IP")
 	}
 
-	logger.Debug("component", "polling", "msg", "MAC and IP validated", "mac", mac, "ip", ip)
+	logger.Debug("MAC and IP validated", "component", "polling", "mac", mac, "ip", ip)
 
 	return nil
 }
@@ -165,7 +165,7 @@ func validateMACAndIP(logger log.Logger, mac string, ip string) (err error) {
 func resolveHostname(logger log.Logger, ip string) string {
 	host := utils.ResolveHostname(ip)
 	if host == "" {
-		logger.Info("component", "polling", "msg", "Can't resolve IP", "ip", ip)
+		logger.Info("Can't resolve IP", "component", "polling", "ip", ip)
 	}
 
 	return host

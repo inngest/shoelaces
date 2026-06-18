@@ -233,7 +233,7 @@ var knownTopLevelMappingKeys = map[string]struct{}{
 
 // ParseMappings parses the mappings YAML file into the new mappings schema.
 func ParseMappings(logger log.Logger, mappingsFile string) (*Mappings, error) {
-	logger.Info("component", "config", "msg", "Reading mappings", "source", mappingsFile)
+	logger.Info("Reading mappings", "component", "config", "source", mappingsFile)
 
 	k := koanf.New(".")
 	if err := k.Load(file.Provider(mappingsFile), yaml.Parser()); err != nil {

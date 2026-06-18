@@ -132,7 +132,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 		return true, err
 	}
 
-	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
+	logger.Debug("Setting server override", "component", "polling", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
 	eventLog.AddEvent(event.UserSelection, resolvedServer, "", result.Target.Script, nil)
 	servers[srv.Mac].Server = resolvedServer
 	servers[srv.Mac].Target = result.Target.Script
@@ -167,12 +167,12 @@ func Poll(logger log.Logger, serverStates *server.States,
 		return "", err
 	}
 	if result.HasTarget() {
-		logger.Debug("component", "polling", "msg", "Host found", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
+		logger.Debug("Host found", "component", "polling", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
 		eventLog.AddEvent(event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params)
 		return genBootScript(logger, templateRenderer, result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning), nil
 	}
 
-	logger.Debug("component", "polling", "msg", "Host needs manual target selection", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
+	logger.Debug("Host needs manual target selection", "component", "polling", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
 	return manualAction(logger, serverStates, templateRenderer, eventLog, baseURL, srv, targetOptions(result.AllowedTargets))
 }
 
@@ -180,7 +180,7 @@ func manualAction(logger log.Logger, serverStates *server.States, templateRender
 	eventLog *event.Log, baseURL string, srv server.Server, allowedTargets []server.TargetOption) (scriptText string, err error) {
 
 	script, action := chooseManualAction(logger, serverStates, eventLog, srv, allowedTargets)
-	logger.Debug("component", "polling", "target-script-name", script, "action", action)
+	logger.Debug("Manual action selected", "component", "polling", "target-script-name", script, "action", action)
 
 	switch action {
 	case BootAction:
@@ -196,7 +196,7 @@ func manualAction(logger log.Logger, serverStates *server.States, templateRender
 		return timeoutScript, nil
 
 	default:
-		logger.Info("component", "polling", "msg", "Unknown action")
+		logger.Info("Unknown action", "component", "polling")
 		return "", fmt.Errorf("%s", "Unknown action")
 	}
 }
@@ -210,7 +210,7 @@ func chooseManualAction(logger log.Logger, serverStates *server.States,
 	if m := serverStates.Servers[srv.Mac]; m != nil {
 		if m.Target != server.InitTarget {
 			serverStates.DeleteServer(srv.Mac)
-			logger.Debug("component", "polling", "msg", "Server boot", "mac", srv.Mac)
+			logger.Debug("Server boot", "component", "polling", "mac", srv.Mac)
 			return &mappings.Script{
 				Name:         m.Target,
 				Environment:  m.Environment,
@@ -220,17 +220,17 @@ func chooseManualAction(logger log.Logger, serverStates *server.States,
 		} else if m.Retry <= maxRetry {
 			m.Retry++
 			m.LastAccess = int(time.Now().UTC().Unix())
-			logger.Debug("component", "polling", "msg", "Retrying reboot", "mac", srv.Mac)
+			logger.Debug("Retrying reboot", "component", "polling", "mac", srv.Mac)
 			return nil, RetryAction
 		} else {
 			serverStates.DeleteServer(srv.Mac)
-			logger.Debug("component", "polling", "msg", "Timing out server", "mac", srv.Mac)
+			logger.Debug("Timing out server", "component", "polling", "mac", srv.Mac)
 			return nil, TimeoutAction
 		}
 	}
 
 	serverStates.AddServerWithTargets(srv, allowedTargets)
-	logger.Debug("component", "polling", "msg", "New server", "mac", srv.Mac)
+	logger.Debug("New server", "component", "polling", "mac", srv.Mac)
 	eventLog.AddEvent(event.HostPoll, srv, "", "", nil)
 
 	return nil, RetryAction
@@ -335,14 +335,14 @@ func GenStartScript(logger log.Logger, baseURL string) string {
 
 	tmpl, err := template.New("retry").Parse(startScript)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error parsing start template")
+		logger.Info("Error parsing start template", "component", "polling")
 		panic(err)
 	}
 
 	variablesMap["baseURL"] = baseURL
 	err = tmpl.Execute(parsedTemplate, variablesMap)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error executing start template")
+		logger.Info("Error executing start template", "component", "polling")
 		panic(err)
 	}
 
@@ -363,7 +363,7 @@ func genRetryScript(logger log.Logger, baseURL string, mac string) string {
 
 	tmpl, err := template.New("retry").Parse(retryScript)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error parsing retry template", "mac", mac)
+		logger.Info("Error parsing retry template", "component", "polling", "mac", mac)
 		panic(err)
 	}
 
@@ -371,7 +371,7 @@ func genRetryScript(logger log.Logger, baseURL string, mac string) string {
 	variablesMap["macAddress"] = utils.MacColonToDash(mac)
 	err = tmpl.Execute(parsedTemplate, variablesMap)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error executing retry template", "mac", mac)
+		logger.Info("Error executing retry template", "component", "polling", "mac", mac)
 		panic(err)
 	}
 
