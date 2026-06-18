@@ -7,9 +7,10 @@ The web UI also shows detected hosts and lets operators choose a boot target whe
 
 ## Flow
 
-This chart shows the two-stage boot path. DHCP and TFTP only get the host into
-iPXE; after that, iPXE talks to Shoelaces over HTTP so Shoelaces can resolve a
-target, render the selected boot template, and serve provisioning assets.
+The API boot chart shows the two-stage boot path without the operator UI. DHCP
+and TFTP only get the host into iPXE; after that, iPXE talks to Shoelaces over
+HTTP so Shoelaces can resolve a target, render the selected boot template, and
+serve provisioning assets.
 
 ```mermaid
 sequenceDiagram
@@ -18,7 +19,6 @@ sequenceDiagram
     participant DHCP as DHCP Server
     participant TFTP as TFTP Server
     participant Shoelaces as Shoelaces HTTP API
-    participant UI as Shoelaces UI
     participant Installer as OS Installer
 
     Host->>DHCP: PXE DHCP request
@@ -33,15 +33,13 @@ sequenceDiagram
     Host->>Shoelaces: GET /start
     Shoelaces-->>Host: iPXE polling script
 
-    loop Until a boot target is selected
+    loop Until target is resolved
         Host->>Shoelaces: GET /poll/1/{mac}
         Shoelaces->>Shoelaces: Record MAC, source IP, and reverse DNS hostname
         alt Mapping selects a target
             Shoelaces->>Shoelaces: Resolve target and render boot template
             Shoelaces-->>Host: Selected iPXE boot script
-        else Manual selection required
-            Shoelaces->>UI: Queue host for operator selection
-            UI->>Shoelaces: Operator selects target
+        else No automatic target yet
             Shoelaces-->>Host: Keep polling until selection is available
         end
     end
@@ -51,6 +49,37 @@ sequenceDiagram
     Installer->>Shoelaces: GET /configs/static/* provisioning assets
     Shoelaces-->>Installer: Static provisioning asset
     Installer->>Installer: Continue OS installation
+```
+
+The UI selection chart shows the manual path for hosts that do not match an
+automatic mapping. The host keeps polling the API while an operator reviews the
+queued host in the browser and selects an allowed boot target.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Host as PXE/iPXE Host
+    participant Shoelaces as Shoelaces HTTP API
+    participant Browser as Operator Browser
+
+    Host->>Shoelaces: GET /poll/1/{mac}
+    Shoelaces->>Shoelaces: Queue host with MAC, source IP, and hostname
+    Shoelaces-->>Host: Keep polling
+
+    Browser->>Shoelaces: GET /
+    Shoelaces-->>Browser: Render UI with target options
+    Browser->>Shoelaces: GET /ajax/servers
+    Shoelaces-->>Browser: Queued hosts and allowed targets
+    Browser->>Shoelaces: GET /ajax/events
+    Shoelaces-->>Browser: Event history
+
+    Browser->>Shoelaces: POST /update/target
+    Shoelaces->>Shoelaces: Store selected target for MAC
+    Shoelaces-->>Browser: Redirect to /
+
+    Host->>Shoelaces: GET /poll/1/{mac}
+    Shoelaces->>Shoelaces: Resolve selected target and render boot template
+    Shoelaces-->>Host: Selected iPXE boot script
 ```
 
 ![Shoelaces overview](screenshots/shoelaces-overview.png)
