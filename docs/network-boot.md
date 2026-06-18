@@ -82,8 +82,6 @@ sequenceDiagram
     Shoelaces-->>Host: Selected iPXE boot script
 ```
 
-![Shoelaces overview](screenshots/shoelaces-overview.png)
-
 If there is no automated installation configured for the host, the UI queues it for manual selection.
 
 ![Shoelaces frontend - Host detected](screenshots/shoelaces-frontend-2.png)
