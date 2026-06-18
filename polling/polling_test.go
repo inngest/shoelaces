@@ -238,6 +238,62 @@ func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
 	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
 }
 
+func TestPollNetworkDefaultTargetRendersTargetRepoRelease(t *testing.T) {
+	events := &event.Log{}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Defaults: mappings.DefaultsMap{
+			Repos: mappings.ReposConfig{
+				OSMirror: "http://ftp.debian.org/debian",
+				Release:  "bookworm",
+			},
+			Installer: mappings.InstallerConfig{
+				ConfigTemplate: "preseed/debian",
+			},
+		},
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script: "debian.ipxe",
+				Label:  "Debian 12 Bookworm",
+				Repos: mappings.ReposConfig{
+					Release: "bookworm",
+				},
+			},
+			"debian13": {
+				Script: "debian.ipxe",
+				Label:  "Debian 13 Trixie",
+				Repos: mappings.ReposConfig{
+					Release: "trixie",
+				},
+			},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian12", "debian13"},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	rendered, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		&server.States{Servers: make(map[string]*server.State)},
+		resolver,
+		events,
+		newEmbeddedProvisioningTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "Debian trixie netboot")
+	assert.Contains(t, rendered, "http://ftp.debian.org/debian/dists/trixie/")
+	assert.NotContains(t, rendered, "bookworm")
+	require.Len(t, events.Events[srv.Mac], 1)
+	assert.Equal(t, event.HostBoot, events.Events[srv.Mac][0].Type)
+	assert.Equal(t, event.SubnetMatchBoot, events.Events[srv.Mac][0].BootType)
+	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
+}
+
 func TestPollPassesStructuredUsersToTemplates(t *testing.T) {
 	events := &event.Log{}
 	resolver := mustResolver(t, &mappings.Mappings{
