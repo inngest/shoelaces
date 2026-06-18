@@ -174,7 +174,7 @@ function updateEventHistory() {
             var elem = eventLogContainer.append('<div class="card" id="' + mac + '"><h5 class="card-header text-primary-custom">' + title + '</h5><div class="card-body"><ul class="list-group list-group-flush">');
 
             $.each(events[mac], function () {
-                var date = (new Date(this.date)).toLocaleString();
+                var date = (new Date(this.occurred_at)).toLocaleString();
                 var params = "";
                 for (var p in this.params) {
                     params += p + ':' + this.params[p] + ' ';

@@ -17,6 +17,7 @@ package polling
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -104,7 +105,7 @@ func (s *Service) StartScript() string {
 }
 
 // UpdateTarget stores a manually selected target for a polling host.
-func (s *Service) UpdateTarget(srv server.Server, targetName string, environment string, params map[string]interface{}) (inputErr bool, err error) {
+func (s *Service) UpdateTarget(srv server.Server, targetName string, environment string, params map[string]any) (inputErr bool, err error) {
 	if !utils.IsValidMAC(srv.Mac) {
 		return true, errors.New("invalid MAC")
 	}
@@ -144,7 +145,9 @@ func (s *Service) UpdateTarget(srv server.Server, targetName string, environment
 	}
 
 	s.logger.Debug("Setting server override", "component", "polling", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
-	s.eventLog.AddEvent(event.UserSelection, resolvedServer, "", result.Target.Script, nil)
+	if err := s.eventLog.AppendEvent(context.Background(), event.UserSelection, resolvedServer, "", result.Target.Script, nil); err != nil {
+		return false, err
+	}
 	servers[srv.Mac].Server = resolvedServer
 	servers[srv.Mac].Target = result.Target.Script
 	servers[srv.Mac].Environment = result.Target.Environment
@@ -174,7 +177,9 @@ func (s *Service) Poll(srv server.Server) (scriptText string, err error) {
 	}
 	if result.HasTarget() {
 		s.logger.Debug("Host found", "component", "polling", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
-		s.eventLog.AddEvent(event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params)
+		if err := s.eventLog.AppendEvent(context.Background(), event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params); err != nil {
+			return "", err
+		}
 		return s.genBootScript(result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning), nil
 	}
 
@@ -205,7 +210,7 @@ func ListServers(serverStates *server.States) server.Servers {
 // that host.
 func UpdateTarget(logger log.Logger, serverStates *server.States,
 	resolver *mappings.Resolver, templateRenderer *templates.ShoelacesTemplates, eventLog *event.Log, baseURL string, srv server.Server,
-	targetName string, _ string, params map[string]interface{}) (inputErr bool, err error) {
+	targetName string, _ string, params map[string]any) (inputErr bool, err error) {
 	return NewService(logger, serverStates, resolver, eventLog, templateRenderer, baseURL).UpdateTarget(srv, targetName, "", params)
 }
 
@@ -228,7 +233,9 @@ func (s *Service) manualAction(srv server.Server, allowedTargets []server.Target
 	case BootAction:
 		setHostName(script.Params, srv.Mac)
 		srv.Hostname = script.Params["hostname"].(string)
-		s.eventLog.AddEvent(event.HostBoot, srv, event.ManualBoot, script.Name, script.Params)
+		if err := s.eventLog.AppendEvent(context.Background(), event.HostBoot, srv, event.ManualBoot, script.Name, script.Params); err != nil {
+			return "", err
+		}
 		return s.genBootScript(script.Name, script.Environment, script.Params, script.Users, script.Provisioning), nil
 
 	case RetryAction:
@@ -272,7 +279,9 @@ func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.
 
 	s.serverStates.AddServerWithTargets(srv, allowedTargets)
 	s.logger.Debug("New server", "component", "polling", "mac", srv.Mac)
-	s.eventLog.AddEvent(event.HostPoll, srv, "", "", nil)
+	if err := s.eventLog.AppendEvent(context.Background(), event.HostPoll, srv, "", "", nil); err != nil {
+		s.logger.Error("Failed to record host poll event", "component", "polling", "mac", srv.Mac, "err", err)
+	}
 
 	return nil, RetryAction
 }
@@ -295,8 +304,8 @@ func resolveBootTarget(resolver *mappings.Resolver, request mappings.ResolveRequ
 	return result, srv, nil
 }
 
-func generatedBootParams(params map[string]interface{}, structuredHostname, baseURL, envName string, srv server.Server, matchType mappings.MatchType) map[string]interface{} {
-	generated := map[string]interface{}{
+func generatedBootParams(params map[string]any, structuredHostname, baseURL, envName string, srv server.Server, matchType mappings.MatchType) map[string]any {
+	generated := map[string]any{
 		"baseURL": utils.BaseURLforEnvName(baseURL, envName),
 	}
 	if _, hasLegacyHostname := params["hostname"]; !hasLegacyHostname && structuredHostname != "" {
@@ -344,18 +353,18 @@ func targetOptions(targets []mappings.TargetCandidate) []server.TargetOption {
 	return options
 }
 
-func copyParams(params map[string]interface{}) map[string]interface{} {
+func copyParams(params map[string]any) map[string]any {
 	if params == nil {
 		return nil
 	}
-	copied := make(map[string]interface{}, len(params))
+	copied := make(map[string]any, len(params))
 	for key, value := range params {
 		copied[key] = value
 	}
 	return copied
 }
 
-func setHostName(params map[string]interface{}, mac string) {
+func setHostName(params map[string]any, mac string) {
 	if _, ok := params["hostname"]; !ok {
 		hostname := utils.MacColonToDash(mac)
 		if hnPrefix, ok := params["hostnamePrefix"]; ok {
@@ -375,7 +384,7 @@ func GenStartScript(logger log.Logger, baseURL string) string {
 }
 
 func genStartScript(logger log.Logger, baseURL string) string {
-	variablesMap := map[string]interface{}{}
+	variablesMap := map[string]any{}
 	parsedTemplate := &bytes.Buffer{}
 
 	tmpl, err := template.New("retry").Parse(startScript)
@@ -394,7 +403,7 @@ func genStartScript(logger log.Logger, baseURL string) string {
 	return parsedTemplate.String()
 }
 
-func (s *Service) genBootScript(scriptName, envName string, params map[string]interface{}, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) string {
+func (s *Service) genBootScript(scriptName, envName string, params map[string]any, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) string {
 	text, err := s.templateRenderer.RenderTemplate(scriptName, mappings.ParamsWithProvisioning(params, users, provisioning), envName)
 	if err != nil {
 		panic(err)
@@ -403,7 +412,7 @@ func (s *Service) genBootScript(scriptName, envName string, params map[string]in
 }
 
 func (s *Service) genRetryScript(mac string) string {
-	variablesMap := map[string]interface{}{}
+	variablesMap := map[string]any{}
 	parsedTemplate := &bytes.Buffer{}
 
 	tmpl, err := template.New("retry").Parse(retryScript)

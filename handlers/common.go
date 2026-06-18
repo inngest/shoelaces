@@ -56,7 +56,7 @@ func (t *DefaultTemplateRenderer) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	t.renderTemplate(w, tpl, "footer", tplVars)
 }
 
-func (t *DefaultTemplateRenderer) renderTemplate(w http.ResponseWriter, tpl *template.Template, tmpl string, d interface{}) {
+func (t *DefaultTemplateRenderer) renderTemplate(w http.ResponseWriter, tpl *template.Template, tmpl string, d any) {
 	err := tpl.ExecuteTemplate(w, tmpl, d)
 	if err != nil {
 		t.env.Logger.Error("Failed to render UI template", "component", "handler", "template", tmpl, "err", err)

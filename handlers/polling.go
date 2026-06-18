@@ -132,8 +132,8 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func parsePostForm(form map[string][]string) (mac, scriptName, environment string, params map[string]interface{}) {
-	params = make(map[string]interface{})
+func parsePostForm(form map[string][]string) (mac, scriptName, environment string, params map[string]any) {
+	params = make(map[string]any)
 	for k, v := range form {
 		switch k {
 		case "mac":

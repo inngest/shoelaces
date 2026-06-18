@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,20 +18,24 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 )
 
 // ListEvents returns a JSON list of the logged events.
 func ListEvents(w http.ResponseWriter, r *http.Request) {
-	// Get Environment and convert the EventLog to JSON
 	env := envFromRequest(r)
-	eventList, err := json.Marshal(env.EventLog.Events)
+	events, err := env.EventLog.ListEvents(r.Context())
+	if err != nil {
+		env.Logger.Error("Failed to list events", "component", "handler", "err", err)
+		http.Error(w, "failed to list events", http.StatusInternalServerError)
+		return
+	}
+	eventList, err := json.Marshal(events)
 	if err != nil {
 		env.Logger.Error("Failed to marshal events", "component", "handler", "err", err)
-		os.Exit(1)
+		http.Error(w, "failed to marshal events", http.StatusInternalServerError)
+		return
 	}
 
-	// Write the EventLog and send the HTTP response.
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(eventList)
 }
