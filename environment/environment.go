@@ -83,12 +83,13 @@ func New(options Options) *Environment {
 	}
 
 	env.Environments = env.initEnvOverrides()
-
 	env.EventLog = &event.Log{}
 
-	env.Logger.Info("Override found", "component", "environment", "environment", env.Environments)
+	env.logStartupConfig()
+	env.Logger.Info("Discovered environment overrides", "component", "environment", "count", len(env.Environments), "environments", env.Environments)
 
 	mappingsPath := path.Join(env.DataDir, env.MappingsFile)
+	env.Logger.Info("Loading mappings", "component", "environment", "source", mappingsPath)
 	if err := env.initMappings(mappingsPath); err != nil {
 		panic(err)
 	}
@@ -99,6 +100,22 @@ func New(options Options) *Environment {
 	server.StartStateCleaner(env.Logger, env.ServerStates)
 
 	return env
+}
+
+func (env *Environment) logStartupConfig() {
+	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler)
+	if env.TFTP == nil {
+		env.Logger.Info("Configured TFTP", "component", "environment", "enabled", false)
+		return
+	}
+	env.Logger.Info("Configured TFTP", "component", "environment", "enabled", env.TFTP.Enabled, "addr", env.TFTP.Addr, "root", env.TFTP.Root, "readonly", env.TFTP.Readonly, "timeout", env.TFTP.Timeout)
+}
+
+func (env *Environment) uiSource() string {
+	if env.UsesUIOverride() {
+		return env.UIDir
+	}
+	return "embedded"
 }
 
 func defaultEnvironment() *Environment {
