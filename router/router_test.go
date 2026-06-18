@@ -147,8 +147,8 @@ baseURL={{.baseURL}}
 `), 0o644))
 
 	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
-		env.Templates = templates.New()
-		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		env.Templates = templates.New(env.Logger)
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 		env.MappingResolver = mustMappingResolver(t, &mappings.Mappings{
 			Defaults: mappings.DefaultsMap{
 				Params: map[string]interface{}{
@@ -176,8 +176,8 @@ baseURL={{.baseURL}}
 func TestConfigTemplateRouteRendersEmbeddedProvisioningTemplate(t *testing.T) {
 	dataDir := t.TempDir()
 	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
-		env.Templates = templates.New()
-		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		env.Templates = templates.New(env.Logger)
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 	})
 	req := httptest.NewRequest(http.MethodGet, "/configs/preseed/debian?encrypt_home=false", nil)
 	rr := httptest.NewRecorder()
@@ -200,8 +200,8 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 
 	var bootScript string
 	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
-		env.Templates = templates.New()
-		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		env.Templates = templates.New(env.Logger)
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 		params := mappings.ParamsWithProvisioning(map[string]interface{}{
 			"baseURL":  env.BaseURL,
 			"hostname": "boot-host",
@@ -232,7 +232,7 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 		})
 
 		var err error
-		bootScript, err = env.Templates.RenderTemplate(env.Logger, "debian.ipxe", params, "")
+		bootScript, err = env.Templates.RenderTemplate("debian.ipxe", params, "")
 		require.NoError(t, err)
 	})
 	preseedURL := renderedPreseedURL(t, bootScript)

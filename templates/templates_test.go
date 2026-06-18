@@ -29,9 +29,8 @@ import (
 
 func TestParseTemplatesAndRenderTemplate(t *testing.T) {
 	renderer := newTestRenderer(t)
-	logger := log.MakeLogger(testLogWriter{})
 
-	rendered, err := renderer.RenderTemplate(logger, "boot.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname": "default-host",
 		"baseURL":  "127.0.0.1:8081",
 	}, "")
@@ -45,7 +44,7 @@ func TestParseTemplatesAndRenderTemplate(t *testing.T) {
 func TestRenderTemplateUsesEnvironmentOverride(t *testing.T) {
 	renderer := newTestRenderer(t)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "boot.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname": "override-host",
 		"baseURL":  "127.0.0.1:8081",
 	}, "testing")
@@ -59,7 +58,7 @@ func TestRenderTemplateUsesEnvironmentOverride(t *testing.T) {
 func TestRenderTemplateFallsBackToDefaultEnvironment(t *testing.T) {
 	renderer := newTestRenderer(t)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "fallback.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("fallback.ipxe", map[string]interface{}{
 		"hostname": "fallback-host",
 	}, "testing")
 
@@ -70,7 +69,7 @@ func TestRenderTemplateFallsBackToDefaultEnvironment(t *testing.T) {
 func TestRenderTemplateReturnsMissingVariableError(t *testing.T) {
 	renderer := newTestRenderer(t)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "boot.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname": "missing-base-url",
 	}, "")
 
@@ -102,7 +101,7 @@ echo {{.hostname}}
 `)
 	renderer := newEmbeddedFallbackRenderer(t, dataDir)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "boot.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname": "partial-host",
 	}, "")
 
@@ -216,8 +215,8 @@ func TestListVariablesPartialDependencyCases(t *testing.T) {
 				writeTemplate(t, filepath.Join(dataDir, path), content)
 			}
 
-			renderer := New()
-			renderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", []string{"testing"}, ".slc")
+			renderer := New(log.MakeLogger(testLogWriter{}))
+			renderer.ParseTemplates(dataDir, "env_overrides", []string{"testing"}, ".slc")
 			variables := renderer.ListVariables(tt.template, tt.env)
 
 			assert.ElementsMatch(t, tt.expected, variables)
@@ -250,7 +249,7 @@ func TestRenderTemplateReturnsNestedPartialMissingVariableErrors(t *testing.T) {
 			writeTemplate(t, filepath.Join(dataDir, "boot.ipxe.slc"), tt.template)
 			renderer := newEmbeddedFallbackRenderer(t, dataDir)
 
-			rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "boot.ipxe", tt.params, "")
+			rendered, err := renderer.RenderTemplate("boot.ipxe", tt.params, "")
 
 			assert.Empty(t, rendered)
 			require.Error(t, err)
@@ -260,10 +259,10 @@ func TestRenderTemplateReturnsNestedPartialMissingVariableErrors(t *testing.T) {
 }
 
 func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
-	renderer := newTestRenderer(t)
 	var logOutput bytes.Buffer
+	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(&logOutput), "boot.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname":              "secure-host",
 		"baseURL":               "127.0.0.1:8081",
 		"root_password_crypted": "hash",
@@ -279,8 +278,8 @@ func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 }
 
 func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
-	renderer := newTestRenderer(t)
 	var logOutput bytes.Buffer
+	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
 	params := mappings.ParamsWithUsers(map[string]interface{}{
 		"hostname": "secure-host",
 		"baseURL":  "127.0.0.1:8081",
@@ -292,7 +291,7 @@ func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 		},
 	})
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(&logOutput), "boot.ipxe", params, "")
+	rendered, err := renderer.RenderTemplate("boot.ipxe", params, "")
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
@@ -302,8 +301,8 @@ func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 }
 
 func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
-	renderer := newTestRenderer(t)
 	var logOutput bytes.Buffer
+	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
 	params := mappings.ParamsWithProvisioning(map[string]interface{}{
 		"hostname": "secure-host",
 		"baseURL":  "127.0.0.1:8081",
@@ -315,7 +314,7 @@ func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 		},
 	})
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(&logOutput), "boot.ipxe", params, "")
+	rendered, err := renderer.RenderTemplate("boot.ipxe", params, "")
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
@@ -334,7 +333,7 @@ func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {
 func TestRenderTemplateUsesEmbeddedProvisioningFallback(t *testing.T) {
 	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "debian.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("debian.ipxe", map[string]interface{}{
 		"baseURL":      "127.0.0.1:8081",
 		"encrypt_home": false,
 		"hostname":     "embedded-host",
@@ -362,7 +361,7 @@ echo disk override {{.hostname}}
 `)
 	renderer := newEmbeddedFallbackRenderer(t, dataDir)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "debian.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("debian.ipxe", map[string]interface{}{
 		"hostname": "disk-host",
 	}, "")
 
@@ -404,22 +403,22 @@ removed-cloudconfig-units: true
 		"release":      "bookworm",
 	}
 
-	preseed, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+	preseed, err := renderer.RenderTemplate("preseed/debian", params, "")
 	require.NoError(t, err)
 	assert.NotContains(t, preseed, "removed preseed hook")
 	assert.NotContains(t, preseed, "d-i preseed/late_command string true")
 
-	ipxe, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "debian.ipxe", params, "")
+	ipxe, err := renderer.RenderTemplate("debian.ipxe", params, "")
 	require.NoError(t, err)
 	assert.NotContains(t, ipxe, "removed-linux-args")
 	assert.NotContains(t, ipxe, "removed.example")
 	assert.Contains(t, ipxe, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
 
-	kickstart, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "centos.ks", params, "")
+	kickstart, err := renderer.RenderTemplate("centos.ks", params, "")
 	require.NoError(t, err)
 	assert.NotContains(t, kickstart, "removed kickstart hook")
 
-	cloudConfig, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "cloudconfig-coreos", params, "")
+	cloudConfig, err := renderer.RenderTemplate("cloudconfig-coreos", params, "")
 	require.NoError(t, err)
 	assert.NotContains(t, cloudConfig, "removed-cloudconfig-units")
 }
@@ -440,7 +439,7 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 		},
 	})
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+	rendered, err := renderer.RenderTemplate("preseed/debian", params, "")
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "d-i preseed/late_command string echo extra extra-host /dev/nvme0n1")
@@ -462,12 +461,12 @@ func TestEmbeddedUserRenderingDoesNotRequireDiskUserPartials(t *testing.T) {
 		},
 	})
 
-	preseed, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+	preseed, err := renderer.RenderTemplate("preseed/debian", params, "")
 	require.NoError(t, err)
 	assert.Contains(t, preseed, "d-i passwd/user-fullname string Infrastructure User")
 	assert.Contains(t, preseed, "d-i passwd/username string infra")
 
-	cloudConfig, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "cloudconfig-coreos", params, "")
+	cloudConfig, err := renderer.RenderTemplate("cloudconfig-coreos", params, "")
 	require.NoError(t, err)
 	assert.Contains(t, cloudConfig, "  - name: infra")
 	assert.Contains(t, cloudConfig, `    passwd: "$6$infra"`)
@@ -496,12 +495,12 @@ users:
 		},
 	})
 
-	preseed, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", params, "")
+	preseed, err := renderer.RenderTemplate("preseed/debian", params, "")
 	require.NoError(t, err)
 	assert.Contains(t, preseed, "d-i passwd/username string infra")
 	assert.NotContains(t, preseed, "disk-partial-user")
 
-	cloudConfig, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "cloudconfig-coreos", params, "")
+	cloudConfig, err := renderer.RenderTemplate("cloudconfig-coreos", params, "")
 	require.NoError(t, err)
 	assert.Contains(t, cloudConfig, "  - name: infra")
 	assert.NotContains(t, cloudConfig, "disk-partial-user")
@@ -516,7 +515,7 @@ d-i netcfg/get_hostname string {{ .hostname }}
 `)
 	renderer := newEmbeddedFallbackRenderer(t, dataDir)
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(testLogWriter{}), "preseed/debian", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("preseed/debian", map[string]interface{}{
 		"hostname": "override-host",
 	}, "")
 
@@ -527,6 +526,11 @@ d-i netcfg/get_hostname string {{ .hostname }}
 }
 
 func newTestRenderer(t *testing.T) *ShoelacesTemplates {
+	t.Helper()
+	return newTestRendererWithLogger(t, log.MakeLogger(testLogWriter{}))
+}
+
+func newTestRendererWithLogger(t *testing.T, logger log.Logger) *ShoelacesTemplates {
 	t.Helper()
 
 	dataDir := t.TempDir()
@@ -547,8 +551,8 @@ chain http://{{.baseURL}}/override
 {{end}}
 `)
 
-	renderer := New()
-	renderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", []string{"testing"}, ".slc")
+	renderer := New(logger)
+	renderer.ParseTemplates(dataDir, "env_overrides", []string{"testing"}, ".slc")
 	return renderer
 }
 
@@ -562,8 +566,8 @@ func writeTemplate(t *testing.T, path string, content string) {
 func newEmbeddedFallbackRenderer(t *testing.T, dataDir string) *ShoelacesTemplates {
 	t.Helper()
 
-	renderer := New()
-	renderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", nil, ".slc")
+	renderer := New(log.MakeLogger(testLogWriter{}))
+	renderer.ParseTemplates(dataDir, "env_overrides", nil, ".slc")
 	return renderer
 }
 

@@ -128,7 +128,7 @@ func UpdateTarget(logger log.Logger, serverStates *server.States,
 	}
 
 	// Test the template before storing the selection for the polling host.
-	if _, err = templateRenderer.RenderTemplate(logger, result.Target.Script, mappings.ParamsWithProvisioning(result.Params, result.Users, result.Provisioning), result.Target.Environment); err != nil {
+	if _, err = templateRenderer.RenderTemplate(result.Target.Script, mappings.ParamsWithProvisioning(result.Params, result.Users, result.Provisioning), result.Target.Environment); err != nil {
 		return true, err
 	}
 
@@ -350,7 +350,7 @@ func GenStartScript(logger log.Logger, baseURL string) string {
 }
 
 func genBootScript(logger log.Logger, templateRenderer *templates.ShoelacesTemplates, scriptName, envName string, params map[string]interface{}, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) string {
-	text, err := templateRenderer.RenderTemplate(logger, scriptName, mappings.ParamsWithProvisioning(params, users, provisioning), envName)
+	text, err := templateRenderer.RenderTemplate(scriptName, mappings.ParamsWithProvisioning(params, users, provisioning), envName)
 	if err != nil {
 		panic(err)
 	}

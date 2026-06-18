@@ -70,6 +70,7 @@ func New(options Options) *Environment {
 		logOptions = append(logOptions, log.WithLevel(log.LevelDebug))
 	}
 	env.Logger = log.MakeLogger(os.Stdout, logOptions...)
+	env.Templates = templates.New(env.Logger)
 
 	if env.TFTP != nil && env.TFTP.Root == "./tftp" && env.DataDir != "" {
 		env.TFTP.Root = env.DataDir + "/tftp"
@@ -91,7 +92,7 @@ func New(options Options) *Environment {
 	}
 
 	env.initStaticTemplates()
-	env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 	server.StartStateCleaner(env.Logger, env.ServerStates)
 
 	return env
@@ -103,9 +104,9 @@ func defaultEnvironment() *Environment {
 	env.HostnameMaps = make([]mappings.HostnameMap, 0)
 	env.ServerStates = &server.States{Servers: make(map[string]*server.State)}
 	env.ParamsBlacklist = []string{"baseURL"}
-	env.Templates = templates.New()
 	env.Environments = make([]string, 0)
 	env.Logger = log.MakeLogger(os.Stdout)
+	env.Templates = templates.New(env.Logger)
 
 	return env
 }

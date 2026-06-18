@@ -528,15 +528,15 @@ func validatorPath(t *testing.T, name string) string {
 func newRenderer(t *testing.T) *templates.ShoelacesTemplates {
 	t.Helper()
 
-	renderer := templates.New()
-	renderer.ParseTemplates(log.MakeLogger(io.Discard), t.TempDir(), "env_overrides", nil, ".slc")
+	renderer := templates.New(log.MakeLogger(io.Discard))
+	renderer.ParseTemplates(t.TempDir(), "env_overrides", nil, ".slc")
 	return renderer
 }
 
 func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name string, params map[string]interface{}) string {
 	t.Helper()
 
-	rendered, err := renderer.RenderTemplate(log.MakeLogger(io.Discard), name, params, "")
+	rendered, err := renderer.RenderTemplate(name, params, "")
 	require.NoError(t, err)
 	return rendered
 }

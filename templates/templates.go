@@ -18,6 +18,7 @@ package templates
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -38,6 +39,7 @@ const defaultEnvironment = "default"
 // ShoelacesTemplates holds the core attributes for handling the dyanmic configurations
 // in Shoelaces.
 type ShoelacesTemplates struct {
+	logger       log.Logger
 	envTemplates map[string]shoelacesTemplateEnvironment
 	dataDir      string
 	envDir       string
@@ -52,21 +54,24 @@ type shoelacesTemplateEnvironment struct {
 
 // New creates and initializes a new ShoelacesTemplates instance a returns a pointer to
 // it.
-func New() *ShoelacesTemplates {
+func New(logger log.Logger) *ShoelacesTemplates {
+	if logger == nil {
+		logger = log.MakeLogger(io.Discard)
+	}
 	e := make(map[string]shoelacesTemplateEnvironment)
 	e[defaultEnvironment] = shoelacesTemplateEnvironment{
 		templateObj:  template.New(""),
 		templateVars: make(map[string][]string),
 		templateRefs: make(map[string][]string),
 	}
-	return &ShoelacesTemplates{envTemplates: e}
+	return &ShoelacesTemplates{logger: logger, envTemplates: e}
 }
 
-func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment string) {
+func (s *ShoelacesTemplates) checkAddEnvironment(environment string) {
 	if _, ok := s.envTemplates[environment]; !ok {
 		c, e := s.envTemplates[defaultEnvironment].templateObj.Clone()
 		if e != nil {
-			logger.Error("Template for environment already executed", "component", "template", "environment", environment)
+			s.logger.Error("Template for environment already executed", "component", "template", "environment", environment)
 			os.Exit(1)
 		}
 		s.envTemplates[environment] = shoelacesTemplateEnvironment{
@@ -79,16 +84,16 @@ func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment 
 	}
 }
 
-func (s *ShoelacesTemplates) addTemplate(logger log.Logger, path string, environment string) error {
+func (s *ShoelacesTemplates) addTemplate(path string, environment string) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	return s.addTemplateContent(logger, path, content, environment)
+	return s.addTemplateContent(path, content, environment)
 }
 
-func (s *ShoelacesTemplates) addTemplateContent(logger log.Logger, source string, content []byte, environment string) error {
-	s.checkAddEnvironment(logger, environment)
+func (s *ShoelacesTemplates) addTemplateContent(source string, content []byte, environment string) error {
+	s.checkAddEnvironment(environment)
 	sourceName := filepath.Base(source)
 	parsed, err := template.New(sourceName).Parse(string(content))
 	if err != nil {
@@ -212,22 +217,22 @@ func (s *ShoelacesTemplates) getEnvFromPath(path string) string {
 
 // ParseTemplates travels the dataDir and loads in an internal structure
 // all the templates found.
-func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, envDir string, envs []string, tplExt string) {
+func (s *ShoelacesTemplates) ParseTemplates(dataDir string, envDir string, envs []string, tplExt string) {
 	s.dataDir = dataDir
 	s.envDir = envDir
 	s.tplExt = tplExt
 
-	logger.Debug("Template parsing started", "component", "template", "dir", dataDir)
-	s.parseEmbeddedProvisioningTemplates(logger)
+	s.logger.Debug("Template parsing started", "component", "template", "dir", dataDir)
+	s.parseEmbeddedProvisioningTemplates()
 
 	tplScannerDefault := func(p string, info os.FileInfo, err error) error {
 		if strings.HasPrefix(p, path.Join(dataDir, envDir)) {
 			return err
 		}
 		if strings.HasSuffix(p, tplExt) {
-			logger.Info("Parsing file", "component", "template", "file", p)
-			if err := s.addTemplate(logger, p, defaultEnvironment); err != nil {
-				logger.Error("Template parse failed", "component", "template", "err", err)
+			s.logger.Info("Parsing file", "component", "template", "file", p)
+			if err := s.addTemplate(p, defaultEnvironment); err != nil {
+				s.logger.Error("Template parse failed", "component", "template", "err", err)
 				os.Exit(1)
 			}
 		}
@@ -237,10 +242,10 @@ func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, e
 	tplScannerOverride := func(p string, info os.FileInfo, err error) error {
 		if strings.HasSuffix(p, tplExt) {
 			env := s.getEnvFromPath(p)
-			logger.Info("Parsing override", "component", "template", "environment", env, "file", p)
+			s.logger.Info("Parsing override", "component", "template", "environment", env, "file", p)
 
-			if err := s.addTemplate(logger, p, env); err != nil {
-				logger.Error("Template override parse failed", "component", "template", "err", err)
+			if err := s.addTemplate(p, env); err != nil {
+				s.logger.Error("Template override parse failed", "component", "template", "err", err)
 				os.Exit(1)
 			}
 		}
@@ -250,31 +255,31 @@ func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, e
 	if err := filepath.Walk(dataDir, tplScannerDefault); err != nil {
 		panic(err)
 	}
-	logger.Info("Parsing override files", "component", "template", "dir", path.Join(dataDir, envDir))
+	s.logger.Info("Parsing override files", "component", "template", "dir", path.Join(dataDir, envDir))
 	if err := filepath.Walk(path.Join(dataDir, envDir), tplScannerOverride); err != nil {
-		logger.Info("No overrides found", "component", "template")
+		s.logger.Info("No overrides found", "component", "template")
 	}
-	logger.Debug("Parsing ended", "component", "template")
+	s.logger.Debug("Parsing ended", "component", "template")
 }
 
-func (s *ShoelacesTemplates) parseEmbeddedProvisioningTemplates(logger log.Logger) {
+func (s *ShoelacesTemplates) parseEmbeddedProvisioningTemplates() {
 	defaults := shoelaces.ProvisioningDefaultsFS()
 	err := fs.WalkDir(defaults, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
 		if strings.HasSuffix(p, s.tplExt) {
-			logger.Info("Parsing embedded provisioning file", "component", "template", "file", p)
+			s.logger.Info("Parsing embedded provisioning file", "component", "template", "file", p)
 			content, err := fs.ReadFile(defaults, p)
 			if err != nil {
 				return err
 			}
-			return s.addTemplateContent(logger, p, content, defaultEnvironment)
+			return s.addTemplateContent(p, content, defaultEnvironment)
 		}
 		return nil
 	})
 	if err != nil {
-		logger.Error("Embedded provisioning template parse failed", "component", "template", "err", err)
+		s.logger.Error("Embedded provisioning template parse failed", "component", "template", "err", err)
 		os.Exit(1)
 	}
 }
@@ -282,7 +287,7 @@ func (s *ShoelacesTemplates) parseEmbeddedProvisioningTemplates(logger log.Logge
 // RenderTemplate receives a name and a map of parameters, among other
 // arguments, and returns the rendered template. It's aware of the
 // environment, in case of any.
-func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string, paramMap map[string]interface{}, envName string) (string, error) {
+func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[string]interface{}, envName string) (string, error) {
 	if envName == "" {
 		envName = defaultEnvironment
 	}
@@ -293,10 +298,10 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	paramMap = mappings.ParamsWithProvisioning(paramMap, nil, provisioning)
 	paramMap, err := s.withInstallerExtra(paramMap, envName, configName)
 	if err != nil {
-		logger.Info("Failed to render installer extra", "component", "template", "action", "render-installer-extra", "err", err)
+		s.logger.Info("Failed to render installer extra", "component", "template", "action", "render-installer-extra", "err", err)
 		return "", err
 	}
-	logger.Info("Template request", "component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
+	s.logger.Info("Template request", "component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
 
 	requiredVariables := s.envTemplates[envName].listVariables(configName)
 
@@ -309,7 +314,7 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 		err = s.envTemplates[defaultEnvironment].templateObj.ExecuteTemplate(&b, configName, paramMap)
 	}
 	if err != nil {
-		logger.Info("Failed to render template", "component", "template", "action", "render-template", "err", err)
+		s.logger.Info("Failed to render template", "component", "template", "action", "render-template", "err", err)
 		return "", err
 	}
 	r := b.String()
@@ -323,7 +328,7 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 				missingVariables += requiredVariable
 			}
 		}
-		logger.Info("Missing variables in request", "component", "template", "variables", missingVariables)
+		s.logger.Info("Missing variables in request", "component", "template", "variables", missingVariables)
 		return "", errors.New("Missing variables in request: " + missingVariables)
 	}
 
