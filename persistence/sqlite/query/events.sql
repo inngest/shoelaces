@@ -1,5 +1,6 @@
 -- name: InsertEvent :one
 INSERT INTO events (
+  id,
   event_type,
   occurred_at_unix_nano,
   mac,
@@ -9,7 +10,7 @@ INSERT INTO events (
   script,
   message,
   params_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: ListEvents :many

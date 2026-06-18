@@ -55,7 +55,7 @@ func RunStoreContract(t *testing.T, factory StoreFactory) {
 			ParamsJSON: []byte(`{"token":"<redacted>"}`),
 		})
 		require.NoError(t, err)
-		assert.NotZero(t, firstID)
+		assert.False(t, firstID.IsZero())
 
 		secondID, err := store.AppendEvent(ctx, persistence.EventRecord{
 			Type:       2,
@@ -69,11 +69,14 @@ func RunStoreContract(t *testing.T, factory StoreFactory) {
 			ParamsJSON: []byte(`{"role":"db"}`),
 		})
 		require.NoError(t, err)
-		assert.Greater(t, secondID, firstID)
+		assert.False(t, secondID.IsZero())
+		assert.NotEqual(t, firstID, secondID)
 
 		events, err := store.ListEvents(ctx)
 		require.NoError(t, err)
 		require.Len(t, events, 2)
+		assert.Equal(t, firstID, events[0].ID)
+		assert.Equal(t, secondID, events[1].ID)
 		assert.Equal(t, "old-host", events[0].Hostname)
 		assert.Equal(t, []byte(`{"role":"db"}`), events[1].ParamsJSON)
 

@@ -17,12 +17,14 @@ package persistence
 import (
 	"context"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
 // EventCommands owns write-side event mutations.
 type EventCommands interface {
 	// AppendEvent persists an already-redacted event and returns its durable ID.
-	AppendEvent(ctx context.Context, event EventRecord) (int64, error)
+	AppendEvent(ctx context.Context, event EventRecord) (ulid.ULID, error)
 	// DeleteEventsBefore removes events older than the cutoff.
 	DeleteEventsBefore(ctx context.Context, cutoff time.Time) (int64, error)
 }

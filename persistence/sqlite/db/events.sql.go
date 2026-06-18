@@ -24,6 +24,7 @@ func (q *Queries) DeleteEventsBefore(ctx context.Context, occurredAtUnixNano int
 
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO events (
+  id,
   event_type,
   occurred_at_unix_nano,
   mac,
@@ -33,11 +34,12 @@ INSERT INTO events (
   script,
   message,
   params_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type InsertEventParams struct {
+	ID                 []byte `json:"id"`
 	EventType          int64  `json:"event_type"`
 	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano"`
 	Mac                string `json:"mac"`
@@ -49,8 +51,9 @@ type InsertEventParams struct {
 	ParamsJson         []byte `json:"params_json"`
 }
 
-func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error) {
+func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) ([]byte, error) {
 	row := q.db.QueryRowContext(ctx, insertEvent,
+		arg.ID,
 		arg.EventType,
 		arg.OccurredAtUnixNano,
 		arg.Mac,
@@ -61,7 +64,7 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (int64
 		arg.Message,
 		arg.ParamsJson,
 	)
-	var id int64
+	var id []byte
 	err := row.Scan(&id)
 	return id, err
 }

@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id BLOB PRIMARY KEY,
   event_type INTEGER NOT NULL,
   occurred_at_unix_nano INTEGER NOT NULL,
   mac TEXT NOT NULL,
