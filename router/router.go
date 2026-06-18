@@ -17,7 +17,7 @@ package router
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	shoelaces "github.com/inngest/shoelaces"
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/handlers"
@@ -25,44 +25,42 @@ import (
 
 // ShoelacesRouter sets up all routes and handlers for shoelaces
 func ShoelacesRouter(env *environment.Environment) http.Handler {
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 
 	// Main UI page
-	r.Handle("/", handlers.RenderDefaultTemplate("index", env)).Methods("GET")
+	r.Method(http.MethodGet, "/", handlers.RenderDefaultTemplate("index", env))
 	// Event Log History page
-	r.Handle("/events", handlers.RenderDefaultTemplate("events", env)).Methods("GET")
+	r.Method(http.MethodGet, "/events", handlers.RenderDefaultTemplate("events", env))
 	// Currently configured mappings page
-	r.Handle("/mappings", handlers.RenderDefaultTemplate("mappings", env)).Methods("GET")
+	r.Method(http.MethodGet, "/mappings", handlers.RenderDefaultTemplate("mappings", env))
 	// Static files used by the UI
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", staticFileServer(env)))
+	r.Handle("/static/*", http.StripPrefix("/static/", staticFileServer(env)))
 	// Manual boot parameters POST endpoint
-	r.HandleFunc("/update/target", handlers.UpdateTargetHandler).Methods("POST")
+	r.Post("/update/target", handlers.UpdateTargetHandler)
 	// Provides a list of the servers that tried to boot but did not match
 	// the hostname regex or network mappings
-	r.HandleFunc("/ajax/servers", handlers.ServerListHandler).Methods("GET")
+	r.Get("/ajax/servers", handlers.ServerListHandler)
 	// Event Log History JSON endpoint
-	r.HandleFunc("/ajax/events", handlers.ListEvents).Methods("GET")
+	r.Get("/ajax/events", handlers.ListEvents)
 	// Provides the list of possible parameters for a given template
 	r.Handle("/ajax/script/params", handlers.TemplateParamsServer(env))
 
 	// Static configuration files endpoint
-	r.PathPrefix("/configs/static/").Handler(http.StripPrefix("/configs/static/",
-		handlers.StaticConfigFileServer()))
+	r.Handle("/configs/static/*", http.StripPrefix("/configs/static/", handlers.StaticConfigFileServer()))
 
 	// Dynamic configuration endpoint
-	r.PathPrefix("/configs/").Handler(http.StripPrefix("/configs/",
-		handlers.TemplateServer(env)))
+	r.Handle("/configs/*", http.StripPrefix("/configs/", handlers.TemplateServer(env)))
 
 	// Starting point for iPXE boot agents, usualy defined by DHCP server.
 	// Gets the iPXE boot agents into the polling loop.
-	r.HandleFunc("/start", handlers.StartPollingHandler).Methods("GET")
+	r.Get("/start", handlers.StartPollingHandler)
 	// Called by iPXE boot agents, returns boot script specified on the configuration
 	// or if the host is unknown makes it retry for a while until the user specifies
 	// alternative ipxe boot script
-	r.HandleFunc("/poll/1/{mac}", handlers.PollHandler).Methods("GET")
+	r.Get("/poll/1/{mac}", handlers.PollHandler)
 	// Serves a generated iPXE boot script providing a selection
 	// of all of the boot scripts available on the filesystem for that environment.
-	r.HandleFunc("/ipxemenu", handlers.IPXEMenu).Methods("GET")
+	r.Get("/ipxemenu", handlers.IPXEMenu)
 
 	return r
 }
