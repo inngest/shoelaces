@@ -103,8 +103,10 @@ persistence:
   rows.
 - [ ] Implement schema migration/versioning for the SQLite backend using the
   checked-in schema files.
-- [ ] Add a =make gen= or equivalent workflow entry if sqlc generation is not
-  already covered.
+- [ ] Update the =Makefile= so =make gen= generates sqlc codegen files for all
+  configured persistence backends.
+- [ ] Add a =Makefile= check target, or extend an existing check target, so CI
+  verifies generated sqlc files are up to date after =make gen=.
 - [ ] Ensure database directories are created with restrictive permissions.
 - [ ] Add unit tests for config parsing, default path resolution, absolute path
   handling, invalid backend values, and directory creation failures.
@@ -194,6 +196,8 @@ persistence:
   allowed to depend on command or query interfaces.
 - [ ] Document the sqlc workflow for editing schema/query files and regenerating
   typed Go accessors.
+- [ ] Document that contributors should run =make gen= after changing sqlc
+  schema or query files.
 - [ ] Document database location, retention behavior, backup expectations, and
   safe deletion/recovery behavior.
 - [ ] Document how references work in the network boot flow.
@@ -223,6 +227,8 @@ persistence:
 - [ ] Secret-bearing or sensitive values are redacted in persisted events and
   UI/API responses.
 - [ ] Retention cleanup bounds persistent database growth.
+- [ ] =make gen= regenerates checked-in sqlc files for the persistence backend.
+- [ ] CI fails when sqlc generated files are stale.
 - [ ] =make test=, =make integration=, render validation, =make lint=, and the
   plan status checker pass.
 
