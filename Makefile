@@ -1,6 +1,7 @@
 GO = go
 SCDOC = scdoc
 LDFLAGS = "-s -w"
+SQLC = go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
 
 pkgs = ./...
 
@@ -19,6 +20,14 @@ lint:
 .PHONY: fmt
 fmt:
 	$(GO) fmt ./...
+
+.PHONY: gen
+gen:
+	$(SQLC) generate
+
+.PHONY: check-gen
+check-gen: gen
+	git diff --exit-code -- persistence/sqlite/db
 
 .PHONY: clean
 clean:
