@@ -63,6 +63,10 @@ Hosts send their MAC address when they contact Shoelaces.
 Shoelaces also extracts the source IP from the HTTP request and performs a reverse DNS lookup.
 When reverse DNS resolves, the hostname is shown in the UI; otherwise the UI shows the MAC and IP.
 
+See [Provisioning Defaults And Overrides](provisioning-overrides.md) for how
+`/configs/*` installer templates, `/configs/static/*` provisioning assets,
+embedded defaults, and disk overrides interact after a boot target is selected.
+
 ## Requirements
 
 You need a LAN segment with working TFTP and DHCP services.

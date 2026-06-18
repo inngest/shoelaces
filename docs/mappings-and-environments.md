@@ -59,6 +59,9 @@ hostnameMaps:
 Shoelaces reads mappings from the YAML file configured by `mappings-file`, relative to `data-dir`.
 See [configs/data-dir/mappings.yaml](../configs/data-dir/mappings.yaml) for a complete example.
 The old `networkMaps[].script` and `hostnameMaps[].script` schema is no longer supported; define named `targets` and reference them from mapping rules instead.
+See [Provisioning Defaults And Overrides](provisioning-overrides.md) for the
+structured provisioning sections that targets and mapping rules can set in
+addition to raw template params.
 
 ## Parameters
 
@@ -109,6 +112,8 @@ Example `data-dir` layout:
 A target with `environment: testing` uses templates from `env_overrides/testing` when present.
 All other templates are served from the base directory.
 Everything except `mappings.yaml` can be overridden by preserving its path under `env_overrides/{environment}/`.
+For the full embedded, disk, and environment override precedence model, see
+[Provisioning Defaults And Overrides](provisioning-overrides.md).
 
 Shoelaces is mostly stateless.
 It sets a different `baseURL` for environment requests:
