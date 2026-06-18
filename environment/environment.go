@@ -28,6 +28,7 @@ import (
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
 )
@@ -41,6 +42,7 @@ type Environment struct {
 	MappingResolver *mappings.Resolver
 	ServerStates    *server.States
 	EventLog        *event.Log
+	Polling         *polling.Service
 	ParamsBlacklist []string
 	Templates       *templates.ShoelacesTemplates // Dynamic slc templates
 	StaticTemplates *template.Template            // Static Templates
@@ -93,6 +95,7 @@ func New(options Options) *Environment {
 
 	env.initStaticTemplates()
 	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 	server.StartStateCleaner(env.Logger, env.ServerStates)
 
 	return env
@@ -103,10 +106,12 @@ func defaultEnvironment() *Environment {
 	env.NetworkMaps = make([]mappings.NetworkMap, 0)
 	env.HostnameMaps = make([]mappings.HostnameMap, 0)
 	env.ServerStates = &server.States{Servers: make(map[string]*server.State)}
+	env.EventLog = &event.Log{}
 	env.ParamsBlacklist = []string{"baseURL"}
 	env.Environments = make([]string, 0)
 	env.Logger = log.MakeLogger(os.Stdout)
 	env.Templates = templates.New(env.Logger)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 
 	return env
 }

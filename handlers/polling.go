@@ -24,7 +24,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/inngest/shoelaces/log"
-	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/utils"
 )
@@ -33,7 +32,7 @@ import (
 func StartPollingHandler(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 
-	script := polling.GenStartScript(env.Logger, env.BaseURL)
+	script := env.Polling.StartScript()
 
 	_, _ = w.Write([]byte(script))
 }
@@ -66,9 +65,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server := server.New(mac, ip, host)
-	script, err := polling.Poll(
-		env.Logger, env.ServerStates, env.MappingResolver,
-		env.EventLog, env.Templates, env.BaseURL, server)
+	script, err := env.Polling.Poll(server)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -82,7 +79,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 func ServerListHandler(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 
-	servers, err := json.Marshal(polling.ListServers(env.ServerStates))
+	servers, err := json.Marshal(env.Polling.ListServers())
 	if err != nil {
 		env.Logger.Error("Failed to marshal server list", "component", "handler", "err", err)
 		os.Exit(1)
@@ -114,9 +111,7 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server := server.New(mac, ip, "")
-	inputErr, err := polling.UpdateTarget(
-		env.Logger, env.ServerStates, env.MappingResolver, env.Templates, env.EventLog, env.BaseURL, server,
-		scriptName, environment, params)
+	inputErr, err := env.Polling.UpdateTarget(server, scriptName, environment, params)
 
 	if err != nil {
 		if inputErr {

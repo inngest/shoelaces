@@ -28,9 +28,12 @@ import (
 
 	shoelaces "github.com/inngest/shoelaces"
 	"github.com/inngest/shoelaces/environment"
+	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/handlers"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/polling"
+	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,10 +278,14 @@ func newTestRouterWithEnvironment(t *testing.T, dataDir string, configure func(*
 		TemplateExtension: ".slc",
 		StaticTemplates:   staticTemplates,
 		Logger:            log.MakeLogger(io.Discard),
+		ServerStates:      &server.States{Servers: make(map[string]*server.State)},
+		EventLog:          &event.Log{},
 	}
+	env.Templates = templates.New(env.Logger)
 	if configure != nil {
 		configure(env)
 	}
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 	return handlers.MiddlewareChain(env).Then(ShoelacesRouter(env))
 }
 
