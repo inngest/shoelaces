@@ -87,3 +87,63 @@ func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing
 	assert.Equal(t, "auto", params["iface"])
 	assert.Equal(t, "", params["installerExtra"])
 }
+
+func TestParamsWithProvisioningProjectsStructuredWipeDiskPatterns(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Disk:             "/dev/nvme0n1",
+			WipeDiskPatterns: []string{"/dev/nvme*n*", "/dev/sd*"},
+		},
+	})
+
+	assert.Equal(t, "/dev/nvme0n1", params["storage_disk"])
+	assert.Equal(t, "/dev/nvme*n* /dev/sd*", params["storage_wipe_disks"])
+}
+
+func TestParamsWithProvisioningPreservesExplicitWipeDiskParams(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]interface{}
+		config InstallerConfig
+	}{
+		{
+			name: "explicit render params",
+			params: map[string]interface{}{
+				"storage_wipe_disks": "/dev/explicit*",
+			},
+		},
+		{
+			name: "installer config params",
+			config: InstallerConfig{
+				ConfigParams: map[string]any{
+					"storage_wipe_disks": "/dev/config*",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := ParamsWithProvisioning(tt.params, nil, ProvisioningConfig{
+				Storage: StorageConfig{
+					Disk:             "/dev/nvme0n1",
+					WipeDiskPatterns: []string{"/dev/nvme*n*"},
+				},
+				Installer: tt.config,
+			})
+
+			if tt.params != nil {
+				assert.Equal(t, "/dev/explicit*", params["storage_wipe_disks"])
+			} else {
+				assert.Equal(t, "/dev/config*", params["storage_wipe_disks"])
+			}
+		})
+	}
+}
+
+func TestParamsWithProvisioningKeepsDefaultWipeDiskFallback(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{})
+
+	assert.Equal(t, "/dev/nvme0n1", params["storage_disk"])
+	assert.Equal(t, "/dev/nvme0n1 /dev/nvme1n1", params["storage_wipe_disks"])
+}

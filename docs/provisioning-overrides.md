@@ -264,6 +264,8 @@ defaults:
   storage:
     disk: /dev/nvme0n1
     wipe: true
+    wipeDiskPatterns:
+      - /dev/nvme*n*
     mode: lvm
     volumeGroup: vg0
     filesystems:
@@ -302,6 +304,36 @@ Scalar fields merge by replacement. String lists, such as package names and
 kernel args, replace inherited lists when set. Keyed maps, such as
 `storage.filesystems`, merge by key; set `absent: true` on a filesystem entry
 to suppress an inherited entry.
+
+`storage.disk` selects the primary disk that the installer partitions and uses
+for the operating system. `storage.wipeDiskPatterns` is separate: it selects the
+explicit disk paths or `/dev` glob patterns that installer templates may clear
+before partitioning. This lets a host install to one disk while also removing
+old partition, mdraid, or LVM metadata from a known disposable disk set.
+
+For NVMe-only hosts:
+
+```yaml
+storage:
+  disk: /dev/nvme0n1
+  wipe: true
+  wipeDiskPatterns:
+    - /dev/nvme*n*
+```
+
+For SATA/SCSI-style hosts:
+
+```yaml
+storage:
+  disk: /dev/sda
+  wipe: true
+  wipeDiskPatterns:
+    - /dev/sd*
+```
+
+Use broad patterns such as `/dev/sd*` only on hosts where every matching disk is
+known to be disposable. Prefer narrower selectors, such as
+`/dev/disk/by-id/<fleet-prefix>*`, when stable disk IDs are available.
 
 `networkMaps[].network` is the CIDR selector, so network-specific structured
 settings on a network map use `networkConfig:`. Other mapping types use

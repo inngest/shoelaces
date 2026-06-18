@@ -368,9 +368,10 @@ func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 			UpdatePolicy: "none",
 		},
 		Storage: mappings.StorageConfig{
-			Disk:        "/dev/vda",
-			Mode:        "regular",
-			VolumeGroup: "vgtest",
+			Disk:             "/dev/vda",
+			Mode:             "regular",
+			VolumeGroup:      "vgtest",
+			WipeDiskPatterns: []string{"/dev/nvme*n*", "/dev/sd*"},
 		},
 		Boot: mappings.BootConfig{
 			Installed: mappings.InstalledBootConfig{
@@ -389,6 +390,7 @@ func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	assert.Contains(t, rendered, "d-i time/zone string Europe/London")
 	assert.Contains(t, rendered, "d-i clock-setup/utc boolean false")
 	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/vda")
+	assert.Contains(t, rendered, "for d in /dev/nvme*n* /dev/sd*; do \\")
 	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
 	assert.Contains(t, rendered, "vg_name{ vgtest }")
 	assert.Contains(t, rendered, "d-i grub2/linux_cmdline string panic=30")

@@ -518,8 +518,9 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 				UpdatePolicy: "none",
 			},
 			Storage: StorageConfig{
-				Mode:        "lvm",
-				VolumeGroup: "vg0",
+				Mode:             "lvm",
+				VolumeGroup:      "vg0",
+				WipeDiskPatterns: []string{"/dev/sd*"},
 				Filesystems: map[string]FilesystemConfig{
 					"root": {Mountpoint: "/", FSType: "ext4", Size: "grow"},
 					"swap": {FSType: "swap", SizeMiB: intPtr(8192)},
@@ -552,7 +553,8 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 				Network:  NetworkConfig{Nameservers: []string{"9.9.9.9"}},
 				Packages: PackagesConfig{Install: []string{"qemu-guest-agent"}},
 				Storage: StorageConfig{
-					Disk: "/dev/nvme0n1",
+					Disk:             "/dev/nvme0n1",
+					WipeDiskPatterns: []string{"/dev/nvme*n*"},
 					Filesystems: map[string]FilesystemConfig{
 						"root": {FSType: "xfs"},
 						"home": {Mountpoint: "/home", FSType: "ext4", Size: "grow"},
@@ -573,6 +575,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 			Targets:       []string{"debian13"},
 			Locale:        LocaleConfig{Keyboard: "de"},
 			Storage: StorageConfig{
+				WipeDiskPatterns: []string{"/dev/disk/by-id/inngest-*"},
 				Filesystems: map[string]FilesystemConfig{
 					"swap": {Absent: boolPtr(true)},
 				},
@@ -615,6 +618,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 	assert.Equal(t, "/dev/nvme0n1", result.Provisioning.Storage.Disk)
 	assert.Equal(t, "lvm", result.Provisioning.Storage.Mode)
 	assert.Equal(t, "vg0", result.Provisioning.Storage.VolumeGroup)
+	assert.Equal(t, []string{"/dev/disk/by-id/inngest-*"}, result.Provisioning.Storage.WipeDiskPatterns)
 	assert.Equal(t, FilesystemConfig{Mountpoint: "/", FSType: "xfs", Size: "grow"}, result.Provisioning.Storage.Filesystems["root"])
 	assert.Equal(t, FilesystemConfig{Mountpoint: "/home", FSType: "ext4", Size: "grow"}, result.Provisioning.Storage.Filesystems["home"])
 	assert.NotContains(t, result.Provisioning.Storage.Filesystems, "swap")

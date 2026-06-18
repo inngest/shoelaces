@@ -48,6 +48,8 @@ defaults:
   storage:
     mode: lvm
     volumeGroup: vg0
+    wipeDiskPatterns:
+      - /dev/nvme*n*
     filesystems:
       root:
         mountpoint: /
@@ -117,6 +119,8 @@ networkMaps:
       hostname: net-host
     storage:
       disk: /dev/nvme0n1
+      wipeDiskPatterns:
+        - /dev/disk/by-id/inngest-*
     users:
       breakglass:
         locked: true
@@ -153,6 +157,7 @@ ipMaps:
 	assert.Equal(t, []string{"core"}, parsed.Defaults.Packages.Groups)
 	assert.Equal(t, "lvm", parsed.Defaults.Storage.Mode)
 	assert.Equal(t, "vg0", parsed.Defaults.Storage.VolumeGroup)
+	assert.Equal(t, []string{"/dev/nvme*n*"}, parsed.Defaults.Storage.WipeDiskPatterns)
 	assert.Equal(t, "/", parsed.Defaults.Storage.Filesystems["root"].Mountpoint)
 	assert.Equal(t, "uefi", parsed.Defaults.Boot.Firmware)
 	assert.Equal(t, "ipxe", parsed.Defaults.Boot.Netboot.Method)
@@ -189,6 +194,7 @@ ipMaps:
 	assert.Equal(t, []string{"debian12", "debian13"}, parsed.NetworkMaps[0].Targets)
 	assert.Equal(t, "net-host", parsed.NetworkMaps[0].NetworkSettings.Hostname)
 	assert.Equal(t, "/dev/nvme0n1", parsed.NetworkMaps[0].Storage.Disk)
+	assert.Equal(t, []string{"/dev/disk/by-id/inngest-*"}, parsed.NetworkMaps[0].Storage.WipeDiskPatterns)
 	require.NotNil(t, parsed.NetworkMaps[0].Users["breakglass"].Locked)
 	assert.True(t, *parsed.NetworkMaps[0].Users["breakglass"].Locked)
 	require.Len(t, parsed.HostnameMaps, 1)
@@ -313,6 +319,45 @@ networkMaps:
       - debian12
 `,
 			want: `targets["debian12"].packages.install[0] must not be empty`,
+		},
+		{
+			name: "invalid wipe disk pattern outside dev",
+			content: `
+defaults:
+  storage:
+    wipeDiskPatterns:
+      - /tmp/nvme*
+targets:
+  debian12:
+    script: debian.ipxe
+`,
+			want: `defaults.storage.wipeDiskPatterns[0] must start with /dev/`,
+		},
+		{
+			name: "invalid wipe disk pattern shell metacharacter",
+			content: `
+defaults:
+  storage:
+    wipeDiskPatterns:
+      - /dev/nvme*;rm
+targets:
+  debian12:
+    script: debian.ipxe
+`,
+			want: `defaults.storage.wipeDiskPatterns[0] contains unsupported shell metacharacters`,
+		},
+		{
+			name: "invalid wipe disk pattern dev catch all",
+			content: `
+defaults:
+  storage:
+    wipeDiskPatterns:
+      - /dev/*
+targets:
+  debian12:
+    script: debian.ipxe
+`,
+			want: `defaults.storage.wipeDiskPatterns[0] must be narrower than /dev/*`,
 		},
 		{
 			name: "invalid mirror url",

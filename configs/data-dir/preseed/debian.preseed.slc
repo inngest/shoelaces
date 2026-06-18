@@ -17,8 +17,10 @@ d-i apt-setup/contrib boolean {{.repo_contrib}}
 # ---- Select installation disk
 d-i partman-auto/disk string {{.storage_disk}}
 
-# ---- HARD RESET OF BOTH NVMes (kills old GPT/md/LVM) ----
+# ---- HARD RESET OF SELECTED WIPE DISKS (kills old GPT/md/LVM) ----
 # Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
+# storage_wipe_disks may contain explicit /dev glob patterns; unmatched globs
+# are skipped by the block-device check below.
 d-i partman/early_command string \
   /bin/ash -c 'set -eux; \
     mdadm --stop --scan || true; \

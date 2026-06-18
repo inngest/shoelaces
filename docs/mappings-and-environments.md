@@ -85,6 +85,40 @@ params:
 This uses the environment of the running Shoelaces process, so systemd service environment variables work without a separate env file.
 Missing referenced environment variables fail the boot render clearly.
 
+## Storage Disk Selection
+
+`storage.disk` is the primary install disk. Installer templates use it when
+choosing the disk to partition for the operating system.
+
+`storage.wipeDiskPatterns` is separate. It is an explicit list of `/dev` paths
+or glob patterns that templates may clear before partitioning. Use it when a
+host must remove stale partition tables, mdraid metadata, or LVM metadata from a
+known disposable disk set.
+
+NVMe-only hosts can use a narrow NVMe selector:
+
+```yaml
+storage:
+  disk: /dev/nvme0n1
+  wipe: true
+  wipeDiskPatterns:
+    - /dev/nvme*n*
+```
+
+SATA/SCSI-style hosts can use an `sd` selector:
+
+```yaml
+storage:
+  disk: /dev/sda
+  wipe: true
+  wipeDiskPatterns:
+    - /dev/sd*
+```
+
+Use broad patterns such as `/dev/sd*` only when every matching disk on the host
+is known to be disposable. Prefer stable, narrower selectors such as
+`/dev/disk/by-id/<fleet-prefix>*` when available.
+
 ## Environment Overrides
 
 Environment overrides let a target serve selected templates from `env_overrides/{environment}/` while falling back to the base `data-dir` for everything else.

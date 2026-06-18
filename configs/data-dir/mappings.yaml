@@ -2,6 +2,11 @@ defaults:
   params:
     encrypt_home: "false"
     linuxargs: ""
+  storage:
+    disk: /dev/nvme0n1
+    wipe: true
+    wipeDiskPatterns:
+      - /dev/nvme*n*
 
 targets:
   debian12:

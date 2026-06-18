@@ -357,6 +357,9 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	if err := validateOneOf(path+".storage.mode", config.Storage.Mode, "", "plain", "lvm", "raid", "manual"); err != nil {
 		return err
 	}
+	if err := validateWipeDiskPatterns(path+".storage.wipeDiskPatterns", config.Storage.WipeDiskPatterns); err != nil {
+		return err
+	}
 	if err := validateFilesystems(path+".storage.filesystems", config.Storage.Filesystems); err != nil {
 		return err
 	}
@@ -406,6 +409,29 @@ func validateStringList(path string, values []string) error {
 	for i, value := range values {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("%s[%d] must not be empty", path, i)
+		}
+	}
+	return nil
+}
+
+func validateWipeDiskPatterns(path string, patterns []string) error {
+	const unsupportedShellMetacharacters = ";&|`$(){}<>\"'\\"
+
+	for i, pattern := range patterns {
+		if strings.TrimSpace(pattern) == "" {
+			return fmt.Errorf("%s[%d] must not be empty", path, i)
+		}
+		if pattern != strings.TrimSpace(pattern) || strings.ContainsAny(pattern, " \t\r\n") {
+			return fmt.Errorf("%s[%d] must not contain whitespace", path, i)
+		}
+		if !strings.HasPrefix(pattern, "/dev/") {
+			return fmt.Errorf("%s[%d] must start with /dev/", path, i)
+		}
+		if pattern == "/dev/*" {
+			return fmt.Errorf("%s[%d] must be narrower than /dev/*", path, i)
+		}
+		if strings.ContainsAny(pattern, unsupportedShellMetacharacters) {
+			return fmt.Errorf("%s[%d] contains unsupported shell metacharacters", path, i)
 		}
 	}
 	return nil
