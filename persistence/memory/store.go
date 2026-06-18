@@ -23,8 +23,8 @@ import (
 	"github.com/inngest/shoelaces/persistence"
 )
 
-// Store is an in-process implementation of the persistence CQRS interfaces.
-type Store struct {
+// store is an in-process implementation of the persistence CQRS interfaces.
+type store struct {
 	mu           sync.RWMutex
 	nextEventID  int64
 	events       []persistence.EventRecord
@@ -33,15 +33,15 @@ type Store struct {
 }
 
 // New returns an empty memory-backed persistence store.
-func New() *Store {
-	return &Store{
+func New() persistence.Store {
+	return &store{
 		serverStates: make(map[string]persistence.ServerStateRecord),
 		bootSessions: make(map[string]persistence.BootSessionRecord),
 	}
 }
 
 // AppendEvent persists an event in memory.
-func (s *Store) AppendEvent(_ context.Context, event persistence.EventRecord) (int64, error) {
+func (s *store) AppendEvent(_ context.Context, event persistence.EventRecord) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -52,7 +52,7 @@ func (s *Store) AppendEvent(_ context.Context, event persistence.EventRecord) (i
 }
 
 // DeleteEventsBefore removes events older than the cutoff.
-func (s *Store) DeleteEventsBefore(_ context.Context, cutoff time.Time) (int64, error) {
+func (s *store) DeleteEventsBefore(_ context.Context, cutoff time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -70,7 +70,7 @@ func (s *Store) DeleteEventsBefore(_ context.Context, cutoff time.Time) (int64, 
 }
 
 // ListEvents returns events in insertion order, matching occurrence order in tests.
-func (s *Store) ListEvents(_ context.Context) ([]persistence.EventRecord, error) {
+func (s *store) ListEvents(_ context.Context) ([]persistence.EventRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -82,7 +82,7 @@ func (s *Store) ListEvents(_ context.Context) ([]persistence.EventRecord, error)
 }
 
 // UpsertServerState creates or replaces host state by MAC.
-func (s *Store) UpsertServerState(_ context.Context, state persistence.ServerStateRecord) error {
+func (s *store) UpsertServerState(_ context.Context, state persistence.ServerStateRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -91,7 +91,7 @@ func (s *Store) UpsertServerState(_ context.Context, state persistence.ServerSta
 }
 
 // DeleteServerState removes host state by MAC.
-func (s *Store) DeleteServerState(_ context.Context, mac string) (int64, error) {
+func (s *store) DeleteServerState(_ context.Context, mac string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -103,7 +103,7 @@ func (s *Store) DeleteServerState(_ context.Context, mac string) (int64, error) 
 }
 
 // DeleteServerStatesBefore removes host states older than the cutoff.
-func (s *Store) DeleteServerStatesBefore(_ context.Context, cutoff time.Time) (int64, error) {
+func (s *store) DeleteServerStatesBefore(_ context.Context, cutoff time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -118,7 +118,7 @@ func (s *Store) DeleteServerStatesBefore(_ context.Context, cutoff time.Time) (i
 }
 
 // GetServerState returns host state by MAC.
-func (s *Store) GetServerState(_ context.Context, mac string) (persistence.ServerStateRecord, error) {
+func (s *store) GetServerState(_ context.Context, mac string) (persistence.ServerStateRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -130,7 +130,7 @@ func (s *Store) GetServerState(_ context.Context, mac string) (persistence.Serve
 }
 
 // ListServerStates returns all host states.
-func (s *Store) ListServerStates(_ context.Context) ([]persistence.ServerStateRecord, error) {
+func (s *store) ListServerStates(_ context.Context) ([]persistence.ServerStateRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -142,7 +142,7 @@ func (s *Store) ListServerStates(_ context.Context) ([]persistence.ServerStateRe
 }
 
 // CreateBootSession stores a boot/config reference by opaque ref.
-func (s *Store) CreateBootSession(_ context.Context, session persistence.BootSessionRecord) error {
+func (s *store) CreateBootSession(_ context.Context, session persistence.BootSessionRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -151,7 +151,7 @@ func (s *Store) CreateBootSession(_ context.Context, session persistence.BootSes
 }
 
 // DeleteBootSessionsBefore removes expired boot/config references.
-func (s *Store) DeleteBootSessionsBefore(_ context.Context, cutoff time.Time) (int64, error) {
+func (s *store) DeleteBootSessionsBefore(_ context.Context, cutoff time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -166,7 +166,7 @@ func (s *Store) DeleteBootSessionsBefore(_ context.Context, cutoff time.Time) (i
 }
 
 // GetBootSession returns an unexpired boot/config reference by opaque ref.
-func (s *Store) GetBootSession(_ context.Context, ref string, now time.Time) (persistence.BootSessionRecord, error) {
+func (s *store) GetBootSession(_ context.Context, ref string, now time.Time) (persistence.BootSessionRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -178,7 +178,7 @@ func (s *Store) GetBootSession(_ context.Context, ref string, now time.Time) (pe
 }
 
 // Close releases memory store resources.
-func (s *Store) Close() error {
+func (s *store) Close() error {
 	return nil
 }
 

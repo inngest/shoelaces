@@ -30,15 +30,15 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-// Store implements the persistence CQRS interfaces using SQLite.
-type Store struct {
+// store implements the persistence CQRS interfaces using SQLite.
+type store struct {
 	db      *sql.DB
 	queries *sqlitedb.Queries
 }
 
 // Open creates the database parent directory, opens SQLite, and applies schema
 // migrations before returning a store.
-func Open(ctx context.Context, path string) (*Store, error) {
+func Open(ctx context.Context, path string) (persistence.Store, error) {
 	if err := persistence.EnsureParentDir(path); err != nil {
 		return nil, fmt.Errorf("create sqlite parent directory: %w", err)
 	}
@@ -47,7 +47,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
-	store := &Store{
+	store := &store{
 		db:      db,
 		queries: sqlitedb.New(db),
 	}
@@ -59,11 +59,11 @@ func Open(ctx context.Context, path string) (*Store, error) {
 }
 
 // Close releases the underlying SQLite connection pool.
-func (s *Store) Close() error {
+func (s *store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) migrate(ctx context.Context) error {
+func (s *store) migrate(ctx context.Context) error {
 	goose.SetBaseFS(migrationFS)
 	goose.SetLogger(goose.NopLogger())
 	if err := goose.SetDialect("sqlite3"); err != nil {
@@ -76,7 +76,7 @@ func (s *Store) migrate(ctx context.Context) error {
 }
 
 // AppendEvent persists an event and returns its database ID.
-func (s *Store) AppendEvent(ctx context.Context, event persistence.EventRecord) (int64, error) {
+func (s *store) AppendEvent(ctx context.Context, event persistence.EventRecord) (int64, error) {
 	return s.queries.InsertEvent(ctx, sqlitedb.InsertEventParams{
 		EventType:          int64(event.Type),
 		OccurredAtUnixNano: unixNano(event.OccurredAt),
@@ -91,12 +91,12 @@ func (s *Store) AppendEvent(ctx context.Context, event persistence.EventRecord) 
 }
 
 // DeleteEventsBefore removes events older than the cutoff.
-func (s *Store) DeleteEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+func (s *store) DeleteEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	return s.queries.DeleteEventsBefore(ctx, unixNano(cutoff))
 }
 
 // ListEvents returns persisted events ordered by occurrence time.
-func (s *Store) ListEvents(ctx context.Context) ([]persistence.EventRecord, error) {
+func (s *store) ListEvents(ctx context.Context) ([]persistence.EventRecord, error) {
 	rows, err := s.queries.ListEvents(ctx)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (s *Store) ListEvents(ctx context.Context) ([]persistence.EventRecord, erro
 }
 
 // UpsertServerState creates or replaces host state by MAC.
-func (s *Store) UpsertServerState(ctx context.Context, state persistence.ServerStateRecord) error {
+func (s *store) UpsertServerState(ctx context.Context, state persistence.ServerStateRecord) error {
 	return s.queries.UpsertServerState(ctx, sqlitedb.UpsertServerStateParams{
 		Mac:                state.MAC,
 		Ip:                 state.IP,
@@ -137,17 +137,17 @@ func (s *Store) UpsertServerState(ctx context.Context, state persistence.ServerS
 }
 
 // DeleteServerState removes host state by MAC.
-func (s *Store) DeleteServerState(ctx context.Context, mac string) (int64, error) {
+func (s *store) DeleteServerState(ctx context.Context, mac string) (int64, error) {
 	return s.queries.DeleteServerState(ctx, mac)
 }
 
 // DeleteServerStatesBefore removes host states older than the cutoff.
-func (s *Store) DeleteServerStatesBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+func (s *store) DeleteServerStatesBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	return s.queries.DeleteServerStatesBefore(ctx, unixNano(cutoff))
 }
 
 // GetServerState returns host state by MAC.
-func (s *Store) GetServerState(ctx context.Context, mac string) (persistence.ServerStateRecord, error) {
+func (s *store) GetServerState(ctx context.Context, mac string) (persistence.ServerStateRecord, error) {
 	row, err := s.queries.GetServerState(ctx, mac)
 	if err != nil {
 		return persistence.ServerStateRecord{}, err
@@ -156,7 +156,7 @@ func (s *Store) GetServerState(ctx context.Context, mac string) (persistence.Ser
 }
 
 // ListServerStates returns all host states ordered by MAC.
-func (s *Store) ListServerStates(ctx context.Context) ([]persistence.ServerStateRecord, error) {
+func (s *store) ListServerStates(ctx context.Context) ([]persistence.ServerStateRecord, error) {
 	rows, err := s.queries.ListServerStates(ctx)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (s *Store) ListServerStates(ctx context.Context) ([]persistence.ServerState
 }
 
 // CreateBootSession stores a boot/config reference by opaque ref.
-func (s *Store) CreateBootSession(ctx context.Context, session persistence.BootSessionRecord) error {
+func (s *store) CreateBootSession(ctx context.Context, session persistence.BootSessionRecord) error {
 	return s.queries.CreateBootSession(ctx, sqlitedb.CreateBootSessionParams{
 		Ref:               session.Ref,
 		Mac:               session.MAC,
@@ -186,12 +186,12 @@ func (s *Store) CreateBootSession(ctx context.Context, session persistence.BootS
 }
 
 // DeleteBootSessionsBefore removes expired boot/config references.
-func (s *Store) DeleteBootSessionsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+func (s *store) DeleteBootSessionsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	return s.queries.DeleteBootSessionsBefore(ctx, unixNano(cutoff))
 }
 
 // GetBootSession returns an unexpired boot/config reference by opaque ref.
-func (s *Store) GetBootSession(ctx context.Context, ref string, now time.Time) (persistence.BootSessionRecord, error) {
+func (s *store) GetBootSession(ctx context.Context, ref string, now time.Time) (persistence.BootSessionRecord, error) {
 	row, err := s.queries.GetBootSession(ctx, sqlitedb.GetBootSessionParams{
 		Ref:               ref,
 		ExpiresAtUnixNano: unixNano(now),
