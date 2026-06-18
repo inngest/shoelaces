@@ -1,0 +1,259 @@
+#+title: Runtime Persistent Storage
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-18 Thu>
+
+* Runtime Persistent Storage
+
+** Goal
+
+Introduce a durable runtime storage layer for Shoelaces so operational data can
+survive process restarts and host reboots, and so boot/config requests can refer
+to previously resolved data by stable references instead of carrying all values
+through transient memory or long query strings.
+
+** Boundaries
+
+- This is runtime persistence, not provisioning template storage. Embedded web
+  assets and embedded provisioning defaults remain static code assets.
+- =data-dir= remains the operator-owned root for runtime configuration,
+  provisioning overrides, static config assets, and the new persistent runtime
+  database.
+- Do not store raw secrets in events, logs, UI responses, or reference records
+  unless a later phase explicitly adds an encrypted-at-rest secret design.
+- Preserve current behavior for operators who do not need persistence beyond the
+  new default database file.
+- Keep the implementation single-node first. HA, replication, and external SQL
+  services are out of scope for this plan.
+
+** Current State
+
+- Shoelaces keeps waiting/manual boot server state in memory via
+  =server.States=.
+- Shoelaces keeps UI event history in memory via =event.Log=.
+- A restart loses waiting hosts, manual target selections, and event history.
+- Installer config rendering is mostly stateless. Structured provisioning data
+  needed by =/configs/*= requests is serialized into URL query values.
+- The query-based flow works for non-secret configuration, but it is a poor fit
+  for larger structures and future secret-bearing data such as LUKS passphrases.
+
+** Design Direction
+
+- Add a small persistence package with clear repository interfaces instead of
+  letting handlers or polling code write SQL directly.
+- Shape those interfaces around CQRS boundaries: command interfaces own writes
+  and transactional mutations, while query interfaces own read models used by
+  the UI, polling, and rendering code.
+- Use SQLite as the default local backend, stored under =data-dir=, because
+  Shoelaces is currently a single-process service and should not require an
+  external database for normal deployments.
+- Use =sqlc= for database access. Keep SQL in checked-in schema and query files,
+  generate typed Go accessors, and keep application code behind repository
+  interfaces rather than embedding raw SQL strings throughout the codebase.
+- Use =goose= for database migrations and schema version tracking across SQL
+  backends. SQLite is the first backend, and future Postgres support should add
+  its own Goose migrations behind the same persistence boundary.
+- Keep backend-specific generated code behind those CQRS interfaces so a future
+  Postgres backend can provide the same command/query contracts without
+  changing handlers, polling, or template rendering.
+- Keep an in-memory backend for fast unit tests and for any explicit
+  no-persistence development mode.
+- Use persistent boot/config references for data that must be reused later by
+  installer config requests. The boot script should carry an opaque reference,
+  and Shoelaces should resolve the reference server-side.
+- Keep retention explicit so operational history does not grow forever.
+
+** Proposed Configuration
+
+#+begin_src yaml
+data-dir: /etc/shoelaces/data-dir
+
+persistence:
+  backend: sqlite
+  path: runtime/shoelaces.db
+  retention:
+    events: 720h
+    bootSessions: 24h
+#+end_src
+
+- =persistence.backend= starts with =sqlite= and =memory=.
+- =postgres= is a future backend option. The public persistence boundary should
+  be designed so adding it mostly means new sqlc config, schema/query files,
+  connection setup, and backend wiring.
+- =persistence.path= is relative to =data-dir= unless absolute.
+- =persistence.retention.events= controls UI/audit event retention.
+- =persistence.retention.bootSessions= controls reference/session retention.
+
+** Phased Implementation Plan
+
+*** Phase 1: Storage Interfaces And Configuration
+
+- [X] Add =persistence= config fields to CLI/config parsing and
+  =environment.Options=.
+- [X] Default to SQLite at =data-dir/runtime/shoelaces.db=.
+- [X] Add an explicit =memory= backend for tests and local throwaway runs.
+- [X] Create a =persistence= package with repository interfaces for events,
+  server state, and boot/config references.
+- [X] Split persistence contracts into command/write interfaces and query/read
+  interfaces instead of one catch-all repository API.
+- [X] Define backend-neutral domain structs at the persistence boundary so
+  SQLite-generated row types do not leak into handlers, polling, or templates.
+- [X] Add =sqlc= configuration for the SQLite backend.
+- [X] Add checked-in SQL schema and query files for the initial persistence
+  model.
+- [X] Generate typed query code with =sqlc= and keep handwritten code limited to
+  repository orchestration and mapping between domain structs and generated
+  rows.
+- [X] Implement SQL backend migration/versioning with =goose= and checked-in
+  migration files, starting with SQLite.
+- [X] Update the =Makefile= so =make gen= generates sqlc codegen files for all
+  configured persistence backends.
+- [X] Add a =Makefile= check target, or extend an existing check target, so CI
+  verifies generated sqlc files are up to date after =make gen=.
+- [X] Ensure database directories are created with restrictive permissions.
+- [X] Add unit tests for config parsing, default path resolution, absolute path
+  handling, invalid backend values, and directory creation failures.
+- [X] Add SQLite migration tests that create an empty database and verify the
+  expected tables/indexes exist.
+- [X] Add generation drift checks so CI fails when sqlc outputs are stale.
+- [X] Add memory backend tests that prove the repository contracts can be
+  exercised without disk.
+- [X] Add interface compliance tests that run the same command/query contract
+  tests against memory and SQLite backends.
+
+*** Phase 2: Persistent Event History
+
+- [ ] Replace direct use of =event.Log.Events= with an event repository API.
+- [ ] Model event writes through an event command interface and event reads
+  through an event query interface.
+- [ ] Keep event writes redacted before persistence.
+- [ ] Update =/ajax/events= to read from the repository.
+- [ ] Preserve existing JSON response shape for the UI.
+- [ ] Add event retention cleanup for old records.
+- [ ] Add unit tests for appending, listing, sorting/grouping by MAC, redaction,
+  and retention deletion.
+- [ ] Add router tests proving =/ajax/events= still returns the existing shape.
+- [ ] Add an integration test that records events, restarts Shoelaces with the
+  same =data-dir=, and verifies the events are still available.
+
+*** Phase 3: Persistent Waiting Server State
+
+- [ ] Move waiting/manual boot server state behind a server-state repository.
+- [ ] Model state mutations through server-state commands and UI/polling reads
+  through server-state queries.
+- [ ] Persist waiting hosts, retry counts, last access time, allowed target
+  options, manual target selection, selected environment, resolved params,
+  resolved users, and structured provisioning data needed to complete a boot.
+- [ ] Preserve the existing three-minute expiry behavior, but apply it to the
+  persistent store.
+- [ ] Keep UI server listing behavior compatible with the current
+  =/ajax/servers= response.
+- [ ] Add unit tests for add, update, delete, list waiting servers, retry
+  increments, manual selection persistence, and expiry cleanup.
+- [ ] Add polling tests proving manual target selection survives a process
+  restart when the same database is reused.
+- [ ] Add integration tests covering =/poll/*=, =/ajax/servers=, restart, and
+  continued manual boot flow.
+
+*** Phase 4: Boot Session And Config References
+
+- [ ] Add a boot-session/reference repository for resolved boot data.
+- [ ] Model reference creation/update through commands and =/configs/*=
+  resolution through queries.
+- [ ] Generate opaque references when polling resolves a target.
+- [ ] Store the resolved target, environment, server identity, params, users,
+  and provisioning config under the reference.
+- [ ] Render boot URLs with a reference parameter, for example
+  =/configs/preseed/debian?ref=<opaque-id>=, instead of serializing the full
+  structured installer config into the query string.
+- [ ] Preserve explicit query params as an override/escape hatch where existing
+  routes support them.
+- [ ] Expire references independently from event history.
+- [ ] Add unit tests for reference creation, lookup, expiry, missing references,
+  and query-param override precedence.
+- [ ] Add render tests proving boot scripts contain references and do not expose
+  sensitive or large structured values directly.
+- [ ] Add router/integration tests for =/poll/*= followed by =/configs/*?ref=...=
+  across a process restart.
+
+*** Phase 5: Data Reuse And Reference APIs
+
+- [ ] Define which persisted records are operator-facing references:
+  boot sessions, host observations, manual selections, and event history.
+- [ ] Add internal APIs for resolving persisted host/boot data by MAC,
+  reference ID, or event ID where needed by rendering and UI code.
+- [ ] Decide whether any user-facing HTTP API should expose references directly
+  beyond existing UI endpoints.
+- [ ] Ensure reference lookups never return unredacted secrets through UI/API
+  responses.
+- [ ] Add unit tests for reference lookup authorization assumptions, redacted
+  serialization, and not-found behavior.
+- [ ] Add API/router tests for any new endpoints or changed response fields.
+- [ ] Add integration tests demonstrating that a later request can reuse data
+  persisted by an earlier boot request.
+
+*** Phase 6: Operational Tooling And Documentation
+
+- [ ] Document the persistence config schema and defaults.
+- [ ] Document the CQRS persistence interfaces and which package layers are
+  allowed to depend on command or query interfaces.
+- [ ] Document the sqlc workflow for editing schema/query files and regenerating
+  typed Go accessors.
+- [ ] Document that contributors should run =make gen= after changing sqlc
+  schema or query files.
+- [ ] Document database location, retention behavior, backup expectations, and
+  safe deletion/recovery behavior.
+- [ ] Document how references work in the network boot flow.
+- [ ] Add a development example that uses a local SQLite database under =dev/=.
+- [ ] Add metrics/logging around migration, reference creation, reference
+  lookup failures, and retention cleanup.
+- [ ] Add tests for the documented examples where practical.
+- [ ] Run =make test=.
+- [ ] Run =make integration=.
+- [ ] Run render validation.
+- [ ] Run =make lint=.
+- [ ] Run =./scripts/check-plan-status.sh=.
+
+** Acceptance Criteria
+
+- [ ] Shoelaces starts with default SQLite persistence under =data-dir=.
+- [ ] Events survive Shoelaces process restarts and host reboots when the same
+  =data-dir= is reused.
+- [ ] Waiting/manual boot state can survive a restart until its retention window
+  expires.
+- [ ] Boot/config rendering can use opaque references to retrieve previously
+  resolved data.
+- [ ] Existing UI routes and JSON response shapes remain compatible unless a
+  documented versioned change is introduced.
+- [ ] Existing direct query-param rendering still works where it is currently
+  supported.
+- [ ] Secret-bearing or sensitive values are redacted in persisted events and
+  UI/API responses.
+- [ ] Retention cleanup bounds persistent database growth.
+- [ ] =make gen= regenerates checked-in sqlc files for the persistence backend.
+- [ ] CI fails when sqlc generated files are stale.
+- [ ] =make test=, =make integration=, render validation, =make lint=, and the
+  plan status checker pass.
+
+** Notes And Risks
+
+- SQLite is a good fit for single-node Shoelaces, but it should not be presented
+  as a clustered persistence story.
+- =sqlc= keeps SQL explicit and reviewable without scattering raw SQL strings
+  across handlers or services. Repository interfaces should remain the boundary
+  consumed by the rest of Shoelaces.
+- CQRS should be a boundary, not ceremony. Avoid duplicating business logic
+  between command and query implementations; use it to keep writes, read models,
+  and backend-specific generated code decoupled.
+- A future Postgres backend may need different SQL and migrations. The command
+  and query contracts should be tested as backend behavior, not as SQLite
+  implementation details.
+- Persisting resolved boot data changes the failure mode of =/configs/*=
+  requests: a missing or expired reference should fail clearly and safely.
+- This plan should make future LUKS support safer by avoiding secret-bearing
+  query strings, but encrypted-at-rest secret management is still a separate
+  design decision.
+- Database retention must be conservative enough for unattended installs that
+  take a long time, especially when hosts reboot between installer stages.
+- The term "storage" is already used for disk layout in mappings. Code and docs
+  should prefer "persistence" or "runtime persistence" to avoid confusion.

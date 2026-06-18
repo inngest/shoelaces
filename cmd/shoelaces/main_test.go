@@ -66,7 +66,8 @@ func TestCommandValuePrecedence(t *testing.T) {
 			}
 
 			configValues := map[any]any{
-				"data-dir": "../../configs/data-dir",
+				"data-dir":            "../../configs/data-dir",
+				"persistence-backend": "memory",
 			}
 			if tt.configValue != "" {
 				configValues["bind-addr"] = tt.configValue
@@ -94,10 +95,11 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 	t.Setenv("TFTP_ADDR", ":2069")
 
 	configValues := map[any]any{
-		"data-dir":     "../../configs/data-dir",
-		"tftp-enabled": true,
-		"tftp-addr":    ":1069",
-		"tftp-timeout": "7s",
+		"data-dir":            "../../configs/data-dir",
+		"persistence-backend": "memory",
+		"tftp-enabled":        true,
+		"tftp-addr":           ":1069",
+		"tftp-timeout":        "7s",
 	}
 
 	var got *environment.Environment
@@ -119,9 +121,10 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "error")
 
 	configValues := map[any]any{
-		"data-dir":    "../../configs/data-dir",
-		"log-level":   "warn",
-		"log-handler": "text",
+		"data-dir":            "../../configs/data-dir",
+		"persistence-backend": "memory",
+		"log-level":           "warn",
+		"log-handler":         "text",
 	}
 
 	var got *environment.Environment
@@ -137,11 +140,57 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 	assert.Equal(t, "json", got.LogHandler)
 }
 
+func TestCommandAppliesPrecedenceToPersistenceConfig(t *testing.T) {
+	t.Setenv("PERSISTENCE_RETENTION_EVENTS", "48h")
+
+	configValues := map[any]any{
+		"data-dir":                            "../../configs/data-dir",
+		"persistence-backend":                 "memory",
+		"persistence-path":                    "runtime/config.db",
+		"persistence-retention-events":        "24h",
+		"persistence-retention-boot-sessions": "2h",
+	}
+
+	var got *environment.Environment
+	cmd := command("test.toml", configValues, func(env *environment.Environment) error {
+		got = env
+		return nil
+	})
+
+	require.NoError(t, cmd.Run(context.Background(), []string{
+		"shoelaces",
+		"--persistence-path", "runtime/cli.db",
+		"--persistence-retention-boot-sessions", "6h",
+	}))
+	require.NotNil(t, got)
+
+	assert.Equal(t, "memory", got.PersistenceConfig.Backend)
+	assert.Equal(t, "runtime/cli.db", got.PersistenceConfig.Path)
+	assert.Equal(t, 48*time.Hour, got.PersistenceConfig.Retention.Events)
+	assert.Equal(t, 6*time.Hour, got.PersistenceConfig.Retention.BootSessions)
+}
+
+func TestCommandRejectsInvalidPersistenceBackend(t *testing.T) {
+	configValues := map[any]any{
+		"data-dir":            "../../configs/data-dir",
+		"persistence-backend": "postgres",
+	}
+
+	cmd := command("test.toml", configValues, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute for invalid persistence backend")
+		return nil
+	})
+
+	err := cmd.Run(context.Background(), []string{"shoelaces"})
+	assert.ErrorContains(t, err, `unsupported persistence backend "postgres"`)
+}
+
 func TestCommandDebugIsCLIOnly(t *testing.T) {
 	t.Setenv("DEBUG", "true")
 
 	configValues := map[any]any{
-		"data-dir": "../../configs/data-dir",
+		"data-dir":            "../../configs/data-dir",
+		"persistence-backend": "memory",
 	}
 
 	var envOnly *environment.Environment
@@ -213,7 +262,8 @@ func TestCommandUIDirPrecedence(t *testing.T) {
 			}
 
 			configValues := map[any]any{
-				"data-dir": "../../configs/data-dir",
+				"data-dir":            "../../configs/data-dir",
+				"persistence-backend": "memory",
 			}
 			if configValue != "" {
 				configValues["ui-dir"] = configValue
@@ -241,8 +291,9 @@ func TestCommandUIDirPrecedence(t *testing.T) {
 func TestCommandStaticDirCompatibilityAlias(t *testing.T) {
 	uiDir := writeCommandTestUIDir(t)
 	configValues := map[any]any{
-		"data-dir":   "../../configs/data-dir",
-		"static-dir": uiDir,
+		"data-dir":            "../../configs/data-dir",
+		"persistence-backend": "memory",
+		"static-dir":          uiDir,
 	}
 
 	var got *environment.Environment

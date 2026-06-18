@@ -3,31 +3,37 @@
 Shoelaces can be configured with CLI flags, environment variables, or a config file.
 Command-line flags have the highest precedence, then environment variables, then config file values, then defaults.
 Environment variable names are uppercase flag names with hyphens converted to underscores, such as `DATA_DIR`, `BIND_ADDR`, and `TFTP_ENABLED`.
-`--debug` is CLI-only; use `log-level: debug` in config files.
+`--debug` is CLI-only; use `log.level: debug` in config files.
 
 Configuration files can be TOML, YAML, or JSON.
 The parser is selected from the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`.
-Nested TFTP settings use a `tftp` object/table and map to the `tftp-*` CLI flags, such as `tftp.enabled`, `tftp.address`, and `tftp.timeout`.
+Config files use nested keys for hyphenated CLI flags. For example, `network.bindAddr` maps to `--bind-addr`, `network.baseURL` maps to `--base-url`, `data.dir` maps to `--data-dir`, `log.level` maps to `--log-level`, and `tftp.enabled` maps to `--tftp-enabled`.
 
 ## Flags
 
-- `config`: path to a configuration file.
-- `bind-addr`: address Shoelaces listens on. Defaults to `localhost:8081`.
-- `base-url`: base URL used when generating URLs. Defaults to `bind-addr`.
-- `data-dir`: root directory for templates, mappings, and static provisioning files.
-- `ui-dir`: optional path to a custom UI directory containing web templates and frontend assets. By default, Shoelaces uses UI assets embedded in the binary.
-- `static-dir`: deprecated alias for `ui-dir`, retained for compatibility. Do not use it for provisioning static files.
-- `env-dir`: environment overrides directory inside `data-dir`. Defaults to `env_overrides`.
-- `mappings-file`: YAML mappings file path relative to `data-dir`. Defaults to `mappings.yaml`.
-- `template-extension`: template filename extension. Defaults to `.slc`.
-- `debug`: CLI-only flag that enables debug messages. In config files, use `log-level = "debug"`.
-- `log-level`: minimum log level: `debug`, `info`, `warn`, or `error`. Defaults to `info`.
-- `log-handler`: log output format: `dev`, `text`, or `json`. Defaults to `dev`.
-- `tftp-enabled`: enable the embedded TFTP server.
-- `tftp-addr`: embedded TFTP listen address. Defaults to `:69`.
-- `tftp-root`: directory served over TFTP. Defaults to `data-dir/tftp` when not explicitly set.
-- `tftp-readonly`: disable TFTP uploads. Defaults to `true`.
-- `tftp-timeout`: embedded TFTP per-request timeout. Defaults to `5s`.
+| CLI flag                                | Config key                           | Environment                           | Default                | Notes                                                                                                       |
+|-----------------------------------------|--------------------------------------|---------------------------------------|------------------------|-------------------------------------------------------------------------------------------------------------|
+| `--config`                              | N/A                                  | N/A                                   | N/A                    | Path to a TOML, YAML, or JSON config file.                                                                  |
+| `--bind-addr`                           | `network.bindAddr`                   | `BIND_ADDR`                           | `localhost:8081`       | HTTP listen address.                                                                                        |
+| `--base-url`                            | `network.baseURL`                    | `BASE_URL`                            | `network.bindAddr`     | Used when rendered templates need to refer back to Shoelaces.                                               |
+| `--data-dir`                            | `data.dir`                           | `DATA_DIR`                            | Required               | Root directory for mappings, disk template overrides, provisioning static files, and environment overrides. |
+| `--ui-dir`                              | `ui.dir`                             | `UI_DIR`                              | Embedded UI            | Optional custom web UI directory containing templates and static frontend assets.                           |
+| `--static-dir`                          | `static.dir`                         | `STATIC_DIR`                          | N/A                    | Compatibility alias for `ui.dir`; it does not control provisioning static files.                            |
+| `--env-dir`                             | `env.dir`                            | `ENV_DIR`                             | `env_overrides`        | Directory under `data.dir` for environment-specific overrides.                                              |
+| `--mappings-file`                       | `mappings.file`                      | `MAPPINGS_FILE`                       | `mappings.yaml`        | Mapping file path, resolved relative to `data.dir`.                                                         |
+| `--template-extension`                  | `template.extension`                 | `TEMPLATE_EXTENSION`                  | `.slc`                 | File extension parsed as a Shoelaces template.                                                              |
+| `--debug`                               | N/A                                  | N/A                                   | `false`                | CLI-only shortcut for debug logging. In config files, use `log.level = "debug"`.                            |
+| `--log-level`                           | `log.level`                          | `LOG_LEVEL`                           | `info`                 | Minimum log level: `debug`, `info`, `warn`, or `error`.                                                     |
+| `--log-handler`                         | `log.handler`                        | `LOG_HANDLER`                         | `dev`                  | Log output format: `dev`, `text`, or `json`.                                                                |
+| `--tftp-enabled`                        | `tftp.enabled`                       | `TFTP_ENABLED`                        | `false`                | Start the embedded TFTP server.                                                                             |
+| `--tftp-addr`                           | `tftp.address`                       | `TFTP_ADDR`                           | `:69`                  | Embedded TFTP UDP listen address.                                                                           |
+| `--tftp-root`                           | `tftp.root`                          | `TFTP_ROOT`                           | `data.dir/tftp`        | Directory served over TFTP when `data.dir` is set and the root is not explicitly changed.                   |
+| `--tftp-readonly`                       | `tftp.readonly`                      | `TFTP_READONLY`                       | `true`                 | Reject TFTP upload attempts.                                                                                |
+| `--tftp-timeout`                        | `tftp.timeout`                       | `TFTP_TIMEOUT`                        | `5s`                   | Per-request embedded TFTP timeout.                                                                          |
+| `--persistence-backend`                 | `persistence.backend`                | `PERSISTENCE_BACKEND`                 | `sqlite`               | Runtime persistence backend: `sqlite` or `memory`.                                                          |
+| `--persistence-path`                    | `persistence.path`                   | `PERSISTENCE_PATH`                    | `runtime/shoelaces.db` | SQLite database path, relative to `data.dir` unless absolute.                                               |
+| `--persistence-retention-events`        | `persistence.retention.events`       | `PERSISTENCE_RETENTION_EVENTS`        | `720h`                 | Retention window for persisted event history.                                                               |
+| `--persistence-retention-boot-sessions` | `persistence.retention.bootSessions` | `PERSISTENCE_RETENTION_BOOT_SESSIONS` | `24h`                  | Retention window for persisted boot/config references.                                                      |
 
 ## Data Directory
 
@@ -52,12 +58,30 @@ See [Provisioning Defaults And Overrides](provisioning-overrides.md) for the dis
 ## Example
 
 ```toml
-bind-addr = "localhost:8081"
-data-dir = "configs/data-dir/"
-template-extension = ".slc"
-mappings-file = "mappings.yaml"
-log-level = "debug"
-log-handler = "dev"
+[network]
+bindAddr = "localhost:8081"
+baseURL = "localhost:8081"
+
+[data]
+dir = "configs/data-dir/"
+
+[template]
+extension = ".slc"
+
+[mappings]
+file = "mappings.yaml"
+
+[log]
+level = "debug"
+handler = "dev"
+
+[persistence]
+backend = "sqlite"
+path = "runtime/shoelaces.db"
+
+[persistence.retention]
+events = "720h"
+bootSessions = "24h"
 
 [tftp]
 enabled = true

@@ -25,6 +25,7 @@ import (
 
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/persistence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,6 +126,9 @@ networkMaps:
 		BindAddr: "localhost:0",
 		DataDir:  dataDir,
 	})
+	t.Cleanup(func() {
+		require.NoError(t, env.RuntimeStore.Close())
+	})
 	rendered, err := env.Templates.RenderTemplate("debian.ipxe", map[string]interface{}{
 		"baseURL":      "127.0.0.1:8081",
 		"encrypt_home": false,
@@ -137,6 +141,39 @@ networkMaps:
 	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
 }
 
+func TestNewCreatesDefaultSQLitePersistence(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+
+	env := New(Options{
+		BindAddr: "localhost:0",
+		DataDir:  dataDir,
+	})
+	t.Cleanup(func() {
+		require.NoError(t, env.RuntimeStore.Close())
+	})
+
+	assert.Equal(t, persistence.BackendSQLite, env.PersistenceConfig.Backend)
+	assert.FileExists(t, filepath.Join(dataDir, "runtime", "shoelaces.db"))
+}
+
+func TestNewSupportsMemoryPersistence(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+
+	env := New(Options{
+		BindAddr: "localhost:0",
+		DataDir:  dataDir,
+		Persistence: persistence.Config{
+			Backend: persistence.BackendMemory,
+		},
+	})
+	t.Cleanup(func() {
+		require.NoError(t, env.RuntimeStore.Close())
+	})
+
+	assert.Equal(t, persistence.BackendMemory, env.PersistenceConfig.Backend)
+	assert.NoFileExists(t, filepath.Join(dataDir, "runtime", "shoelaces.db"))
+}
+
 func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {
 	assert.Panics(t, func() {
 		New(Options{
@@ -144,6 +181,23 @@ func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {
 			DataDir:  t.TempDir(),
 		})
 	})
+}
+
+func writeMinimalMappingsDataDir(t *testing.T) string {
+	t.Helper()
+
+	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+targets:
+  debian12:
+    script: debian.ipxe
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`), 0o644))
+	return dataDir
 }
 
 func TestInitMappingsLoadsNetworkAndHostnameMaps(t *testing.T) {

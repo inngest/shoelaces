@@ -1,12 +1,24 @@
 # Local HTTP profile for `make dev`. TFTP stays disabled so the server can run
 # without privileged ports or local network boot setup.
-bind-addr: "localhost:18081"
-base-url: "localhost:18081"
-data-dir: dev/data-dir
-template-extension: .slc
-mappings-file: mappings.yaml
-log-level: debug
-log-handler: dev
+network:
+  bindAddr: "localhost:18081"
+  baseURL: "localhost:18081"
+data:
+  dir: dev/data-dir
+template:
+  extension: .slc
+mappings:
+  file: mappings.yaml
+log:
+  level: debug
+  handler: dev
+
+persistence:
+  backend: sqlite
+  path: runtime/shoelaces.db
+  retention:
+    events: 720h
+    bootSessions: 24h
 
 tftp:
   enabled: false
