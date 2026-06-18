@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -158,9 +159,11 @@ func stateFromRecord(record persistence.ServerStateRecord) (*State, error) {
 		Retry:       int(record.Retry),
 		LastAccess:  int(record.LastAccess.UTC().Unix()),
 	}
-	if err := unmarshalStateJSON(record.ParamsJSON, &state.Params); err != nil {
+	params, err := unmarshalStateParamsJSON(record.ParamsJSON)
+	if err != nil {
 		return nil, fmt.Errorf("unmarshal params: %w", err)
 	}
+	state.Params = params
 	if err := unmarshalStateJSON(record.UsersJSON, &state.Users); err != nil {
 		return nil, fmt.Errorf("unmarshal users: %w", err)
 	}
@@ -189,6 +192,49 @@ func unmarshalStateJSON(encoded []byte, value any) error {
 		return nil
 	}
 	return json.Unmarshal(encoded, value)
+}
+
+func unmarshalStateParamsJSON(encoded []byte) (map[string]interface{}, error) {
+	if len(encoded) == 0 {
+		return nil, nil
+	}
+	var params map[string]interface{}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if err := decoder.Decode(&params); err != nil {
+		return nil, err
+	}
+	normalized, _ := normalizeJSONNumbers(params).(map[string]interface{})
+	return normalized, nil
+}
+
+func normalizeJSONNumbers(value any) any {
+	switch typed := value.(type) {
+	case json.Number:
+		if integer, err := typed.Int64(); err == nil {
+			if int64(int(integer)) == integer {
+				return int(integer)
+			}
+			return integer
+		}
+		float, err := typed.Float64()
+		if err != nil {
+			return typed.String()
+		}
+		return float
+	case map[string]interface{}:
+		for key, nested := range typed {
+			typed[key] = normalizeJSONNumbers(nested)
+		}
+		return typed
+	case []interface{}:
+		for index, nested := range typed {
+			typed[index] = normalizeJSONNumbers(nested)
+		}
+		return typed
+	default:
+		return typed
+	}
 }
 
 func copyState(state *State) *State {

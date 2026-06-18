@@ -129,7 +129,7 @@ func TestPersistentStateStorePersistsWaitingAndSelectedState(t *testing.T) {
 
 	state.Target = "debian.ipxe"
 	state.Environment = "prod"
-	state.Params = map[string]interface{}{"baseURL": "shoelaces.test", "release": "trixie"}
+	state.Params = map[string]interface{}{"baseURL": "shoelaces.test", "count": 1, "release": "trixie"}
 	state.Users = map[string]mappings.ResolvedUser{
 		"infra": {Name: "infra", Primary: true, Groups: []string{"sudo"}},
 	}
@@ -144,6 +144,8 @@ func TestPersistentStateStorePersistsWaitingAndSelectedState(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "debian.ipxe", selected.Target)
 	assert.Equal(t, "prod", selected.Environment)
+	assert.IsType(t, 1, selected.Params["count"])
+	assert.Equal(t, 1, selected.Params["count"])
 	assert.Equal(t, "trixie", selected.Params["release"])
 	assert.Equal(t, "infra", selected.Users["infra"].Name)
 	assert.Equal(t, []string{"sudo"}, selected.Users["infra"].Groups)
