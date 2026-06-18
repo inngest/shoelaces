@@ -150,21 +150,29 @@ Shoelaces reads runtime boot policy from the YAML file selected by
 *macMaps*, and *ipMaps*.
 
 Each target has a required *script*, optional *label*, optional *environment*,
-and optional *params*. Mapping rules can define *targets* to restrict manual
-choices and *defaultTarget* to select a target automatically. If a matched rule
-has no *defaultTarget*, Shoelaces queues the host for manual choice in the UI and
-only exposes the rule's allowed targets.
+structured provisioning fields, and optional escape-hatch *params*. Mapping
+rules can define *targets* to restrict manual choices and *defaultTarget* to
+select a target automatically. If a matched rule has no *defaultTarget*,
+Shoelaces queues the host for manual choice in the UI and only exposes the
+rule's allowed targets.
 
-Parameter merge order is global defaults, target params, matched mapping params,
+Prefer structured sections such as *repos*, *storage*, *boot*, *packages*,
+*network*, *locale*, *time*, *users*, and *installer* for built-in provisioning
+behavior. *params* remains available for custom site templates, low-level
+compatibility values, and explicit manual/request overrides. Parameter merge
+order for *params* is global defaults, target params, matched mapping params,
 manual/request params, then generated values such as *hostname* and *baseURL*.
-Sensitive values can be loaded explicitly from the Shoelaces process
-environment:
+Sensitive params can be loaded explicitly from the Shoelaces process environment:
 
 ```
 params:
   root_password_crypted:
     env: SHOELACES_ROOT_PASSWORD_CRYPTED
 ```
+
+When a built-in field is present in both structured config and legacy mapping
+params, structured mapping policy is canonical for mapping-resolved boots.
+Explicit manual/request params can still override for one-off renders.
 
 The old *networkMaps[].script* and *hostnameMaps[].script* mapping schema is no
 longer supported. Define named targets and reference them from mapping rules

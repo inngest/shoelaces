@@ -302,6 +302,7 @@ func (r *Resolver) Resolve(request ResolveRequest) (ResolveResult, error) {
 		r.logger.Error("Failed to resolve target provisioning", "match_type", matchType, "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
+	applyStructuredLegacyParams(result.Params, result.Provisioning, request)
 	r.logger.Debug("Resolved boot target", "match_type", matchType, "target", result.TargetName, "script", result.Target.Script, "environment", result.Target.Environment)
 	return result, nil
 }
@@ -354,6 +355,7 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 		r.logger.Error("Failed to resolve manual target provisioning", "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
+	applyStructuredLegacyParams(result.Params, result.Provisioning, request)
 	r.logger.Debug("Resolved manual boot target", "target", result.TargetName, "script", result.Target.Script, "environment", result.Target.Environment, "allowed_targets", result.AllowedTargetNames())
 	return result, nil
 }
@@ -518,6 +520,22 @@ func (r *Resolver) resolveProvisioning(target ProvisioningConfig, mapping Provis
 		merged.Installer.ConfigParams[key] = resolved
 	}
 	return merged, nil
+}
+
+func applyStructuredLegacyParams(params map[string]any, provisioning ProvisioningConfig, request ResolveRequest) {
+	if provisioning.Repos.Release != "" && !requestOverridesParam(request, "release") {
+		params["release"] = provisioning.Repos.Release
+	}
+}
+
+func requestOverridesParam(request ResolveRequest, key string) bool {
+	if _, ok := request.Params[key]; ok {
+		return true
+	}
+	if _, ok := request.GeneratedParams[key]; ok {
+		return true
+	}
+	return false
 }
 
 func mergeParamMap(dst map[string]any, src map[string]any) {

@@ -177,23 +177,27 @@ d-i passwd/username string debian
 d-i passwd/user-password-crypted password !
 ```
 
-Set these parameters from `mappings.yaml`, manual request parameters, or query
-parameters to customize that user:
+Legacy templates also accept these flat parameters from `mappings.yaml`, manual
+request parameters, or query parameters:
 
 - `install_user_fullname`: full name for the regular install user.
 - `install_username`: username for the regular install user.
 - `install_user_password_crypted`: crypted password hash. Leave unset to keep
   the account locked.
 
-For example:
+Use them only for compatibility with custom templates that still consume the old
+flat names. For example:
 
 ```yaml
 targets:
   debian12:
     script: debian.ipxe
-    params:
+    repos:
       release: bookworm
-      encrypt_home: false
+    installer:
+      configParams:
+        encrypt_home: false
+    params:
       install_username: infra
       install_user_fullname: Infrastructure User
       install_user_password_crypted: "$6$rounds=4096$example$salthash"
@@ -213,9 +217,11 @@ defaults:
 targets:
   debian12:
     script: debian.ipxe
-    params:
+    repos:
       release: bookworm
-      encrypt_home: false
+    installer:
+      configParams:
+        encrypt_home: false
     users:
       root:
         locked: false
@@ -238,9 +244,14 @@ targets:
 
 Shoelaces also accepts structured provisioning sections on `defaults`, targets,
 and mapping rules. These fields are parsed, validated, and merged in the same
-order as runtime params: defaults, target, matched mapping rule. Template
-rendering migrates to these fields in phases, so `params:` remains available for
-low-level template-specific values during the transition.
+order as runtime params: defaults, target, matched mapping rule.
+
+For built-in provisioning behavior, prefer these structured sections over
+`params:`. `params:` remains available as an escape hatch for custom site
+templates, low-level compatibility values, and explicit manual/request
+overrides. When a built-in field is present in both structured config and legacy
+mapping params, structured mapping policy is canonical for mapping-resolved
+boots; explicit request params can still override for one-off renders.
 
 ```yaml
 defaults:
