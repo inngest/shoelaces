@@ -27,15 +27,16 @@ import (
 // on its name. It implements the http.Handler interface.
 type DefaultTemplateRenderer struct {
 	templateName string
+	env          *environment.Environment
 }
 
 // RenderDefaultTemplate renders a template by the given name
-func RenderDefaultTemplate(name string) *DefaultTemplateRenderer {
-	return &DefaultTemplateRenderer{templateName: name}
+func RenderDefaultTemplate(name string, env *environment.Environment) *DefaultTemplateRenderer {
+	return &DefaultTemplateRenderer{templateName: name, env: env}
 }
 
 func (t *DefaultTemplateRenderer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	env := envFromRequest(r)
+	env := t.env
 	tpl := env.StaticTemplates
 	// XXX: Probably not ideal as it's doing the directory listing on every request
 	ipxeScripts := ipxe.ScriptList(env)
@@ -50,15 +51,15 @@ func (t *DefaultTemplateRenderer) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		&env.NetworkMaps,
 		&ipxeScripts,
 	}
-	renderTemplate(w, tpl, "header", tplVars, env)
-	renderTemplate(w, tpl, t.templateName, tplVars, env)
-	renderTemplate(w, tpl, "footer", tplVars, env)
+	t.renderTemplate(w, tpl, "header", tplVars)
+	t.renderTemplate(w, tpl, t.templateName, tplVars)
+	t.renderTemplate(w, tpl, "footer", tplVars)
 }
 
-func renderTemplate(w http.ResponseWriter, tpl *template.Template, tmpl string, d interface{}, env *environment.Environment) {
+func (t *DefaultTemplateRenderer) renderTemplate(w http.ResponseWriter, tpl *template.Template, tmpl string, d interface{}) {
 	err := tpl.ExecuteTemplate(w, tmpl, d)
 	if err != nil {
-		env.Logger.Error("Failed to render UI template", "component", "handler", "template", tmpl, "err", err)
+		t.env.Logger.Error("Failed to render UI template", "component", "handler", "template", tmpl, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -20,19 +20,22 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
 )
 
 // TemplateHandler handles templated config files
-type TemplateHandler struct{}
+type TemplateHandler struct {
+	env *environment.Environment
+}
 
 // TemplateHandler is the dynamic configuration provider endpoint. It
 // receives a key and maybe an environment.
 func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	variablesMap := map[string]interface{}{}
 	configName := filepath.Clean(r.URL.Path)
-	env := envFromRequest(r)
+	env := t.env
 
 	if configName == "" {
 		env.Logger.Error("Template request missing config name", "component", "handler", "path", r.URL.Path)
@@ -62,15 +65,23 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // TemplateHandler returns a TemplateHandler instance implementing http.Handler
-func TemplateServer() *TemplateHandler {
-	return &TemplateHandler{}
+func TemplateServer(env *environment.Environment) *TemplateHandler {
+	return &TemplateHandler{env: env}
 }
 
-// GetTemplateParams receives a script name and returns the parameters
-// required for completing that template.
-func GetTemplateParams(w http.ResponseWriter, r *http.Request) {
+// TemplateParamsHandler serves the parameters required for completing a template.
+type TemplateParamsHandler struct {
+	env *environment.Environment
+}
+
+// TemplateParamsServer returns a handler for template parameter discovery.
+func TemplateParamsServer(env *environment.Environment) *TemplateParamsHandler {
+	return &TemplateParamsHandler{env: env}
+}
+
+func (h *TemplateParamsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var vars []string
-	env := envFromRequest(r)
+	env := h.env
 
 	filterBlacklist := func(s string) bool {
 		return !utils.StringInSlice(s, env.ParamsBlacklist)
