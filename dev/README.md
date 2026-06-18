@@ -7,8 +7,9 @@ make dev
 ```
 
 The `dev/shoelaces.yaml` profile listens on `localhost:18081`, disables TFTP,
-and uses `dev/data-dir` for site policy and disk overrides. The boot templates
-come from the embedded provisioning defaults unless you add `.slc` files under
+uses SQLite persistence under `dev/data-dir/runtime/shoelaces.db`, and uses
+`dev/data-dir` for site policy and disk overrides. The boot templates come from
+the embedded provisioning defaults unless you add `.slc` files under
 `dev/data-dir`.
 
 Useful URLs:

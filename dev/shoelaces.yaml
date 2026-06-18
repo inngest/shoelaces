@@ -8,6 +8,13 @@ mappings-file: mappings.yaml
 log-level: debug
 log-handler: dev
 
+persistence:
+  backend: sqlite
+  path: runtime/shoelaces.db
+  retention:
+    events: 720h
+    bootSessions: 24h
+
 tftp:
   enabled: false
   address: ":1069"

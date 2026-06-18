@@ -124,6 +124,25 @@ persistence-retention-boot-sessions = "30m"
 	assert.NoError(t, err)
 }
 
+func TestReadConfigSamplesIncludePersistence(t *testing.T) {
+	for _, configPath := range []string{
+		"../../configs/shoelaces.toml",
+		"../../configs/shoelaces.yaml",
+		"../../configs/shoelaces.json",
+		"../../dev/shoelaces.yaml",
+	} {
+		t.Run(configPath, func(t *testing.T) {
+			values, err := readConfig(configPath)
+			require.NoError(t, err)
+
+			assert.Equal(t, "sqlite", values["persistence-backend"])
+			assert.Equal(t, "runtime/shoelaces.db", values["persistence-path"])
+			assert.Equal(t, "720h", values["persistence-retention-events"])
+			assert.Equal(t, "24h", values["persistence-retention-boot-sessions"])
+		})
+	}
+}
+
 func TestReadConfigRejectsDebugConfigOption(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "shoelaces.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte("debug: true\n"), 0o644))
