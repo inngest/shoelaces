@@ -92,6 +92,9 @@ type StorageConfig struct {
 	Disk string `koanf:"disk"`
 	// Wipe controls whether the installer should clear existing storage.
 	Wipe *bool `koanf:"wipe"`
+	// WipeDiskPatterns contains explicit /dev glob patterns for disks that the
+	// installer may wipe before partitioning.
+	WipeDiskPatterns []string `koanf:"wipeDiskPatterns"`
 	// Mode selects the storage recipe family.
 	Mode string `koanf:"mode"`
 	// VolumeGroup is the LVM volume group name when Mode is lvm.
@@ -262,6 +265,9 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 		if _, ok := params[key]; !ok {
 			params[key] = value
 		}
+	}
+	if len(provisioning.Storage.WipeDiskPatterns) > 0 {
+		setDefaultParamValue(params, "storage_wipe_disks", strings.Join(provisioning.Storage.WipeDiskPatterns, " "))
 	}
 	if release, ok := params["release"]; ok {
 		setDefaultParamValue(params, "coreos_release", release)
@@ -571,6 +577,9 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 	if override.Wipe != nil {
 		base.Wipe = copyBoolPtr(override.Wipe)
 	}
+	if override.WipeDiskPatterns != nil {
+		base.WipeDiskPatterns = append([]string(nil), override.WipeDiskPatterns...)
+	}
 	if override.Mode != "" {
 		base.Mode = override.Mode
 	}
@@ -694,6 +703,7 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Packages.Install = append([]string(nil), config.Packages.Install...)
 	config.Packages.Groups = append([]string(nil), config.Packages.Groups...)
 	config.Storage.Wipe = copyBoolPtr(config.Storage.Wipe)
+	config.Storage.WipeDiskPatterns = append([]string(nil), config.Storage.WipeDiskPatterns...)
 	config.Storage.Filesystems = copyFilesystemConfigMap(config.Storage.Filesystems)
 	config.Boot.Netboot.KernelArgs = append([]string(nil), config.Boot.Netboot.KernelArgs...)
 	if config.Boot.Installed.TimeoutSeconds != nil {
