@@ -1,7 +1,12 @@
 defaults:
   params:
     encrypt_home: "false"
-    linuxargs: ""
+  boot:
+    netboot:
+      kernelArgs: []
+  repos:
+    osMirror: http://ftp.debian.org/debian
+    release: bookworm
   storage:
     disk: /dev/nvme0n1
     wipe: true
@@ -12,25 +17,27 @@ targets:
   debian12:
     script: debian.ipxe
     label: Debian 12 Bookworm
-    params:
+    repos:
       release: bookworm
 
   debian13:
     script: debian.ipxe
     label: Debian 13 Trixie
-    params:
+    repos:
       release: trixie
 
   ubuntu2404:
     script: ubuntu-minimal.ipxe
     label: Ubuntu 24.04 LTS
-    params:
+    repos:
+      osMirror: http://mirror.rackspace.com/ubuntu
       release: noble
 
   ubuntu2604:
     script: ubuntu-minimal.ipxe
     label: Ubuntu 26.04 LTS
-    params:
+    repos:
+      osMirror: http://mirror.rackspace.com/ubuntu
       release: resolute
 
 networkMaps:
@@ -67,7 +74,7 @@ macMaps:
     defaultTarget: ubuntu2604
     targets:
       - ubuntu2604
-    params:
+    network:
       hostname: ubuntu2604-example
 
 ipMaps:

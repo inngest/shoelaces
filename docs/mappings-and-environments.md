@@ -1,7 +1,7 @@
 # Mappings And Environments
 
 Shoelaces resolves each booting host to a named boot target from `mappings.yaml`.
-A target points at an iPXE template, an optional environment override, a UI label, and target-specific template parameters.
+A target points at an iPXE template, an optional environment override, a UI label, structured provisioning policy, and optional target-specific escape-hatch parameters.
 
 ## Target Selection
 
@@ -25,19 +25,24 @@ Unmatched hosts can choose from all configured targets.
 defaults:
   params:
     encrypt_home: "false"
-    linuxargs: ""
+  boot:
+    netboot:
+      kernelArgs: []
+  repos:
+    osMirror: http://ftp.debian.org/debian
+    release: bookworm
 
 targets:
   debian12:
     script: debian.ipxe
     label: Debian 12 Bookworm
-    params:
+    repos:
       release: bookworm
 
   debian13:
     script: debian.ipxe
     label: Debian 13 Trixie
-    params:
+    repos:
       release: trixie
 
 networkMaps:
@@ -60,12 +65,16 @@ Shoelaces reads mappings from the YAML file configured by `mappings-file`, relat
 See [configs/data-dir/mappings.yaml](../configs/data-dir/mappings.yaml) for a complete example.
 The old `networkMaps[].script` and `hostnameMaps[].script` schema is no longer supported; define named `targets` and reference them from mapping rules instead.
 See [Provisioning Defaults And Overrides](provisioning-overrides.md) for the
-structured provisioning sections that targets and mapping rules can set in
-addition to raw template params.
+structured provisioning sections that targets and mapping rules can set.
 
 ## Parameters
 
-Parameter merge order is:
+`params` is an escape hatch for custom site templates and low-level values that
+do not have a structured field yet. Prefer structured sections such as `repos`,
+`storage`, `boot`, `packages`, `network`, `locale`, `time`, `users`, and
+`installer` for built-in provisioning behavior.
+
+Parameter merge order for escape-hatch params is:
 
 1. Global `defaults.params`.
 2. Selected target `params`.
@@ -73,7 +82,7 @@ Parameter merge order is:
 4. Manual/request params.
 5. Generated values such as `hostname` and `baseURL`.
 
-Raw scalar values can be placed directly in params.
+Raw scalar values can be placed directly in `params`.
 Sensitive values can also come from the Shoelaces process environment using an explicit reference:
 
 ```yaml
@@ -84,6 +93,10 @@ params:
 
 This uses the environment of the running Shoelaces process, so systemd service environment variables work without a separate env file.
 Missing referenced environment variables fail the boot render clearly.
+
+When a built-in field exists both in structured config and legacy `params`,
+structured mapping policy is treated as canonical for mapping-resolved boots.
+Explicit manual/request params can still override for one-off renders.
 
 ## Storage Disk Selection
 

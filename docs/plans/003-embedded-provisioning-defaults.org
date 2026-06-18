@@ -1,6 +1,6 @@
 #+title: Embedded Provisioning Defaults
 #+author: Darwin D. Wu
-#+status: Active
+#+status: Done
 #+date: <2026-06-16 Tue>
 
 * Embedded Provisioning Defaults
@@ -653,11 +653,11 @@ operator's responsibility.
 - [X] Add polling/render coverage proving a network default target with
   =repos.release: trixie= renders the final Debian iPXE template with =trixie=
   even when defaults include legacy =params.release: bookworm=.
-- [ ] Update docs to describe =params= as an escape hatch rather than the
+- [X] Update docs to describe =params= as an escape hatch rather than the
   preferred path for built-in provisioning fields.
-- [ ] Run =go test ./...=.
-- [ ] Run =make lint=.
-- [ ] Run =./scripts/check-plan-status.sh=.
+- [X] Run =go test ./...=.
+- [X] Run =make lint=.
+- [X] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 
