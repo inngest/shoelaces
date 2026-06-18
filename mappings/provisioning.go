@@ -15,9 +15,16 @@
 package mappings
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
+)
+
+const (
+	installerProvisioningQueryParam = "provisioning"
+	installerUsersQueryParam        = "users"
 )
 
 // ProvisioningConfig contains structured installer policy merged from
@@ -166,11 +173,31 @@ func ParamsWithProvisioning(params map[string]interface{}, users map[string]Reso
 	copied := ParamsWithUsers(params, users)
 	copied["provisioning"] = copyProvisioningConfig(provisioning)
 
-	projectProvisioningParams(copied, provisioning)
+	projectProvisioningParams(copied, users, provisioning)
 	return copied
 }
 
-func projectProvisioningParams(params map[string]interface{}, provisioning ProvisioningConfig) {
+// HydrateInstallerConfigQuery restores structured query values emitted in
+// installer config URLs back into template-facing parameters.
+func HydrateInstallerConfigQuery(params map[string]interface{}) error {
+	if raw, ok := params[installerProvisioningQueryParam].(string); ok && looksLikeJSONObject(raw) {
+		var provisioning ProvisioningConfig
+		if err := json.Unmarshal([]byte(raw), &provisioning); err != nil {
+			return fmt.Errorf("decode installer provisioning query: %w", err)
+		}
+		params[installerProvisioningQueryParam] = provisioning
+	}
+	if raw, ok := params[installerUsersQueryParam].(string); ok && looksLikeJSONObject(raw) {
+		var users map[string]ResolvedUser
+		if err := json.Unmarshal([]byte(raw), &users); err != nil {
+			return fmt.Errorf("decode installer users query: %w", err)
+		}
+		params[installerUsersQueryParam] = NewTemplateUsers(users)
+	}
+	return nil
+}
+
+func projectProvisioningParams(params map[string]interface{}, users map[string]ResolvedUser, provisioning ProvisioningConfig) {
 	// Preserve explicit caller/query parameters first, project structured
 	// provisioning fields second, then fill remaining keys with built-in
 	// defaults. This lets /configs/* query params override mapping policy while
@@ -199,7 +226,7 @@ func projectProvisioningParams(params map[string]interface{}, provisioning Provi
 	setDefaultParam(params, "ubuntu_minimal_installer_config_template", provisioning.Installer.ConfigTemplate)
 	setDefaultParam(params, "centos_installer_config_template", provisioning.Installer.ConfigTemplate)
 	setDefaultParam(params, "coreos_installer_config_template", provisioning.Installer.ConfigTemplate)
-	installerConfigQuery := encodeInstallerConfigParams(provisioning.Installer.ConfigParams)
+	installerConfigQuery := encodeInstallerConfigParams(params, provisioning.Installer.ConfigParams, users, provisioning)
 	setDefaultParam(params, "installer_config_query", installerConfigQuery)
 	if installerConfigQuery != "" {
 		setDefaultParam(params, "installer_config_query_suffix", "&"+installerConfigQuery)
@@ -368,15 +395,34 @@ func kickstartUTCFlag(raw string) string {
 	return "--utc"
 }
 
-func encodeInstallerConfigParams(params map[string]any) string {
-	if len(params) == 0 {
+func encodeInstallerConfigParams(templateParams map[string]interface{}, configParams map[string]any, users map[string]ResolvedUser, provisioning ProvisioningConfig) string {
+	if len(configParams) == 0 && len(users) == 0 && reflect.ValueOf(provisioning).IsZero() {
 		return ""
 	}
 	values := url.Values{}
-	for key, value := range params {
+	for _, key := range []string{"hostname"} {
+		if value, ok := templateParams[key]; ok {
+			values.Set(key, fmt.Sprint(value))
+		}
+	}
+	for key, value := range configParams {
 		values.Set(key, fmt.Sprint(value))
 	}
+	if !reflect.ValueOf(provisioning).IsZero() {
+		if encoded, err := json.Marshal(provisioning); err == nil {
+			values.Set(installerProvisioningQueryParam, string(encoded))
+		}
+	}
+	if len(users) > 0 {
+		if encoded, err := json.Marshal(users); err == nil {
+			values.Set(installerUsersQueryParam, string(encoded))
+		}
+	}
 	return values.Encode()
+}
+
+func looksLikeJSONObject(raw string) bool {
+	return strings.HasPrefix(strings.TrimSpace(raw), "{")
 }
 
 func (defaults DefaultsMap) provisioningConfig() ProvisioningConfig {
