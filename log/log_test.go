@@ -50,3 +50,20 @@ func TestLoggerDevHandlerFormatsAttributes(t *testing.T) {
 	assert.Contains(t, output.String(), `dir=/tmp/data`)
 	assert.Contains(t, output.String(), `err=missing`)
 }
+
+func TestLoggerDevHandlerFormatsTypedNilAttributes(t *testing.T) {
+	var output bytes.Buffer
+	logger := MakeLogger(&output, WithHandler(HandlerDev), WithLevel(LevelDebug))
+
+	var value *panicStringer
+	logger.Debug("manual action", "script", value)
+
+	assert.Contains(t, output.String(), `DBG manual action`)
+	assert.Contains(t, output.String(), `script=<nil>`)
+}
+
+type panicStringer struct{}
+
+func (*panicStringer) String() string {
+	panic("nil stringer should not be called")
+}

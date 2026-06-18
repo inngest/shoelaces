@@ -20,6 +20,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 )
@@ -167,6 +168,9 @@ func devStyleForLevel(level slog.Level) devLevelStyle {
 func formatValue(v any) string {
 	// Quote only values that would make key=value output ambiguous. This keeps
 	// common IDs and paths compact while preserving spaces and error text.
+	if isNilValue(v) {
+		return "<nil>"
+	}
 	switch value := v.(type) {
 	case string:
 		if value == "" || strings.ContainsAny(value, " \t\n\r\"=") {
@@ -179,6 +183,19 @@ func formatValue(v any) string {
 		return fmt.Sprintf("%q", value.String())
 	default:
 		return fmt.Sprint(value)
+	}
+}
+
+func isNilValue(v any) bool {
+	if v == nil {
+		return true
+	}
+	value := reflect.ValueOf(v)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
 	}
 }
 
