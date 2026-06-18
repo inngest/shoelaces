@@ -50,6 +50,9 @@ through transient memory or long query strings.
 - Use =sqlc= for database access. Keep SQL in checked-in schema and query files,
   generate typed Go accessors, and keep application code behind repository
   interfaces rather than embedding raw SQL strings throughout the codebase.
+- Use =goose= for database migrations and schema version tracking across SQL
+  backends. SQLite is the first backend, and future Postgres support should add
+  its own Goose migrations behind the same persistence boundary.
 - Keep backend-specific generated code behind those CQRS interfaces so a future
   Postgres backend can provide the same command/query contracts without
   changing handlers, polling, or template rendering.
@@ -95,27 +98,27 @@ persistence:
   interfaces instead of one catch-all repository API.
 - [X] Define backend-neutral domain structs at the persistence boundary so
   SQLite-generated row types do not leak into handlers, polling, or templates.
-- [ ] Add =sqlc= configuration for the SQLite backend.
-- [ ] Add checked-in SQL schema and query files for the initial persistence
+- [X] Add =sqlc= configuration for the SQLite backend.
+- [X] Add checked-in SQL schema and query files for the initial persistence
   model.
-- [ ] Generate typed query code with =sqlc= and keep handwritten code limited to
+- [X] Generate typed query code with =sqlc= and keep handwritten code limited to
   repository orchestration and mapping between domain structs and generated
   rows.
-- [ ] Implement schema migration/versioning for the SQLite backend using the
-  checked-in schema files.
-- [ ] Update the =Makefile= so =make gen= generates sqlc codegen files for all
+- [X] Implement SQL backend migration/versioning with =goose= and checked-in
+  migration files, starting with SQLite.
+- [X] Update the =Makefile= so =make gen= generates sqlc codegen files for all
   configured persistence backends.
-- [ ] Add a =Makefile= check target, or extend an existing check target, so CI
+- [X] Add a =Makefile= check target, or extend an existing check target, so CI
   verifies generated sqlc files are up to date after =make gen=.
 - [X] Ensure database directories are created with restrictive permissions.
 - [ ] Add unit tests for config parsing, default path resolution, absolute path
   handling, invalid backend values, and directory creation failures.
-- [ ] Add SQLite migration tests that create an empty database and verify the
+- [X] Add SQLite migration tests that create an empty database and verify the
   expected tables/indexes exist.
-- [ ] Add generation drift checks so CI fails when sqlc outputs are stale.
+- [X] Add generation drift checks so CI fails when sqlc outputs are stale.
 - [X] Add memory backend tests that prove the repository contracts can be
   exercised without disk.
-- [ ] Add interface compliance tests that run the same command/query contract
+- [X] Add interface compliance tests that run the same command/query contract
   tests against memory and SQLite backends.
 
 *** Phase 2: Persistent Event History
