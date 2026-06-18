@@ -297,6 +297,7 @@ data-dir = "%s"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
 log-level = "debug"
+persistence-backend = "memory"
 `, apiAddr, dataDir)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)

@@ -23,6 +23,7 @@ import (
 
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/handlers"
+	"github.com/inngest/shoelaces/persistence"
 	"github.com/inngest/shoelaces/router"
 	"github.com/inngest/shoelaces/tftpserver"
 	"github.com/knadh/koanf/providers/file"
@@ -85,6 +86,7 @@ func newCommand(args []string, run serverRunner) (*cli.Command, error) {
 func command(configPath string, configValues map[any]any, run serverRunner) *cli.Command {
 	defaults := environment.DefaultOptions()
 	tftpDefaults := environment.DefaultTFTPConfig()
+	persistenceDefaults := persistence.DefaultConfig()
 	configSource := cli.NewMapSource("config", configValues)
 
 	flagSources := func(name, env string) cli.ValueSourceChain {
@@ -199,6 +201,30 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 				Usage:   "Per-request TFTP timeout",
 				Sources: flagSources("tftp-timeout", "TFTP_TIMEOUT"),
 			},
+			&cli.StringFlag{
+				Name:    "persistence-backend",
+				Value:   persistenceDefaults.Backend,
+				Usage:   "Runtime persistence backend: sqlite or memory",
+				Sources: flagSources("persistence-backend", "PERSISTENCE_BACKEND"),
+			},
+			&cli.StringFlag{
+				Name:    "persistence-path",
+				Value:   persistenceDefaults.Path,
+				Usage:   "SQLite persistence database path, relative to data-dir unless absolute",
+				Sources: flagSources("persistence-path", "PERSISTENCE_PATH"),
+			},
+			&cli.DurationFlag{
+				Name:    "persistence-retention-events",
+				Value:   persistenceDefaults.Retention.Events,
+				Usage:   "Retention window for persisted event history",
+				Sources: flagSources("persistence-retention-events", "PERSISTENCE_RETENTION_EVENTS"),
+			},
+			&cli.DurationFlag{
+				Name:    "persistence-retention-boot-sessions",
+				Value:   persistenceDefaults.Retention.BootSessions,
+				Usage:   "Retention window for persisted boot/config references",
+				Sources: flagSources("persistence-retention-boot-sessions", "PERSISTENCE_RETENTION_BOOT_SESSIONS"),
+			},
 			&cli.BoolFlag{
 				Name:  "version",
 				Usage: "Print version information and exit",
@@ -227,6 +253,14 @@ func optionsFromCommand(cmd *cli.Command) environment.Options {
 		Readonly: cmd.Bool("tftp-readonly"),
 		Timeout:  cmd.Duration("tftp-timeout"),
 	}
+	persistenceConfig := persistence.Config{
+		Backend: cmd.String("persistence-backend"),
+		Path:    cmd.String("persistence-path"),
+		Retention: persistence.RetentionConfig{
+			Events:       cmd.Duration("persistence-retention-events"),
+			BootSessions: cmd.Duration("persistence-retention-boot-sessions"),
+		},
+	}
 	uiDir := cmd.String("ui-dir")
 	uiDirSet := cmd.IsSet("ui-dir")
 	if !uiDirSet && cmd.IsSet("static-dir") {
@@ -247,12 +281,16 @@ func optionsFromCommand(cmd *cli.Command) environment.Options {
 		LogLevel:          cmd.String("log-level"),
 		LogHandler:        cmd.String("log-handler"),
 		TFTP:              tftp,
+		Persistence:       persistenceConfig,
 	}
 }
 
 func validateOptions(options environment.Options) error {
 	if options.DataDir == "" {
 		return fmt.Errorf("you must specify the data-dir parameter")
+	}
+	if err := persistence.Validate(persistence.ApplyDefaults(options.Persistence)); err != nil {
+		return err
 	}
 	return nil
 }

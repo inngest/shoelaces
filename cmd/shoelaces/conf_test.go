@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,14 @@ ui-dir = "/srv/shoelaces/ui"
 log-level = "warn"
 log-handler = "json"
 
+[persistence]
+backend = "sqlite"
+path = "runtime/test.db"
+
+[persistence.retention]
+events = "24h"
+bootSessions = "2h"
+
 [tftp]
 enabled = true
 address = ":69"
@@ -31,6 +40,12 @@ data-dir: configs/data-dir/
 ui-dir: /srv/shoelaces/ui
 log-level: warn
 log-handler: json
+persistence:
+  backend: sqlite
+  path: runtime/test.db
+  retention:
+    events: 24h
+    bootSessions: 2h
 tftp:
   enabled: true
   address: ":69"
@@ -44,6 +59,14 @@ tftp:
   "ui-dir": "/srv/shoelaces/ui",
   "log-level": "warn",
   "log-handler": "json",
+  "persistence": {
+    "backend": "sqlite",
+    "path": "runtime/test.db",
+    "retention": {
+      "events": "24h",
+      "bootSessions": "2h"
+    }
+  },
   "tftp": {
     "enabled": true,
     "address": ":69",
@@ -67,6 +90,10 @@ tftp:
 			assert.Equal(t, "/srv/shoelaces/ui", values["ui-dir"])
 			assert.Equal(t, "warn", values["log-level"])
 			assert.Equal(t, "json", values["log-handler"])
+			assert.Equal(t, "sqlite", values["persistence-backend"])
+			assert.Equal(t, "runtime/test.db", values["persistence-path"])
+			assert.Equal(t, "24h", values["persistence-retention-events"])
+			assert.Equal(t, "2h", values["persistence-retention-boot-sessions"])
 			assert.Equal(t, true, values["tftp-enabled"])
 			assert.Equal(t, ":69", values["tftp-addr"])
 			assert.Equal(t, "/var/lib/shoelaces/tftp", values["tftp-root"])
@@ -74,6 +101,27 @@ tftp:
 			assert.Equal(t, "5s", values["tftp-timeout"])
 		})
 	}
+}
+
+func TestReadConfigSupportsFlatPersistenceKeys(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "shoelaces.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+data-dir = "configs/data-dir/"
+persistence-backend = "memory"
+persistence-path = "/tmp/ignored.db"
+persistence-retention-events = "1h"
+persistence-retention-boot-sessions = "30m"
+`), 0o644))
+
+	values, err := readConfig(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "memory", values["persistence-backend"])
+	assert.Equal(t, "/tmp/ignored.db", values["persistence-path"])
+	assert.Equal(t, "1h", values["persistence-retention-events"])
+	assert.Equal(t, "30m", values["persistence-retention-boot-sessions"])
+	_, err = time.ParseDuration(values["persistence-retention-events"].(string))
+	assert.NoError(t, err)
 }
 
 func TestReadConfigRejectsDebugConfigOption(t *testing.T) {

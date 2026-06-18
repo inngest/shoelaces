@@ -1,5 +1,7 @@
 package environment
 
+import "github.com/inngest/shoelaces/persistence"
+
 // Options contains startup configuration for a Shoelaces environment.
 type Options struct {
 	// BindAddr is the HTTP listen address for the Shoelaces web server.
@@ -26,6 +28,8 @@ type Options struct {
 	LogHandler string
 	// TFTP controls the optional embedded TFTP server. A nil value means use defaults.
 	TFTP *TFTPConfig
+	// Persistence controls runtime data storage for events, host state, and references.
+	Persistence persistence.Config
 }
 
 // DefaultOptions returns the runtime defaults for options not explicitly set.
@@ -37,6 +41,7 @@ func DefaultOptions() Options {
 		TemplateExtension: ".slc",
 		MappingsFile:      "mappings.yaml",
 		TFTP:              &tftp,
+		Persistence:       persistence.DefaultConfig(),
 	}
 }
 
@@ -58,6 +63,7 @@ func (env *Environment) applyOptions(options Options) {
 	if options.TFTP == nil {
 		options.TFTP = defaults.TFTP
 	}
+	options.Persistence = persistence.ApplyDefaults(options.Persistence)
 
 	env.BindAddr = options.BindAddr
 	env.BaseURL = options.BaseURL
@@ -71,4 +77,5 @@ func (env *Environment) applyOptions(options Options) {
 	env.LogLevel = options.LogLevel
 	env.LogHandler = options.LogHandler
 	env.TFTP = options.TFTP
+	env.PersistenceConfig = options.Persistence
 }

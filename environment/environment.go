@@ -16,6 +16,7 @@
 package environment
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net"
@@ -28,6 +29,9 @@ import (
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/persistence"
+	"github.com/inngest/shoelaces/persistence/memory"
+	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
@@ -48,6 +52,7 @@ type Environment struct {
 	StaticTemplates *template.Template            // Static Templates
 	Environments    []string                      // Valid config environments
 	Logger          log.Logger
+	RuntimeStore    persistence.Store
 
 	BindAddr          string
 	BaseURL           string
@@ -61,6 +66,7 @@ type Environment struct {
 	Debug             bool
 	LogLevel          string
 	LogHandler        string
+	PersistenceConfig persistence.Config
 }
 
 // New returns an initialized environment structure
@@ -84,6 +90,7 @@ func New(options Options) *Environment {
 
 	env.Environments = env.initEnvOverrides()
 	env.EventLog = &event.Log{}
+	env.RuntimeStore = env.initPersistence()
 
 	env.logStartupConfig()
 	env.Logger.Info("Discovered environment overrides", "component", "environment", "count", len(env.Environments), "environments", env.Environments)
@@ -103,12 +110,19 @@ func New(options Options) *Environment {
 }
 
 func (env *Environment) logStartupConfig() {
-	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler)
+	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler, "persistence_backend", env.PersistenceConfig.Backend, "persistence_path", env.persistencePathForLog())
 	if env.TFTP == nil {
 		env.Logger.Info("Configured TFTP", "component", "environment", "enabled", false)
 		return
 	}
 	env.Logger.Info("Configured TFTP", "component", "environment", "enabled", env.TFTP.Enabled, "addr", env.TFTP.Addr, "root", env.TFTP.Root, "readonly", env.TFTP.Readonly, "timeout", env.TFTP.Timeout)
+}
+
+func (env *Environment) persistencePathForLog() string {
+	if env.PersistenceConfig.Backend != persistence.BackendSQLite {
+		return ""
+	}
+	return persistence.ResolvePath(env.DataDir, env.PersistenceConfig)
 }
 
 func (env *Environment) uiSource() string {
@@ -129,8 +143,29 @@ func defaultEnvironment() *Environment {
 	env.Logger = log.MakeLogger(os.Stdout)
 	env.Templates = templates.New(env.Logger)
 	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
+	env.PersistenceConfig = persistence.DefaultConfig()
+	env.RuntimeStore = memory.New()
 
 	return env
+}
+
+func (env *Environment) initPersistence() persistence.Store {
+	if err := persistence.Validate(env.PersistenceConfig); err != nil {
+		panic(err)
+	}
+
+	switch env.PersistenceConfig.Backend {
+	case persistence.BackendMemory:
+		return memory.New()
+	case persistence.BackendSQLite:
+		store, err := persistencesqlite.Open(context.Background(), persistence.ResolvePath(env.DataDir, env.PersistenceConfig))
+		if err != nil {
+			panic(err)
+		}
+		return store
+	default:
+		panic(fmt.Errorf("unsupported persistence backend %q", env.PersistenceConfig.Backend))
+	}
 }
 
 func (env *Environment) initStaticTemplates() {

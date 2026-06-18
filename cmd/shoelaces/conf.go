@@ -42,7 +42,8 @@ func configValuesFromKoanf(k *koanf.Koanf) (map[any]any, error) {
 func normalizeConfigValue(name string, value any) (string, any, error) {
 	switch name {
 	case "bind-addr", "base-url", "data-dir", "ui-dir", "static-dir", "env-dir", "template-extension", "mappings-file", "log-level", "log-handler",
-		"tftp-enabled", "tftp-addr", "tftp-root", "tftp-readonly", "tftp-timeout":
+		"tftp-enabled", "tftp-addr", "tftp-root", "tftp-readonly", "tftp-timeout",
+		"persistence-backend", "persistence-path", "persistence-retention-events", "persistence-retention-boot-sessions":
 		return name, value, nil
 	case "tftp.enabled":
 		return "tftp-enabled", value, nil
@@ -54,6 +55,14 @@ func normalizeConfigValue(name string, value any) (string, any, error) {
 		return "tftp-readonly", value, nil
 	case "tftp.timeout":
 		return "tftp-timeout", value, nil
+	case "persistence.backend":
+		return "persistence-backend", value, nil
+	case "persistence.path":
+		return "persistence-path", value, nil
+	case "persistence.retention.events":
+		return "persistence-retention-events", value, nil
+	case "persistence.retention.bootSessions", "persistence.retention.bootsessions", "persistence.retention.boot-sessions":
+		return "persistence-retention-boot-sessions", value, nil
 	default:
 		return "", nil, fmt.Errorf("configuration variable provided but not defined: %s", name)
 	}

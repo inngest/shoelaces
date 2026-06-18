@@ -88,7 +88,7 @@ persistence:
 
 *** Phase 1: Storage Interfaces And Configuration
 
-- [ ] Add =persistence= config fields to CLI/config parsing and
+- [X] Add =persistence= config fields to CLI/config parsing and
   =environment.Options=.
 - [X] Default to SQLite at =data-dir/runtime/shoelaces.db=.
 - [X] Add an explicit =memory= backend for tests and local throwaway runs.
@@ -111,7 +111,7 @@ persistence:
 - [X] Add a =Makefile= check target, or extend an existing check target, so CI
   verifies generated sqlc files are up to date after =make gen=.
 - [X] Ensure database directories are created with restrictive permissions.
-- [ ] Add unit tests for config parsing, default path resolution, absolute path
+- [X] Add unit tests for config parsing, default path resolution, absolute path
   handling, invalid backend values, and directory creation failures.
 - [X] Add SQLite migration tests that create an empty database and verify the
   expected tables/indexes exist.
