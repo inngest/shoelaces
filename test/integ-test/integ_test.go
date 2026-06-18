@@ -233,7 +233,10 @@ networkMaps:
 	proc.assertGETContains(t, "/poll/1/06-66-de-ad-be-ef", nil, []string{
 		"Debian bookworm netboot",
 		"set mirror https://deb.example/debian/dists/bookworm/",
-		"preseed/url=http://localhost:18888/configs/preseed/debian?encrypt_home=false&site=integ",
+		"preseed/url=http://localhost:18888/configs/preseed/debian?",
+		"encrypt_home=false",
+		"site=integ",
+		"provisioning=",
 		"console=ttyS1",
 	})
 	proc.assertGETContains(t, "/configs/preseed/debian", url.Values{"encrypt_home": {"false"}}, []string{
