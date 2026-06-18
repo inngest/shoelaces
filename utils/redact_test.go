@@ -49,10 +49,13 @@ func TestIsSensitiveParamKey(t *testing.T) {
 }
 
 func TestRedactParamsCopiesAndMasksSensitiveValues(t *testing.T) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"hostname":              "iad-1",
 		"root_password_crypted": "hash",
 		"bootstrap_token":       "token-value",
+		"users": map[string]any{
+			"root": map[string]any{"passwordCrypted": "root-hash"},
+		},
 	}
 
 	redacted := RedactParams(params)
@@ -60,7 +63,71 @@ func TestRedactParamsCopiesAndMasksSensitiveValues(t *testing.T) {
 	assert.Equal(t, "iad-1", redacted["hostname"])
 	assert.Equal(t, redactedValue, redacted["root_password_crypted"])
 	assert.Equal(t, redactedValue, redacted["bootstrap_token"])
+	assert.Equal(t, redactedValue, redacted["users"])
 	redacted["hostname"] = "changed"
 	assert.Equal(t, "iad-1", params["hostname"])
 	assert.Equal(t, "hash", params["root_password_crypted"])
+}
+
+func TestRedactForLogPreservesStructuredContextAndMasksSecrets(t *testing.T) {
+	payload := map[string]any{
+		"hostname": "iad-1",
+		"users": map[string]any{
+			"root": map[string]any{
+				"locked":          false,
+				"passwordCrypted": "root-hash",
+			},
+			"infra": map[string]any{
+				"sshAuthorizedKeys": []any{"ssh-ed25519 public"},
+				"bootstrapToken":    "token-value",
+			},
+		},
+		"provisioning": structuredRedactionFixture{
+			Repos: repoRedactionFixture{
+				Release: "trixie",
+				Token:   "repo-token",
+			},
+		},
+	}
+
+	redacted := RedactForLog(payload).(map[string]any)
+
+	assert.Equal(t, "iad-1", redacted["hostname"])
+	users := redacted["users"].(map[string]any)
+	root := users["root"].(map[string]any)
+	assert.Equal(t, false, root["locked"])
+	assert.Equal(t, redactedValue, root["passwordCrypted"])
+	infra := users["infra"].(map[string]any)
+	assert.Equal(t, redactedValue, infra["sshAuthorizedKeys"])
+	assert.Equal(t, redactedValue, infra["bootstrapToken"])
+	provisioning := redacted["provisioning"].(map[string]any)
+	repos := provisioning["repos"].(map[string]any)
+	assert.Equal(t, "trixie", repos["release"])
+	assert.Equal(t, redactedValue, repos["token"])
+}
+
+func TestRedactJSONForLogMasksSecrets(t *testing.T) {
+	redacted := RedactJSONForLog([]byte(`{
+		"release": "trixie",
+		"users": {
+			"root": {
+				"passwordCrypted": "hash"
+			}
+		}
+	}`)).(map[string]any)
+
+	assert.Equal(t, "trixie", redacted["release"])
+	users := redacted["users"].(map[string]any)
+	root := users["root"].(map[string]any)
+	assert.Equal(t, redactedValue, root["passwordCrypted"])
+	assert.Equal(t, redactedValue, RedactJSONForLog([]byte(`{`)))
+}
+
+type structuredRedactionFixture struct {
+	Repos repoRedactionFixture `json:"repos"`
+}
+
+type repoRedactionFixture struct {
+	Release string `json:"release"`
+	Token   string `json:"token"`
 }

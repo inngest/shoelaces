@@ -30,7 +30,7 @@ import (
 func TestParseTemplatesAndRenderTemplate(t *testing.T) {
 	renderer := newTestRenderer(t)
 
-	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
+	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]any{
 		"hostname": "default-host",
 		"baseURL":  "127.0.0.1:8081",
 	}, "")
@@ -280,7 +280,7 @@ func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 	var logOutput bytes.Buffer
 	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
-	params := mappings.ParamsWithUsers(map[string]interface{}{
+	params := mappings.ParamsWithUsers(map[string]any{
 		"hostname": "secure-host",
 		"baseURL":  "127.0.0.1:8081",
 	}, map[string]mappings.ResolvedUser{
@@ -297,13 +297,15 @@ func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 	assert.Contains(t, rendered, "secure-host")
 	assert.NotContains(t, logOutput.String(), "secret-hash")
 	assert.NotContains(t, logOutput.String(), "ssh-ed25519 AAAA secret-key")
-	assert.Contains(t, logOutput.String(), "users:[REDACTED]")
+	assert.Contains(t, logOutput.String(), "users:map")
+	assert.Contains(t, logOutput.String(), "PasswordCrypted:[REDACTED]")
+	assert.Contains(t, logOutput.String(), "SSHAuthorizedKeys:[REDACTED]")
 }
 
 func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 	var logOutput bytes.Buffer
 	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
-	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+	params := mappings.ParamsWithProvisioning(map[string]any{
 		"hostname": "secure-host",
 		"baseURL":  "127.0.0.1:8081",
 	}, nil, mappings.ProvisioningConfig{
@@ -319,7 +321,8 @@ func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
 	assert.NotContains(t, logOutput.String(), "secret-token")
-	assert.Contains(t, logOutput.String(), "provisioning:[REDACTED]")
+	assert.Contains(t, logOutput.String(), "provisioning:map")
+	assert.Contains(t, logOutput.String(), "bootstrap_token:[REDACTED]")
 	assert.Contains(t, logOutput.String(), "installer_config_query:[REDACTED]")
 }
 
