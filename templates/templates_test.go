@@ -17,8 +17,11 @@ package templates
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/inngest/shoelaces/log"
@@ -273,8 +276,9 @@ func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 	assert.Contains(t, rendered, "secure-host")
 	assert.NotContains(t, logOutput.String(), "hash")
 	assert.NotContains(t, logOutput.String(), "token-value")
-	assert.Contains(t, logOutput.String(), "root_password_crypted:[REDACTED]")
-	assert.Contains(t, logOutput.String(), "bootstrap_token:[REDACTED]")
+	logParams := loggedTemplateParams(t, logOutput.String())
+	assert.Equal(t, "[REDACTED]", logParams["root_password_crypted"])
+	assert.Equal(t, "[REDACTED]", logParams["bootstrap_token"])
 }
 
 func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
@@ -297,9 +301,12 @@ func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 	assert.Contains(t, rendered, "secure-host")
 	assert.NotContains(t, logOutput.String(), "secret-hash")
 	assert.NotContains(t, logOutput.String(), "ssh-ed25519 AAAA secret-key")
-	assert.Contains(t, logOutput.String(), "users:map")
-	assert.Contains(t, logOutput.String(), "PasswordCrypted:[REDACTED]")
-	assert.Contains(t, logOutput.String(), "SSHAuthorizedKeys:[REDACTED]")
+	logParams := loggedTemplateParams(t, logOutput.String())
+	users := logParams["users"].(map[string]any)
+	byName := users["ByName"].(map[string]any)
+	infra := byName["infra"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", infra["PasswordCrypted"])
+	assert.Equal(t, "[REDACTED]", infra["SSHAuthorizedKeys"])
 }
 
 func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
@@ -321,9 +328,13 @@ func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
 	assert.NotContains(t, logOutput.String(), "secret-token")
-	assert.Contains(t, logOutput.String(), "provisioning:map")
-	assert.Contains(t, logOutput.String(), "bootstrap_token:[REDACTED]")
-	assert.Contains(t, logOutput.String(), "installer_config_query:[REDACTED]")
+	logParams := loggedTemplateParams(t, logOutput.String())
+	assert.Equal(t, "[REDACTED]", logParams["bootstrap_token"])
+	assert.Equal(t, "[REDACTED]", logParams["installer_config_query"])
+	provisioning := logParams["provisioning"].(map[string]any)
+	installer := provisioning["Installer"].(map[string]any)
+	configParams := installer["ConfigParams"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", configParams["bootstrap_token"])
 }
 
 func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {
@@ -572,6 +583,31 @@ func newEmbeddedFallbackRenderer(t *testing.T, dataDir string) *ShoelacesTemplat
 	renderer := New(log.MakeLogger(testLogWriter{}))
 	renderer.ParseTemplates(dataDir, "env_overrides", nil, ".slc")
 	return renderer
+}
+
+func loggedTemplateParams(t *testing.T, logs string) map[string]any {
+	t.Helper()
+
+	const key = "parameters="
+	start := strings.Index(logs, key)
+	require.NotEqual(t, -1, start, "template log should include parameters attribute:\n%s", logs)
+	raw := logs[start+len(key):]
+	if newline := strings.IndexByte(raw, '\n'); newline >= 0 {
+		raw = raw[:newline]
+	}
+
+	var jsonText string
+	if strings.HasPrefix(raw, `"`) {
+		var err error
+		jsonText, err = strconv.Unquote(raw)
+		require.NoError(t, err)
+	} else {
+		jsonText = raw
+	}
+
+	var params map[string]any
+	require.NoError(t, json.Unmarshal([]byte(jsonText), &params))
+	return params
 }
 
 type testLogWriter struct{}

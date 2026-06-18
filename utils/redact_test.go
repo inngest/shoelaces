@@ -15,9 +15,11 @@
 package utils
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsSensitiveParamKey(t *testing.T) {
@@ -121,6 +123,25 @@ func TestRedactJSONForLogMasksSecrets(t *testing.T) {
 	root := users["root"].(map[string]any)
 	assert.Equal(t, redactedValue, root["passwordCrypted"])
 	assert.Equal(t, redactedValue, RedactJSONForLog([]byte(`{`)))
+}
+
+func TestRedactedMapToStringReturnsJSON(t *testing.T) {
+	logValue := RedactedMapToString(map[string]any{
+		"hostname": "iad-1",
+		"users": map[string]any{
+			"root": map[string]any{
+				"passwordCrypted": "hash",
+			},
+		},
+	})
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(logValue), &parsed))
+	assert.Equal(t, "iad-1", parsed["hostname"])
+	users := parsed["users"].(map[string]any)
+	root := users["root"].(map[string]any)
+	assert.Equal(t, redactedValue, root["passwordCrypted"])
+	assert.NotContains(t, logValue, "hash")
 }
 
 type structuredRedactionFixture struct {

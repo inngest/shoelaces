@@ -90,7 +90,11 @@ func RedactJSONForLog(raw []byte) any {
 // RedactedMapToString formats params for logs after masking sensitive values.
 func RedactedMapToString(params map[string]any) string {
 	redacted, _ := RedactForLog(params).(map[string]any)
-	return MapToString(redacted)
+	encoded, err := json.Marshal(redacted)
+	if err != nil {
+		return redactedValue
+	}
+	return string(encoded)
 }
 
 func redactForLog(key string, value any) any {
