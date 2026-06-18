@@ -19,7 +19,9 @@ Nested TFTP settings use a `tftp` object/table and map to the `tftp-*` CLI flags
 - `env-dir`: environment overrides directory inside `data-dir`. Defaults to `env_overrides`.
 - `mappings-file`: YAML mappings file path relative to `data-dir`. Defaults to `mappings.yaml`.
 - `template-extension`: template filename extension. Defaults to `.slc`.
-- `debug`: enable debug messages.
+- `debug`: enable debug messages. This is equivalent to `log-level = "debug"`.
+- `log-level`: minimum log level: `debug`, `info`, `warn`, or `error`. Defaults to `info`.
+- `log-handler`: log output format: `dev`, `text`, or `json`. Defaults to `dev`.
 - `tftp-enabled`: enable the embedded TFTP server.
 - `tftp-addr`: embedded TFTP listen address. Defaults to `:69`.
 - `tftp-root`: directory served over TFTP. Defaults to `data-dir/tftp` when not explicitly set.
@@ -54,6 +56,8 @@ data-dir = "configs/data-dir/"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
 debug = true
+log-level = "debug"
+log-handler = "dev"
 
 [tftp]
 enabled = true

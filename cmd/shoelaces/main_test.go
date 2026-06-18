@@ -115,6 +115,28 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 	assert.Equal(t, 7*time.Second, got.TFTP.Timeout)
 }
 
+func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "error")
+
+	configValues := map[any]any{
+		"data-dir":    "../../configs/data-dir",
+		"log-level":   "warn",
+		"log-handler": "text",
+	}
+
+	var got *environment.Environment
+	cmd := command("test.toml", configValues, func(env *environment.Environment) error {
+		got = env
+		return nil
+	})
+
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--log-handler", "json"}))
+	require.NotNil(t, got)
+
+	assert.Equal(t, "error", got.LogLevel)
+	assert.Equal(t, "json", got.LogHandler)
+}
+
 func TestCommandUIDirPrecedence(t *testing.T) {
 	tests := []struct {
 		name      string
