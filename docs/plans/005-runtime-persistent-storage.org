@@ -44,6 +44,9 @@ through transient memory or long query strings.
 - Use SQLite as the default local backend, stored under =data-dir=, because
   Shoelaces is currently a single-process service and should not require an
   external database for normal deployments.
+- Use =sqlc= for database access. Keep SQL in checked-in schema and query files,
+  generate typed Go accessors, and keep application code behind repository
+  interfaces rather than embedding raw SQL strings throughout the codebase.
 - Keep an in-memory backend for fast unit tests and for any explicit
   no-persistence development mode.
 - Use persistent boot/config references for data that must be reused later by
@@ -79,12 +82,22 @@ persistence:
 - [ ] Add an explicit =memory= backend for tests and local throwaway runs.
 - [ ] Create a =persistence= package with repository interfaces for events,
   server state, and boot/config references.
-- [ ] Implement schema migration/versioning for the SQLite backend.
+- [ ] Add =sqlc= configuration for the SQLite backend.
+- [ ] Add checked-in SQL schema and query files for the initial persistence
+  model.
+- [ ] Generate typed query code with =sqlc= and keep handwritten code limited to
+  repository orchestration and mapping between domain structs and generated
+  rows.
+- [ ] Implement schema migration/versioning for the SQLite backend using the
+  checked-in schema files.
+- [ ] Add a =make gen= or equivalent workflow entry if sqlc generation is not
+  already covered.
 - [ ] Ensure database directories are created with restrictive permissions.
 - [ ] Add unit tests for config parsing, default path resolution, absolute path
   handling, invalid backend values, and directory creation failures.
 - [ ] Add SQLite migration tests that create an empty database and verify the
   expected tables/indexes exist.
+- [ ] Add generation drift checks so CI fails when sqlc outputs are stale.
 - [ ] Add memory backend tests that prove the repository contracts can be
   exercised without disk.
 
@@ -156,6 +169,8 @@ persistence:
 *** Phase 6: Operational Tooling And Documentation
 
 - [ ] Document the persistence config schema and defaults.
+- [ ] Document the sqlc workflow for editing schema/query files and regenerating
+  typed Go accessors.
 - [ ] Document database location, retention behavior, backup expectations, and
   safe deletion/recovery behavior.
 - [ ] Document how references work in the network boot flow.
@@ -192,6 +207,9 @@ persistence:
 
 - SQLite is a good fit for single-node Shoelaces, but it should not be presented
   as a clustered persistence story.
+- =sqlc= keeps SQL explicit and reviewable without scattering raw SQL strings
+  across handlers or services. Repository interfaces should remain the boundary
+  consumed by the rest of Shoelaces.
 - Persisting resolved boot data changes the failure mode of =/configs/*=
   requests: a missing or expired reference should fail clearly and safely.
 - This plan should make future LUKS support safer by avoiding secret-bearing
