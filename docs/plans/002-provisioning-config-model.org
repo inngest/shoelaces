@@ -43,7 +43,7 @@ per mapping:
 defaults:
   params:
     install_username: infra
-    ansible_repo_url: git@example.com:infra/ansible.git
+    ansible_repo_url: git@example.com:infra/provisioning.git
     ansible_branch: main
     ansible_playbook: playbooks/baremetal.yml
 

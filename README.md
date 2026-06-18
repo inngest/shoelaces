@@ -2,7 +2,6 @@
 
 This repository is Inngest's maintained fork of [ThousandEyes Shoelaces](https://github.com/thousandeyes/shoelaces).
 Shoelaces serves iPXE, configuration, and static provisioning assets for bare-metal provisioning.
-At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 release artifacts, so the release workflow publishes both GitHub release artifacts and the S3 compatibility path.
 
 ## Building and testing
 
@@ -29,39 +28,10 @@ CI currently runs:
 - `golangci-lint`
 - a GoReleaser snapshot dry run
 
-## Proposed release process
-
-Shoelaces follows the same broad release pattern as Atlas: release PRs drive tags, and tags drive GoReleaser.
-Every push to `master` creates or updates a `release/next` PR with a SemVer release tag in the PR title.
-Merging that release PR creates the tag and publishes GitHub release plus S3 artifacts with GoReleaser.
-The important Shoelaces-specific difference is that the current Ansible deployment still consumes the S3 `shoelaces/releases/.../shoelaces.tar.gz` feed, so the release workflow also publishes that compatibility path.
-
-### Automatic releases
-
-Merging ordinary changes to `master` runs the auto-release PR workflow.
-It asks `git-cliff` for the next SemVer tag, updates `CHANGELOG.md`, and opens or updates `release/next`.
-When `release/next` is merged, the release tag workflow creates the tag from the release PR title and publishes per-platform archives plus `checksums.txt` to the GitHub release with GoReleaser.
-It also publishes the same archives and checksum file to S3 using GoReleaser's S3 blob publisher.
-S3 publication writes both an immutable version prefix and the mutable `latest` prefix:
-
-```text
-s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces_<version>_<os>_<arch>.tar.gz
-s3://inngest-artifacts/shoelaces/releases/<release_tag>/shoelaces_<version>_windows_<arch>.zip
-s3://inngest-artifacts/shoelaces/releases/<release_tag>/checksums.txt
-s3://inngest-artifacts/shoelaces/releases/latest/shoelaces_<version>_<os>_<arch>.tar.gz
-s3://inngest-artifacts/shoelaces/releases/latest/shoelaces_<version>_windows_<arch>.zip
-s3://inngest-artifacts/shoelaces/releases/latest/checksums.txt
-```
-
-After S3 publication, the user should run the Ansible deployment; agents must not run Inngest Ansible.
-
-A follow-up Ansible ticket should switch Shoelaces installation to consume GitHub release artifacts directly.
-Until that lands, GitHub releases are the canonical build output, but S3 remains the live deployment source.
-
 ## Upstream ThousandEyes README content
 
 The following project overview and usage material is adapted from the upstream [ThousandEyes Shoelaces README](https://github.com/thousandeyes/shoelaces).
-Some examples in this fork have diverged for Inngest's current data directory, DHCP, and release workflow.
+Some examples in this fork have diverged for Inngest's current data directory and DHCP setup.
 
 ## **Shoelaces:** lightweight and painless server bootstrapping
 
