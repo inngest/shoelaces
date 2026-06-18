@@ -237,6 +237,76 @@ func TestResolverResolvesParamsInMergeOrder(t *testing.T) {
 	}, result.Params)
 }
 
+func TestResolverStructuredRepoReleaseOverridesLegacyMappingParams(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Params: map[string]any{
+				"release": "bookworm",
+			},
+			Repos: ReposConfig{
+				Release: "bookworm",
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Repos: ReposConfig{
+					Release: "trixie",
+				},
+			},
+		},
+		NetworkMaps: []NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		IP: "192.0.2.10",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "trixie", result.Params["release"])
+	assert.Equal(t, "trixie", result.Provisioning.Repos.Release)
+}
+
+func TestResolverRequestParamsOverrideStructuredRepoRelease(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Repos: ReposConfig{
+				Release: "bookworm",
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Repos: ReposConfig{
+					Release: "trixie",
+				},
+			},
+		},
+		NetworkMaps: []NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		IP: "192.0.2.10",
+		Params: map[string]any{
+			"release": "operator-release",
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "operator-release", result.Params["release"])
+	assert.Equal(t, "trixie", result.Provisioning.Repos.Release)
+}
+
 func TestResolverResolvesExplicitEnvironmentBackedParams(t *testing.T) {
 	resolver := newEnvTestResolver(t)
 
@@ -604,7 +674,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "target-param", result.Params["release"])
+	assert.Equal(t, "trixie", result.Params["release"])
 	assert.Equal(t, "database", result.Params["role"])
 	assert.Equal(t, "en_US.UTF-8", result.Provisioning.Locale.Language)
 	assert.Equal(t, "de", result.Provisioning.Locale.Keyboard)

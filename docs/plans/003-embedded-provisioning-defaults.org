@@ -1,6 +1,6 @@
 #+title: Embedded Provisioning Defaults
 #+author: Darwin D. Wu
-#+status: Done
+#+status: Active
 #+date: <2026-06-16 Tue>
 
 * Embedded Provisioning Defaults
@@ -639,6 +639,25 @@ operator's responsibility.
 - [X] Run =go test ./...=.
 - [X] Run =go test -tags=integration ./test/integ-test=.
 - [X] Run the plan status checker.
+
+*** Phase 13: Canonical Structured Provisioning Policy
+
+- [X] Audit embedded provisioning templates for remaining legacy flat parameter
+  references.
+- [X] Preserve =params= as a low-level escape hatch for site-specific templates
+  and direct request overrides.
+- [X] Make structured =repos.release= canonical over legacy mapping
+  =params.release= for mapping-resolved boot renders.
+- [X] Add resolver tests proving structured repository release wins over legacy
+  mapping params, while explicit request params can still override.
+- [X] Add polling/render coverage proving a network default target with
+  =repos.release: trixie= renders the final Debian iPXE template with =trixie=
+  even when defaults include legacy =params.release: bookworm=.
+- [ ] Update docs to describe =params= as an escape hatch rather than the
+  preferred path for built-in provisioning fields.
+- [ ] Run =go test ./...=.
+- [ ] Run =make lint=.
+- [ ] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 

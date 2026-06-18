@@ -242,6 +242,9 @@ func TestPollNetworkDefaultTargetRendersTargetRepoRelease(t *testing.T) {
 	events := &event.Log{}
 	resolver := mustResolver(t, &mappings.Mappings{
 		Defaults: mappings.DefaultsMap{
+			Params: map[string]any{
+				"release": "bookworm",
+			},
 			Repos: mappings.ReposConfig{
 				OSMirror: "http://ftp.debian.org/debian",
 				Release:  "bookworm",
