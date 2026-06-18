@@ -45,7 +45,9 @@ func TestOpenAppliesSchema(t *testing.T) {
 
 	db, err := sql.Open("sqlite", dbPath)
 	require.NoError(t, err)
-	defer db.Close()
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
 
 	for _, table := range []string{"goose_db_version", "events", "server_states", "boot_sessions"} {
 		t.Run(table, func(t *testing.T) {
