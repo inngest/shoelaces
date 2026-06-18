@@ -12,30 +12,45 @@ iPXE; after that, iPXE talks to Shoelaces over HTTP so Shoelaces can resolve a
 target, render the selected boot template, and serve provisioning assets.
 
 ```mermaid
-flowchart TD
-    host["Host starts PXE network boot"] --> dhcp1["DHCP request"]
-    dhcp1 --> pxeDecision{"Client is already iPXE?"}
+sequenceDiagram
+    autonumber
+    participant Host as PXE/iPXE Host
+    participant DHCP as DHCP Server
+    participant TFTP as TFTP Server
+    participant Shoelaces as Shoelaces HTTP API
+    participant UI as Shoelaces UI
+    participant Installer as OS Installer
 
-    pxeDecision -- no --> tftp["DHCP returns TFTP boot loader"]
-    tftp --> loader["Host downloads iPXE executable over TFTP"]
-    loader --> ipxe["Host chainloads into iPXE"]
-    ipxe --> dhcp2["iPXE sends second DHCP request"]
-    dhcp2 --> pxeDecision
+    Host->>DHCP: PXE DHCP request
+    alt Host is not running iPXE yet
+        DHCP-->>Host: TFTP boot loader filename
+        Host->>TFTP: Download iPXE executable
+        TFTP-->>Host: iPXE executable
+        Host->>Host: Chainload into iPXE
+        Host->>DHCP: iPXE DHCP request
+    end
+    DHCP-->>Host: Shoelaces /start URL
+    Host->>Shoelaces: GET /start
+    Shoelaces-->>Host: iPXE polling script
 
-    pxeDecision -- yes --> start["DHCP returns Shoelaces /start URL"]
-    start --> poll["iPXE enters /poll/1/{mac} loop"]
-    poll --> identity["Shoelaces records MAC, source IP, and reverse DNS hostname"]
-    identity --> mapping{"Automatic mapping resolves target?"}
+    loop Until a boot target is selected
+        Host->>Shoelaces: GET /poll/1/{mac}
+        Shoelaces->>Shoelaces: Record MAC, source IP, and reverse DNS hostname
+        alt Mapping selects a target
+            Shoelaces->>Shoelaces: Resolve target and render boot template
+            Shoelaces-->>Host: Selected iPXE boot script
+        else Manual selection required
+            Shoelaces->>UI: Queue host for operator selection
+            UI->>Shoelaces: Operator selects target
+            Shoelaces-->>Host: Keep polling until selection is available
+        end
+    end
 
-    mapping -- yes --> render["Shoelaces renders selected boot template"]
-    mapping -- no --> queue["Host waits for manual target selection in UI"]
-    queue --> operator["Operator selects target"]
-    operator --> render
-
-    render --> bootScript["Shoelaces serves iPXE boot script"]
-    bootScript --> configs["Host requests /configs/* installer templates"]
-    configs --> static["Host requests /configs/static/* provisioning assets as needed"]
-    static --> install["OS installer continues"]
+    Host->>Shoelaces: GET /configs/* installer templates
+    Shoelaces-->>Installer: Rendered installer config
+    Installer->>Shoelaces: GET /configs/static/* provisioning assets
+    Shoelaces-->>Installer: Static provisioning asset
+    Installer->>Installer: Continue OS installation
 ```
 
 ![Shoelaces overview](screenshots/shoelaces-overview.png)
