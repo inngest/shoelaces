@@ -173,6 +173,7 @@ func (env *Environment) initMappings(mappingsPath string) error {
 	if err != nil {
 		return err
 	}
+	env.MappingResolver.WithLogger(env.Logger)
 
 	for _, configNetMap := range configMappings.NetworkMaps {
 		_, ipnet, err := net.ParseCIDR(configNetMap.Network)

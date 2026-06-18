@@ -113,6 +113,7 @@ func (s *Service) UpdateTarget(srv server.Server, targetName string, environment
 		if err != nil {
 			return false, err
 		}
+		s.resolver.WithLogger(s.logger)
 	}
 
 	s.serverStates.Lock()
@@ -160,6 +161,7 @@ func (s *Service) Poll(srv server.Server) (scriptText string, err error) {
 		if err != nil {
 			return "", err
 		}
+		s.resolver.WithLogger(s.logger)
 	}
 
 	result, resolvedServer, err := resolveBootTarget(s.resolver, mappings.ResolveRequest{
