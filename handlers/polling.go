@@ -129,6 +129,7 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	env.Logger.Info("Accepted update target request", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "remote_ip", ip, "params", len(params))
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
