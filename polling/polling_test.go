@@ -140,6 +140,36 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 				"role":           "db",
 			},
 		},
+		{
+			name: "network match with structured hostname",
+			srv:  server.New("06:66:de:ad:be:ef", "192.0.2.10", ""),
+			resolver: mustResolver(t, &mappings.Mappings{
+				Targets: map[string]mappings.Target{
+					"db": {
+						Script: "test.ipxe",
+						Network: mappings.NetworkConfig{
+							Hostname: "structured-db",
+						},
+						Params: map[string]interface{}{
+							"role": "db",
+						},
+					},
+				},
+				NetworkMaps: []mappings.NetworkMapConfig{{
+					Network:       "192.0.2.0/24",
+					DefaultTarget: "db",
+					Targets:       []string{"db"},
+				}},
+			}),
+			wantBootType: event.SubnetMatchBoot,
+			wantHostname: "structured-db",
+			wantRendered: "boot structured-db",
+			wantParams: map[string]interface{}{
+				"baseURL":  "127.0.0.1:8081",
+				"hostname": "structured-db",
+				"role":     "db",
+			},
+		},
 	}
 
 	for _, tt := range tests {

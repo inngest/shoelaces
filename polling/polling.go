@@ -243,7 +243,7 @@ func resolveBootTarget(resolver *mappings.Resolver, request mappings.ResolveRequ
 		return result, srv, err
 	}
 
-	request.GeneratedParams = generatedBootParams(result.Params, baseURL, result.Target.Environment, srv, result.MatchType)
+	request.GeneratedParams = generatedBootParams(result.Params, result.Provisioning.Network.Hostname, baseURL, result.Target.Environment, srv, result.MatchType)
 	result, err = resolver.Resolve(request)
 	if err != nil {
 		return mappings.ResolveResult{}, srv, err
@@ -254,9 +254,13 @@ func resolveBootTarget(resolver *mappings.Resolver, request mappings.ResolveRequ
 	return result, srv, nil
 }
 
-func generatedBootParams(params map[string]interface{}, baseURL, envName string, srv server.Server, matchType mappings.MatchType) map[string]interface{} {
+func generatedBootParams(params map[string]interface{}, structuredHostname, baseURL, envName string, srv server.Server, matchType mappings.MatchType) map[string]interface{} {
 	generated := map[string]interface{}{
 		"baseURL": utils.BaseURLforEnvName(baseURL, envName),
+	}
+	if _, hasLegacyHostname := params["hostname"]; !hasLegacyHostname && structuredHostname != "" {
+		generated["hostname"] = structuredHostname
+		return generated
 	}
 	if matchType == mappings.MatchHostname && srv.Hostname != "" {
 		generated["hostname"] = srv.Hostname
