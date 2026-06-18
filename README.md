@@ -28,11 +28,6 @@ CI currently runs:
 - `golangci-lint`
 - a GoReleaser snapshot dry run
 
-## Upstream ThousandEyes README content
-
-The following project overview and usage material is adapted from the upstream [ThousandEyes Shoelaces README](https://github.com/thousandeyes/shoelaces).
-Some examples in this fork have diverged for Inngest's current data directory and DHCP setup.
-
 ## **Shoelaces:** lightweight and painless server bootstrapping
 
 **Shoelaces** serves [iPXE](https://ipxe.org/) boot scripts,
