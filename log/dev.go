@@ -24,6 +24,38 @@ import (
 	"sync"
 )
 
+type devLevelName string
+
+const (
+	// devLevelDebugName is the compact debug label used in the local dev log.
+	devLevelDebugName devLevelName = "DBG"
+	// devLevelInfoName is the compact info label used in the local dev log.
+	devLevelInfoName devLevelName = "INF"
+	// devLevelWarnName is the compact warning label used in the local dev log.
+	devLevelWarnName devLevelName = "WRN"
+	// devLevelErrorName is the compact error label used in the local dev log.
+	devLevelErrorName devLevelName = "ERR"
+)
+
+type ansiColorCode string
+
+const (
+	// ansiYellow is used for debug logs so local diagnostic output is visible
+	// without competing with warnings and errors.
+	ansiYellow ansiColorCode = "33"
+	// ansiCyan is used for ordinary info logs.
+	ansiCyan ansiColorCode = "36"
+	// ansiMagenta is used for warnings to distinguish them from errors.
+	ansiMagenta ansiColorCode = "35"
+	// ansiRed is reserved for errors.
+	ansiRed ansiColorCode = "31"
+)
+
+type devLevelStyle struct {
+	name  devLevelName
+	color ansiColorCode
+}
+
 type devHandler struct {
 	w     io.Writer
 	level slog.Level
@@ -33,6 +65,9 @@ type devHandler struct {
 	mu    *sync.Mutex
 }
 
+// newDevHandler intentionally avoids third-party dependencies. It gives local
+// development a tint-style compact format while production can use slog's text
+// or JSON handlers.
 func newDevHandler(w io.Writer, level slog.Level) slog.Handler {
 	return &devHandler{
 		w:     w,
@@ -48,6 +83,8 @@ func (h *devHandler) Enabled(_ context.Context, level slog.Level) bool {
 
 func (h *devHandler) Handle(_ context.Context, record slog.Record) error {
 	var b strings.Builder
+	// Keep timestamps short and millisecond-precision so boot/poll loops are
+	// easy to scan when running Shoelaces locally.
 	b.WriteString(record.Time.Format("[15:04:05.000]"))
 	b.WriteByte(' ')
 	b.WriteString(h.levelName(record.Level))
@@ -57,6 +94,8 @@ func (h *devHandler) Handle(_ context.Context, record slog.Record) error {
 	}
 
 	writeAttr := func(attr slog.Attr) {
+		// Resolve LogValuer values before formatting so dynamic attributes behave
+		// consistently with the standard slog handlers.
 		attr.Value = attr.Value.Resolve()
 		if attr.Equal(slog.Attr{}) {
 			return
@@ -87,6 +126,8 @@ func (h *devHandler) Handle(_ context.Context, record slog.Record) error {
 }
 
 func (h *devHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	// Copy-on-write keeps derived loggers independent while sharing the same
+	// writer lock, matching slog handler expectations.
 	next := *h
 	next.attrs = append(append([]slog.Attr{}, h.attrs...), attrs...)
 	return &next
@@ -103,26 +144,29 @@ func (h *devHandler) WithGroup(name string) slog.Handler {
 }
 
 func (h *devHandler) levelName(level slog.Level) string {
-	name := "INF"
-	color := "36"
+	style := devStyleForLevel(level)
+	if !h.color {
+		return string(style.name)
+	}
+	return "\x1b[" + string(style.color) + "m" + string(style.name) + "\x1b[0m"
+}
+
+func devStyleForLevel(level slog.Level) devLevelStyle {
 	switch {
 	case level <= slog.LevelDebug:
-		name = "DBG"
-		color = "33"
+		return devLevelStyle{name: devLevelDebugName, color: ansiYellow}
 	case level >= slog.LevelError:
-		name = "ERR"
-		color = "31"
+		return devLevelStyle{name: devLevelErrorName, color: ansiRed}
 	case level >= slog.LevelWarn:
-		name = "WRN"
-		color = "35"
+		return devLevelStyle{name: devLevelWarnName, color: ansiMagenta}
+	default:
+		return devLevelStyle{name: devLevelInfoName, color: ansiCyan}
 	}
-	if !h.color {
-		return name
-	}
-	return "\x1b[" + color + "m" + name + "\x1b[0m"
 }
 
 func formatValue(v any) string {
+	// Quote only values that would make key=value output ambiguous. This keeps
+	// common IDs and paths compact while preserving spaces and error text.
 	switch value := v.(type) {
 	case string:
 		if value == "" || strings.ContainsAny(value, " \t\n\r\"=") {

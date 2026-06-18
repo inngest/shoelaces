@@ -24,6 +24,8 @@ import (
 type Handler string
 
 const (
+	// HandlerDev is optimized for local terminal use: compact levels, readable
+	// attributes, and color when stdout/stderr is a TTY.
 	HandlerDev  Handler = "dev"
 	HandlerJSON Handler = "json"
 	HandlerText Handler = "text"
@@ -48,6 +50,8 @@ type Logger interface {
 	With(args ...any) Logger
 }
 
+// Option mutates logger construction without exposing slog-specific config to
+// callers. Keep new runtime knobs here instead of widening call-site imports.
 type Option func(*options)
 
 type options struct {
@@ -97,6 +101,8 @@ func WithHandlerString(handler string) Option {
 
 // MakeLogger returns a logger configured with Shoelaces' output defaults.
 func MakeLogger(w io.Writer, opts ...Option) Logger {
+	// Environment variables match Inngest's logger conventions and let operators
+	// change output in containers without editing Shoelaces config files.
 	o := options{
 		level:   slogLevel(ParseLevel(os.Getenv("LOG_LEVEL"))),
 		handler: normalizeHandler(os.Getenv("LOG_HANDLER")),
@@ -104,6 +110,9 @@ func MakeLogger(w io.Writer, opts ...Option) Logger {
 	for _, apply := range opts {
 		apply(&o)
 	}
+	// Empty env vars should not be treated as explicit overrides. This preserves
+	// the normal default of info-level dev logs while still allowing options to
+	// intentionally set either field.
 	if !o.levelSet && os.Getenv("LOG_LEVEL") == "" {
 		o.level = slogLevel(LevelInfo)
 	}
@@ -137,6 +146,8 @@ type logger struct {
 	*slog.Logger
 }
 
+// With keeps the return type on this package's interface, so callers can pass
+// scoped loggers around without depending on slog's concrete logger type.
 func (l logger) With(args ...any) Logger {
 	return logger{l.Logger.With(args...)}
 }
