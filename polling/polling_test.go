@@ -431,6 +431,33 @@ func TestManualTargetSelectionSurvivesSQLiteRestart(t *testing.T) {
 	assert.Empty(t, waiting)
 }
 
+func TestManualRetryCountSurvivesSQLiteRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"manual": {Script: "test.ipxe"},
+		},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+	service := NewService(log.MakeLogger(testLogWriter{}), server.NewPersistentStateStore(store, store), resolver, newEventLog(), newTestTemplates(t), "127.0.0.1:8081")
+
+	_, err = service.Poll(srv)
+	require.NoError(t, err)
+	_, err = service.Poll(srv)
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	restartedStore, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, restartedStore.Close()) })
+	state, err := server.NewPersistentStateStore(restartedStore, restartedStore).GetState(context.Background(), srv.Mac)
+	require.NoError(t, err)
+	assert.Equal(t, 2, state.Retry)
+}
+
 func TestPollQueuesRestrictedManualTargets(t *testing.T) {
 	states := &server.States{Servers: make(map[string]*server.State)}
 	resolver := mustResolver(t, &mappings.Mappings{
