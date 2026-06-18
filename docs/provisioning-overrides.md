@@ -34,6 +34,15 @@ The UI route `/static/*` is separate and serves only web UI assets.
 
 ## Rendering And Override Flow
 
+This chart shows the internal rendering path after a target has been selected.
+Structured mapping data is merged and projected into the flat values consumed
+by the templates, while template definitions are loaded with deterministic
+precedence. Embedded defaults provide the baseline, disk templates can replace
+those definitions, and environment overrides are the final layer.
+`installer.extraTemplate` is handled separately from declarative rendering: it
+is an explicit, operator-selected native snippet rendered verbatim near the end
+of the installer config.
+
 ```mermaid
 flowchart TD
     selected["Selected target from mappings.yaml"] --> merged["Merge defaults, target, matched mapping, runtime values"]
@@ -64,6 +73,14 @@ flowchart TD
 ```
 
 ## Shoelaces Request Flow
+
+This chart shows the external requests that interact with Shoelaces. Booting
+machines poll for a boot script, installers fetch follow-on config templates
+and provisioning static files, and browsers use the UI routes. The important
+separation is that `/configs/*` belongs to provisioning and `/static/*` belongs
+to the web UI. Direct `/configs/{template}` requests are stateless, so explicit
+query parameters are still honored even though normal boot rendering starts
+from resolved mapping policy.
 
 ```mermaid
 flowchart TD
