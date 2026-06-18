@@ -19,6 +19,7 @@ import (
 	"github.com/justinas/alice"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/inngest/shoelaces/environment"
 )
@@ -54,10 +55,39 @@ func environmentMiddleware(h http.Handler) http.Handler {
 func loggingMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger := envFromRequest(r).Logger
+		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
 
-		logger.Info("HTTP request", "component", "http", "type", "request", "src", r.RemoteAddr, "method", r.Method, "url", r.URL)
-		h.ServeHTTP(w, r)
+		h.ServeHTTP(recorder, r)
+
+		logger.Info("HTTP request",
+			"component", "http",
+			"type", "request",
+			"src", r.RemoteAddr,
+			"method", r.Method,
+			"url", r.URL.String(),
+			"status", recorder.status,
+			"bytes", recorder.bytes,
+			"duration", time.Since(start).String(),
+		)
 	})
+}
+
+type responseRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (r *responseRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *responseRecorder) Write(p []byte) (int, error) {
+	n, err := r.ResponseWriter.Write(p)
+	r.bytes += n
+	return n, err
 }
 
 // SecureHeaders adds secure headers to the responses

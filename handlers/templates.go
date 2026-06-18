@@ -32,8 +32,10 @@ type TemplateHandler struct{}
 func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	variablesMap := map[string]interface{}{}
 	configName := filepath.Clean(r.URL.Path)
+	env := envFromRequest(r)
 
 	if configName == "" {
+		env.Logger.Error("Template request missing config name", "component", "handler", "path", r.URL.Path)
 		http.Error(w, "No template name provided", http.StatusNotFound)
 		return
 	}
@@ -42,16 +44,17 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		variablesMap[key] = val[0]
 	}
 	if err := mappings.HydrateInstallerConfigQuery(variablesMap); err != nil {
+		env.Logger.Error("Invalid installer config query", "component", "handler", "template", configName, "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	env := envFromRequest(r)
 	envName := envNameFromRequest(r)
 	variablesMap["baseURL"] = utils.BaseURLforEnvName(env.BaseURL, envName)
 
 	configString, err := env.Templates.RenderTemplate(configName, variablesMap, envName)
 	if err != nil {
+		env.Logger.Error("Failed to render config template", "component", "handler", "template", configName, "environment", envName, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	} else {
 		_, _ = io.WriteString(w, configString)
@@ -75,6 +78,7 @@ func GetTemplateParams(w http.ResponseWriter, r *http.Request) {
 
 	script := r.URL.Query().Get("script")
 	if script == "" {
+		env.Logger.Error("Template params request missing script", "component", "handler", "path", r.URL.Path)
 		http.Error(w, "Required script parameter", http.StatusInternalServerError)
 		return
 	}
@@ -88,6 +92,7 @@ func GetTemplateParams(w http.ResponseWriter, r *http.Request) {
 
 	marshaled, err := json.Marshal(vars)
 	if err != nil {
+		env.Logger.Error("Failed to marshal template params", "component", "handler", "script", script, "environment", envName, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

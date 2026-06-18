@@ -50,14 +50,15 @@ func (t *DefaultTemplateRenderer) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		&env.NetworkMaps,
 		&ipxeScripts,
 	}
-	renderTemplate(w, tpl, "header", tplVars)
-	renderTemplate(w, tpl, t.templateName, tplVars)
-	renderTemplate(w, tpl, "footer", tplVars)
+	renderTemplate(w, tpl, "header", tplVars, env)
+	renderTemplate(w, tpl, t.templateName, tplVars, env)
+	renderTemplate(w, tpl, "footer", tplVars, env)
 }
 
-func renderTemplate(w http.ResponseWriter, tpl *template.Template, tmpl string, d interface{}) {
+func renderTemplate(w http.ResponseWriter, tpl *template.Template, tmpl string, d interface{}, env *environment.Environment) {
 	err := tpl.ExecuteTemplate(w, tmpl, d)
 	if err != nil {
+		env.Logger.Error("Failed to render UI template", "component", "handler", "template", tmpl, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

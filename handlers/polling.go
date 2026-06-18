@@ -45,6 +45,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
+		env.Logger.Error("Failed to parse polling remote address", "component", "handler", "remote_addr", r.RemoteAddr, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -56,6 +57,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = validateMACAndIP(env.Logger, mac, ip)
 	if err != nil {
+		env.Logger.Error("Rejected polling request", "component", "handler", "mac", mac, "ip", ip, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -68,6 +70,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 	script, err := env.Polling.Poll(server)
 
 	if err != nil {
+		env.Logger.Error("Polling request failed", "component", "handler", "mac", mac, "ip", ip, "host", host, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -96,16 +99,19 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
+		env.Logger.Error("Failed to parse update target remote address", "component", "handler", "remote_addr", r.RemoteAddr, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
+		env.Logger.Error("Failed to parse update target form", "component", "handler", "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	mac, scriptName, environment, params := parsePostForm(r.PostForm)
 	if mac == "" || scriptName == "" {
+		env.Logger.Error("Rejected update target request", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "reason", "missing required field")
 		http.Error(w, "MAC address and target must not be empty", http.StatusBadRequest)
 		return
 	}
@@ -115,8 +121,10 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if inputErr {
+			env.Logger.Error("Rejected update target request", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "err", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else {
+			env.Logger.Error("Update target request failed", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "err", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
