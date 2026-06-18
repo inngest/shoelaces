@@ -53,6 +53,20 @@ type serverInfo struct {
 	Hostname string
 }
 
+type targetOptionInfo struct {
+	Name        string
+	Script      string
+	Label       string
+	Environment string
+}
+
+type waitingServerInfo struct {
+	IP             string
+	Mac            string
+	Hostname       string
+	AllowedTargets []targetOptionInfo
+}
+
 type eventInfo struct {
 	ID         string         `json:"id"`
 	EventType  int            `json:"eventType"`
@@ -315,6 +329,65 @@ networkMaps:
 	if restartedEvents[mac][0].EventType != 2 {
 		t.Fatalf("expected persisted HostBoot event, got %#v", restartedEvents[mac][0])
 	}
+}
+
+func TestShoelacesPersistsManualSelectionAcrossRestarts(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "ipxe"), 0o755); err != nil {
+		t.Fatalf("create ipxe dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+targets:
+  manual-coreos:
+    script: coreos.ipxe
+    label: Manual CoreOS
+    params:
+      version: "999.0"
+      cloudconfig: virtual
+`), 0o644); err != nil {
+		t.Fatalf("write mappings: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "ipxe", "coreos.ipxe.slc"), []byte(`{{define "coreos.ipxe" -}}
+#!ipxe
+echo manual {{.version}} {{.hostname}}
+boot
+{{end}}
+`), 0o644); err != nil {
+		t.Fatalf("write coreos template: %v", err)
+	}
+
+	const pollPath = "/poll/1/06-66-de-ad-be-ef"
+	proc := startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	proc.assertGETContains(t, pollPath, nil, []string{"/poll/1/06-66-de-ad-be-ef"})
+
+	var waiting []waitingServerInfo
+	proc.getJSON(t, "/ajax/servers", &waiting)
+	if len(waiting) != 1 {
+		proc.stop(t)
+		t.Fatalf("expected one waiting server before selection, got %#v", waiting)
+	}
+	if len(waiting[0].AllowedTargets) != 1 || waiting[0].AllowedTargets[0].Name != "manual-coreos" {
+		proc.stop(t)
+		t.Fatalf("expected manual-coreos as allowed target, got %#v", waiting[0].AllowedTargets)
+	}
+
+	proc.postForm(t, "/update/target", url.Values{
+		"target": {"manual-coreos"},
+		"mac":    {"06:66:de:ad:be:ef"},
+	})
+	proc.stop(t)
+
+	proc = startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	defer proc.stop(t)
+
+	waiting = nil
+	proc.getJSON(t, "/ajax/servers", &waiting)
+	if len(waiting) != 0 {
+		t.Fatalf("expected selected server to be hidden from waiting list after restart, got %#v", waiting)
+	}
+	proc.assertGETContains(t, pollPath, nil, []string{
+		"echo manual 999.0 06-66-de-ad-be-ef",
+	})
 }
 
 func startShoelaces(t *testing.T) *shoelacesProcess {

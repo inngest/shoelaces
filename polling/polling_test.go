@@ -26,6 +26,7 @@ import (
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/persistence/memory"
+	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
@@ -383,6 +384,51 @@ func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	require.Len(t, hostEvents, 1)
 	assert.Equal(t, event.UserSelection, hostEvents[0].Type)
 	assert.Equal(t, "test.ipxe", hostEvents[0].Script)
+}
+
+func TestManualTargetSelectionSurvivesSQLiteRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+
+	events := newEventLog()
+	templateRenderer := newTestTemplates(t)
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"manual": {
+				Script: "test.ipxe",
+				Params: map[string]any{"role": "selected"},
+			},
+		},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+	service := NewService(log.MakeLogger(testLogWriter{}), server.NewPersistentStateStore(store, store), resolver, events, templateRenderer, "127.0.0.1:8081")
+
+	retryScript, err := service.Poll(srv)
+	require.NoError(t, err)
+	assert.Contains(t, retryScript, "/poll/1/06-66-de-ad-be-ef")
+	waiting, err := service.ListServers()
+	require.NoError(t, err)
+	require.Len(t, waiting, 1)
+	assert.Equal(t, []string{"manual"}, targetOptionNames(waiting[0].AllowedTargets))
+
+	inputErr, err := service.UpdateTarget(srv, "manual", "", map[string]any{})
+	require.NoError(t, err)
+	assert.False(t, inputErr)
+	require.NoError(t, store.Close())
+
+	restartedStore, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, restartedStore.Close()) })
+	restartedService := NewService(log.MakeLogger(testLogWriter{}), server.NewPersistentStateStore(restartedStore, restartedStore), resolver, events, templateRenderer, "127.0.0.1:8081")
+
+	rendered, err := restartedService.Poll(srv)
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "boot 06-66-de-ad-be-ef")
+	assert.Contains(t, rendered, "role selected")
+	waiting, err = restartedService.ListServers()
+	require.NoError(t, err)
+	assert.Empty(t, waiting)
 }
 
 func TestPollQueuesRestrictedManualTargets(t *testing.T) {
