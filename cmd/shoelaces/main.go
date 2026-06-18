@@ -53,16 +53,8 @@ func runServer(env *environment.Environment) error {
 	app := handlers.MiddlewareChain(env).Then(router.ShoelacesRouter(env))
 
 	if env.TFTP != nil && env.TFTP.Enabled {
-		tf := tftpserver.New(env.TFTP.Addr, env.TFTP.Root, env.TFTP.Readonly, env.TFTP.Timeout)
+		tf := tftpserver.New(env.TFTP.Addr, env.TFTP.Root, env.TFTP.Readonly, env.TFTP.Timeout).WithLogger(env.Logger)
 		go func() {
-			env.Logger.Info(
-				"listening",
-				"component", "tftp",
-				"transport", "udp",
-				"addr", env.TFTP.Addr,
-				"root", env.TFTP.Root,
-				"readonly", env.TFTP.Readonly,
-			)
 			if err := tf.ListenAndServe(); err != nil {
 				env.Logger.Error("TFTP server failed", "component", "tftp", "err", err)
 			}
