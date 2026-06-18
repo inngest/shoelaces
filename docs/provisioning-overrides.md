@@ -32,6 +32,44 @@ Provisioning static files are served from `/configs/static/*` in this order:
 
 The UI route `/static/*` is separate and serves only web UI assets.
 
+## Provisioning Flow
+
+```mermaid
+flowchart TD
+    bootReq["Boot request: /poll or manual target"] --> resolve["Resolve mappings.yaml policy"]
+    resolve --> merge["Merge defaults, target, matched mapping, runtime values"]
+    merge --> project["Project structured provisioning into render params"]
+    project --> bootTpl["Render selected boot template, for example debian.ipxe"]
+
+    embedded["Embedded generic provisioning templates"] --> loader["Template loader"]
+    diskTpl["Disk data-dir template overrides"] --> loader
+    envTpl["Environment overrides"] --> loader
+    loader --> bootTpl
+
+    bootTpl --> configReq["Installer fetches /configs/{template}"]
+    configReq --> query["Apply explicit query params for stateless direct renders"]
+    query --> project
+    project --> installCfg["Render preseed, kickstart, or cloud-init config"]
+
+    installCfg --> extraDecision{"installer.extraTemplate selected?"}
+    extraDecision -- yes --> extraTpl["Render selected native installer snippet verbatim"]
+    extraDecision -- no --> noop["Use embedded no-op provisioning/extra"]
+    extraTpl --> response["Final installer config response"]
+    noop --> response
+
+    staticReq["Installer fetches /configs/static/*"] --> diskStatic["Serve data-dir/static first"]
+    diskStatic --> embeddedStatic["Fallback to embedded generic provisioning static files"]
+
+    uiReq["Browser fetches /static/*"] --> uiAssets["Serve UI assets only"]
+
+    classDef embedded fill:#eef7ff,stroke:#4c8eda,color:#0f172a;
+    classDef disk fill:#fff7e6,stroke:#d99a2b,color:#0f172a;
+    classDef ui fill:#f1f5f9,stroke:#64748b,color:#0f172a;
+    class embedded,embeddedStatic,noop embedded;
+    class diskTpl,envTpl,diskStatic,extraTpl disk;
+    class uiReq,uiAssets ui;
+```
+
 ## Full Template Overrides
 
 To replace an embedded template completely, provide a disk `.slc` file that
