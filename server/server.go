@@ -73,12 +73,13 @@ func (s Servers) Less(i, j int) bool {
 // State holds information regarding a host that is attempting to boot.
 type State struct {
 	Server
-	Target      string
-	Environment string
-	Params      map[string]interface{}
-	Users       map[string]mappings.ResolvedUser
-	Retry       int
-	LastAccess  int
+	Target       string
+	Environment  string
+	Params       map[string]interface{}
+	Users        map[string]mappings.ResolvedUser
+	Provisioning mappings.ProvisioningConfig
+	Retry        int
+	LastAccess   int
 }
 
 // States holds a map between MAC addresses and

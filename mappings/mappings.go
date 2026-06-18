@@ -23,10 +23,11 @@ import (
 
 // Script holds information related to a booting script.
 type Script struct {
-	Name        string
-	Environment string
-	Params      map[string]interface{}
-	Users       map[string]ResolvedUser
+	Name         string
+	Environment  string
+	Params       map[string]interface{}
+	Users        map[string]ResolvedUser
+	Provisioning ProvisioningConfig
 }
 
 // NetworkMap struct contains an association between a CIDR network and a

@@ -14,6 +14,12 @@
 
 package mappings
 
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
+
 // ProvisioningConfig contains structured installer policy merged from
 // defaults, the selected target, and the matched mapping rule.
 type ProvisioningConfig struct {
@@ -151,6 +157,226 @@ type InstallerConfig struct {
 	ConfigParams map[string]any `koanf:"configParams"`
 	// ExtraTemplate selects a native installer snippet template escape hatch.
 	ExtraTemplate string `koanf:"extraTemplate"`
+}
+
+// ParamsWithProvisioning returns template parameters with structured users and
+// provisioning data attached. It also projects structured fields into the legacy
+// flat params consumed by templates during the renderer migration.
+func ParamsWithProvisioning(params map[string]interface{}, users map[string]ResolvedUser, provisioning ProvisioningConfig) map[string]interface{} {
+	copied := ParamsWithUsers(params, users)
+	copied["provisioning"] = copyProvisioningConfig(provisioning)
+
+	projectProvisioningParams(copied, provisioning)
+	return copied
+}
+
+func projectProvisioningParams(params map[string]interface{}, provisioning ProvisioningConfig) {
+	// Preserve explicit caller/query parameters first, project structured
+	// provisioning fields second, then fill remaining keys with built-in
+	// defaults. This lets /configs/* query params override mapping policy while
+	// keeping templates free of repeated fallback conditionals.
+	setDefaultParam(params, "release", provisioning.Repos.Release)
+	setDefaultParam(params, "linuxargs", strings.Join(provisioning.Boot.Netboot.KernelArgs, " "))
+	setDefaultParam(params, "vg_name", provisioning.Storage.VolumeGroup)
+	setDefaultParam(params, "hostname", provisioning.Network.Hostname)
+	setDefaultParam(params, "locale_language", provisioning.Locale.Language)
+	setDefaultParam(params, "locale_keyboard", provisioning.Locale.Keyboard)
+	setDefaultParam(params, "time_timezone", provisioning.Time.Timezone)
+	setDefaultParam(params, "network_bootproto", provisioning.Network.Bootproto)
+	setDefaultParam(params, "nameservers", strings.Join(provisioning.Network.Nameservers, " "))
+	setDefaultParam(params, "packages_install", strings.Join(provisioning.Packages.Install, " "))
+	setDefaultParam(params, "packages_groups", strings.Join(provisioning.Packages.Groups, " "))
+	setDefaultParam(params, "packages_update_policy", provisioning.Packages.UpdatePolicy)
+	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
+	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
+	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
+	setDefaultParam(params, "repo_ubuntu_mirror", provisioning.Repos.OSMirror)
+	setDefaultParam(params, "repo_centos_mirror", provisioning.Repos.OSMirror)
+	setDefaultParam(params, "repo_coreos_mirror", provisioning.Repos.OSMirror)
+	setDefaultParam(params, "boot_installed_args", strings.Join(provisioning.Boot.Installed.KernelArgs, " "))
+	setDefaultParam(params, "debian_installer_config_template", provisioning.Installer.ConfigTemplate)
+	setDefaultParam(params, "storage_installer_config_template", provisioning.Installer.ConfigTemplate)
+	setDefaultParam(params, "ubuntu_minimal_installer_config_template", provisioning.Installer.ConfigTemplate)
+	setDefaultParam(params, "centos_installer_config_template", provisioning.Installer.ConfigTemplate)
+	setDefaultParam(params, "coreos_installer_config_template", provisioning.Installer.ConfigTemplate)
+	installerConfigQuery := encodeInstallerConfigParams(provisioning.Installer.ConfigParams)
+	setDefaultParam(params, "installer_config_query", installerConfigQuery)
+	if installerConfigQuery != "" {
+		setDefaultParam(params, "installer_config_query_suffix", "&"+installerConfigQuery)
+		setDefaultParam(params, "installer_config_query_question", "?"+installerConfigQuery)
+	}
+	if provisioning.Time.UTC != nil {
+		setDefaultParamValue(params, "time_utc", *provisioning.Time.UTC)
+		if *provisioning.Time.UTC {
+			setDefaultParamValue(params, "kickstart_utc_flag", "--utc")
+		} else {
+			setDefaultParamValue(params, "kickstart_utc_flag", "")
+		}
+	}
+	if provisioning.Time.NTP != nil {
+		setDefaultParamValue(params, "time_ntp", *provisioning.Time.NTP)
+	}
+	if provisioning.Storage.Wipe != nil {
+		setDefaultParamValue(params, "storage_wipe", *provisioning.Storage.Wipe)
+	}
+	if provisioning.Boot.Installed.TimeoutSeconds != nil {
+		setDefaultParamValue(params, "boot_timeout_seconds", *provisioning.Boot.Installed.TimeoutSeconds)
+	}
+	if provisioning.Repos.Firmware != nil {
+		setDefaultParamValue(params, "repo_firmware", *provisioning.Repos.Firmware)
+	}
+	if provisioning.Repos.Contrib != nil {
+		setDefaultParamValue(params, "repo_contrib", *provisioning.Repos.Contrib)
+	}
+	if provisioning.Repos.NonFree != nil {
+		setDefaultParamValue(params, "repo_non_free", *provisioning.Repos.NonFree)
+	}
+	for key, value := range provisioning.Installer.ConfigParams {
+		if _, ok := params[key]; !ok {
+			params[key] = value
+		}
+	}
+	if release, ok := params["release"]; ok {
+		setDefaultParamValue(params, "coreos_release", release)
+	}
+	if linuxArgs, ok := params["linuxargs"]; ok {
+		setDefaultParamValue(params, "linux_cfg_args", linuxArgs)
+	}
+	if disk, ok := params["storage_disk"]; ok {
+		setDefaultParamValue(params, "storage_wipe_disks", disk)
+		setDefaultParamValue(params, "storage_template_disk", disk)
+		setDefaultParamValue(params, "kickstart_storage_drive", kickstartDriveName(fmt.Sprint(disk)))
+	}
+	if storageMode, ok := params["storage_mode"]; ok {
+		setDefaultParamValue(params, "ubuntu_minimal_storage_mode", storageMode)
+	}
+	if timezone, ok := params["time_timezone"]; ok {
+		setDefaultParamValue(params, "ubuntu_minimal_timezone", timezone)
+	}
+	if timeUTC, ok := params["time_utc"]; ok {
+		setDefaultParamValue(params, "kickstart_utc_flag", kickstartUTCFlag(fmt.Sprint(timeUTC)))
+	}
+	if groups, ok := params["packages_groups"]; ok {
+		setDefaultParamValue(params, "kickstart_package_groups", kickstartGroupLines(fmt.Sprint(groups)))
+	}
+	if packages, ok := params["packages_install"]; ok {
+		setDefaultParamValue(params, "kickstart_packages", packageLines(fmt.Sprint(packages)))
+	}
+	if bootArgs, ok := params["boot_installed_args"]; ok {
+		setDefaultParamValue(params, "kickstart_boot_args", bootArgs)
+	}
+	if centosMirror, ok := params["repo_centos_mirror"]; ok {
+		setDefaultParamValue(params, "kickstart_centos_mirror", centosMirror)
+	}
+	setProvisioningDefaults(params)
+}
+
+func setProvisioningDefaults(params map[string]interface{}) {
+	setDefaultParamValue(params, "encrypt_home", "false")
+	setDefaultParamValue(params, "iface", "auto")
+	setDefaultParamValue(params, "linuxargs", "")
+	setDefaultParamValue(params, "linux_cfg_args", "console=tty0 console=ttyS0,115200n8 console=ttyS1,115200n8 vga=normal biosdevname=0 nomodeset interface=auto libata.force=noncq consoleblank=0")
+	setDefaultParamValue(params, "vg_name", "vg0")
+	setDefaultParamValue(params, "locale_language", "en_US.UTF-8")
+	setDefaultParamValue(params, "locale_keyboard", "us")
+	setDefaultParamValue(params, "time_timezone", "UTC")
+	setDefaultParamValue(params, "ubuntu_minimal_timezone", "America/Los_Angeles")
+	setDefaultParamValue(params, "time_utc", "true")
+	setDefaultParamValue(params, "kickstart_utc_flag", "--utc")
+	setDefaultParamValue(params, "time_ntp", "true")
+	setDefaultParamValue(params, "network_bootproto", "dhcp")
+	setDefaultParamValue(params, "nameservers", "")
+	setDefaultParamValue(params, "packages_install", "openssh-server curl ca-certificates git")
+	setDefaultParamValue(params, "packages_groups", "")
+	setDefaultParamValue(params, "kickstart_package_groups", "@core")
+	setDefaultParamValue(params, "kickstart_packages", "")
+	setDefaultParamValue(params, "packages_update_policy", "unattended-upgrades")
+	setDefaultParamValue(params, "storage_disk", "/dev/nvme0n1")
+	setDefaultParamValue(params, "storage_wipe_disks", "/dev/nvme0n1 /dev/nvme1n1")
+	setDefaultParamValue(params, "storage_template_disk", "/dev/sda /dev/sdb")
+	setDefaultParamValue(params, "kickstart_storage_drive", "sda")
+	setDefaultParamValue(params, "storage_wipe", "true")
+	setDefaultParamValue(params, "storage_mode", "lvm")
+	setDefaultParamValue(params, "ubuntu_minimal_storage_mode", "regular")
+	setDefaultParamValue(params, "repo_firmware", "true")
+	setDefaultParamValue(params, "repo_contrib", "true")
+	setDefaultParamValue(params, "repo_non_free", "true")
+	setDefaultParamValue(params, "repo_debian_mirror", "http://ftp.debian.org/debian")
+	setDefaultParamValue(params, "repo_ubuntu_mirror", "http://mirror.rackspace.com/ubuntu")
+	setDefaultParamValue(params, "repo_centos_mirror", "http://mirror.centos.org/centos")
+	setDefaultParamValue(params, "kickstart_centos_mirror", "http://mirror.netcologne.de/centos")
+	setDefaultParamValue(params, "repo_coreos_mirror", "http://stable.release.core-os.net/amd64-usr")
+	setDefaultParamValue(params, "coreos_release", "current")
+	setDefaultParamValue(params, "boot_installed_args", "consoleblank=0 loglevel=6 sysrq_always_enabled clocksource=tsc tsc=reliable")
+	setDefaultParamValue(params, "kickstart_boot_args", "crashkernel=auto panic=60")
+	setDefaultParamValue(params, "boot_timeout_seconds", "5")
+	setDefaultParamValue(params, "debian_installer_config_template", "preseed/debian")
+	setDefaultParamValue(params, "storage_installer_config_template", "preseed/storage")
+	setDefaultParamValue(params, "ubuntu_minimal_installer_config_template", "preseed/ubuntu-minimal")
+	setDefaultParamValue(params, "centos_installer_config_template", "centos.ks")
+	setDefaultParamValue(params, "coreos_installer_config_template", "cloudconfig-coreos")
+	setDefaultParamValue(params, "installer_config_query", "")
+	setDefaultParamValue(params, "installer_config_query_suffix", "")
+	setDefaultParamValue(params, "installer_config_query_question", "")
+	setDefaultParamValue(params, "installerExtra", "")
+}
+
+func setDefaultParam(params map[string]interface{}, key string, value string) {
+	if value == "" {
+		return
+	}
+	if _, ok := params[key]; !ok {
+		params[key] = value
+	}
+}
+
+func setDefaultParamValue(params map[string]interface{}, key string, value any) {
+	if _, ok := params[key]; !ok {
+		params[key] = fmt.Sprint(value)
+	}
+}
+
+func kickstartGroupLines(raw string) string {
+	groups := strings.Fields(raw)
+	if len(groups) == 0 {
+		return ""
+	}
+	for i, group := range groups {
+		if !strings.HasPrefix(group, "@") {
+			groups[i] = "@" + group
+		}
+	}
+	return strings.Join(groups, "\n")
+}
+
+func packageLines(raw string) string {
+	return strings.Join(strings.Fields(raw), "\n")
+}
+
+func kickstartDriveName(raw string) string {
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(fields[0], "/dev/")
+}
+
+func kickstartUTCFlag(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), "false") {
+		return ""
+	}
+	return "--utc"
+}
+
+func encodeInstallerConfigParams(params map[string]any) string {
+	if len(params) == 0 {
+		return ""
+	}
+	values := url.Values{}
+	for key, value := range params {
+		values.Set(key, fmt.Sprint(value))
+	}
+	return values.Encode()
 }
 
 func (defaults DefaultsMap) provisioningConfig() ProvisioningConfig {

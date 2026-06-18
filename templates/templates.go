@@ -29,6 +29,7 @@ import (
 
 	shoelaces "github.com/inngest/shoelaces"
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
 )
 
@@ -285,12 +286,22 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	if envName == "" {
 		envName = defaultEnvironment
 	}
+	if paramMap == nil {
+		paramMap = map[string]interface{}{}
+	}
+	provisioning, _ := paramMap["provisioning"].(mappings.ProvisioningConfig)
+	paramMap = mappings.ParamsWithProvisioning(paramMap, nil, provisioning)
+	paramMap, err := s.withInstallerExtra(paramMap, envName, configName)
+	if err != nil {
+		logger.Info("component", "template", "action", "render-installer-extra", "err", err.Error())
+		return "", err
+	}
 	logger.Info("component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
 
 	requiredVariables := s.envTemplates[envName].listVariables(configName)
 
 	var b bytes.Buffer
-	err := s.envTemplates[envName].templateObj.ExecuteTemplate(&b, configName, paramMap)
+	err = s.envTemplates[envName].templateObj.ExecuteTemplate(&b, configName, paramMap)
 	// Fall back to default template in case this is non default environment
 	// XXX: this is temporary and will be simplified to reduce the code duplication
 	if err != nil && envName != defaultEnvironment {
@@ -317,6 +328,30 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	}
 
 	return r, nil
+}
+
+func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {
+	copied := make(map[string]interface{}, len(paramMap)+1)
+	for key, value := range paramMap {
+		copied[key] = value
+	}
+	copied["installerExtra"] = ""
+	provisioning, ok := copied["provisioning"].(mappings.ProvisioningConfig)
+	if !ok || provisioning.Installer.ExtraTemplate == "" || provisioning.Installer.ExtraTemplate == configName {
+		return copied, nil
+	}
+
+	var b bytes.Buffer
+	err := s.envTemplates[envName].templateObj.ExecuteTemplate(&b, provisioning.Installer.ExtraTemplate, copied)
+	if err != nil && envName != defaultEnvironment {
+		b.Reset()
+		err = s.envTemplates[defaultEnvironment].templateObj.ExecuteTemplate(&b, provisioning.Installer.ExtraTemplate, copied)
+	}
+	if err != nil {
+		return nil, err
+	}
+	copied["installerExtra"] = b.String()
+	return copied, nil
 }
 
 // ListVariables receives a template name and return the list of variables

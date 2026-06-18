@@ -32,7 +32,7 @@ var sensitiveKeyFragments = []string{
 // IsSensitiveParamKey reports whether a template parameter key should be
 // hidden before it is written to logs, events, or UI-facing event JSON.
 func IsSensitiveParamKey(key string) bool {
-	if key == "users" {
+	if key == "users" || key == "provisioning" || strings.HasPrefix(key, "installer_config_query") {
 		return true
 	}
 	normalized := normalizeParamKey(key)
