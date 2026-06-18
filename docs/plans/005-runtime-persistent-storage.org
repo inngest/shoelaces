@@ -41,12 +41,18 @@ through transient memory or long query strings.
 
 - Add a small persistence package with clear repository interfaces instead of
   letting handlers or polling code write SQL directly.
+- Shape those interfaces around CQRS boundaries: command interfaces own writes
+  and transactional mutations, while query interfaces own read models used by
+  the UI, polling, and rendering code.
 - Use SQLite as the default local backend, stored under =data-dir=, because
   Shoelaces is currently a single-process service and should not require an
   external database for normal deployments.
 - Use =sqlc= for database access. Keep SQL in checked-in schema and query files,
   generate typed Go accessors, and keep application code behind repository
   interfaces rather than embedding raw SQL strings throughout the codebase.
+- Keep backend-specific generated code behind those CQRS interfaces so a future
+  Postgres backend can provide the same command/query contracts without
+  changing handlers, polling, or template rendering.
 - Keep an in-memory backend for fast unit tests and for any explicit
   no-persistence development mode.
 - Use persistent boot/config references for data that must be reused later by
@@ -68,6 +74,9 @@ persistence:
 #+end_src
 
 - =persistence.backend= starts with =sqlite= and =memory=.
+- =postgres= is a future backend option. The public persistence boundary should
+  be designed so adding it mostly means new sqlc config, schema/query files,
+  connection setup, and backend wiring.
 - =persistence.path= is relative to =data-dir= unless absolute.
 - =persistence.retention.events= controls UI/audit event retention.
 - =persistence.retention.bootSessions= controls reference/session retention.
@@ -82,6 +91,10 @@ persistence:
 - [ ] Add an explicit =memory= backend for tests and local throwaway runs.
 - [ ] Create a =persistence= package with repository interfaces for events,
   server state, and boot/config references.
+- [ ] Split persistence contracts into command/write interfaces and query/read
+  interfaces instead of one catch-all repository API.
+- [ ] Define backend-neutral domain structs at the persistence boundary so
+  SQLite-generated row types do not leak into handlers, polling, or templates.
 - [ ] Add =sqlc= configuration for the SQLite backend.
 - [ ] Add checked-in SQL schema and query files for the initial persistence
   model.
@@ -100,10 +113,14 @@ persistence:
 - [ ] Add generation drift checks so CI fails when sqlc outputs are stale.
 - [ ] Add memory backend tests that prove the repository contracts can be
   exercised without disk.
+- [ ] Add interface compliance tests that run the same command/query contract
+  tests against memory and SQLite backends.
 
 *** Phase 2: Persistent Event History
 
 - [ ] Replace direct use of =event.Log.Events= with an event repository API.
+- [ ] Model event writes through an event command interface and event reads
+  through an event query interface.
 - [ ] Keep event writes redacted before persistence.
 - [ ] Update =/ajax/events= to read from the repository.
 - [ ] Preserve existing JSON response shape for the UI.
@@ -117,6 +134,8 @@ persistence:
 *** Phase 3: Persistent Waiting Server State
 
 - [ ] Move waiting/manual boot server state behind a server-state repository.
+- [ ] Model state mutations through server-state commands and UI/polling reads
+  through server-state queries.
 - [ ] Persist waiting hosts, retry counts, last access time, allowed target
   options, manual target selection, selected environment, resolved params,
   resolved users, and structured provisioning data needed to complete a boot.
@@ -134,6 +153,8 @@ persistence:
 *** Phase 4: Boot Session And Config References
 
 - [ ] Add a boot-session/reference repository for resolved boot data.
+- [ ] Model reference creation/update through commands and =/configs/*=
+  resolution through queries.
 - [ ] Generate opaque references when polling resolves a target.
 - [ ] Store the resolved target, environment, server identity, params, users,
   and provisioning config under the reference.
@@ -169,6 +190,8 @@ persistence:
 *** Phase 6: Operational Tooling And Documentation
 
 - [ ] Document the persistence config schema and defaults.
+- [ ] Document the CQRS persistence interfaces and which package layers are
+  allowed to depend on command or query interfaces.
 - [ ] Document the sqlc workflow for editing schema/query files and regenerating
   typed Go accessors.
 - [ ] Document database location, retention behavior, backup expectations, and
@@ -210,6 +233,12 @@ persistence:
 - =sqlc= keeps SQL explicit and reviewable without scattering raw SQL strings
   across handlers or services. Repository interfaces should remain the boundary
   consumed by the rest of Shoelaces.
+- CQRS should be a boundary, not ceremony. Avoid duplicating business logic
+  between command and query implementations; use it to keep writes, read models,
+  and backend-specific generated code decoupled.
+- A future Postgres backend may need different SQL and migrations. The command
+  and query contracts should be tested as backend behavior, not as SQLite
+  implementation details.
 - Persisting resolved boot data changes the failure mode of =/configs/*=
   requests: a missing or expired reference should fail clearly and safely.
 - This plan should make future LUKS support safer by avoiding secret-bearing
