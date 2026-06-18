@@ -294,6 +294,425 @@ func TestResolverDoesNotLeakResolvedParamsBetweenBoots(t *testing.T) {
 	assert.Equal(t, "$6$second", second.Params["root_password_crypted"])
 }
 
+func TestResolverResolvesStructuredUsersInMergeOrder(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Users: map[string]UserConfig{
+				"root": {
+					Locked:            boolPtr(true),
+					PasswordCrypted:   map[string]any{"env": "ROOT_PASSWORD_CRYPTED"},
+					SSHAuthorizedKeys: []any{"ssh-ed25519 root-default"},
+				},
+				"infra": {
+					Primary:           boolPtr(true),
+					FullName:          "Default Infrastructure User",
+					Locked:            boolPtr(true),
+					PasswordCrypted:   "default-hash",
+					SSHAuthorizedKeys: []any{"ssh-ed25519 default"},
+					Groups:            []string{"sudo"},
+				},
+				"breakglass": {
+					Locked: boolPtr(true),
+				},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"infra": {
+						FullName:        "Target Infrastructure User",
+						Locked:          boolPtr(false),
+						PasswordCrypted: map[string]any{"env": "INFRA_PASSWORD_CRYPTED"},
+						Groups:          []string{"sudo", "adm"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+				Users: map[string]UserConfig{
+					"infra": {
+						SSHAuthorizedKeys: []any{map[string]any{"env": "INFRA_SSH_KEY"}},
+						Shell:             "/bin/bash",
+					},
+					"breakglass": {
+						Absent: boolPtr(true),
+					},
+					"siteadmin": {
+						FullName: "Site Admin",
+						Locked:   boolPtr(true),
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			values := map[string]string{
+				"ROOT_PASSWORD_CRYPTED":  "$6$root",
+				"INFRA_PASSWORD_CRYPTED": "$6$infra",
+				"INFRA_SSH_KEY":          "ssh-ed25519 host",
+			}
+			value, ok := values[key]
+			return value, ok
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]ResolvedUser{
+		"root": {
+			Name:              "root",
+			System:            true,
+			Locked:            true,
+			PasswordCrypted:   "$6$root",
+			SSHAuthorizedKeys: []string{"ssh-ed25519 root-default"},
+		},
+		"infra": {
+			Name:              "infra",
+			Primary:           true,
+			FullName:          "Target Infrastructure User",
+			PasswordCrypted:   "$6$infra",
+			SSHAuthorizedKeys: []string{"ssh-ed25519 host"},
+			Groups:            []string{"sudo", "adm"},
+			Shell:             "/bin/bash",
+		},
+		"siteadmin": {
+			Name:     "siteadmin",
+			FullName: "Site Admin",
+			Locked:   true,
+		},
+	}, result.Users)
+	assert.NotContains(t, result.Users, "breakglass")
+}
+
+func TestResolverReturnsMissingEnvironmentVariableErrorForStructuredUsers(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"infra": {
+						PasswordCrypted: map[string]any{"env": "INFRA_PASSWORD_CRYPTED"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "", false
+		},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `parameter "user \"infra\" passwordCrypted" references missing environment variable "INFRA_PASSWORD_CRYPTED"`)
+}
+
+func TestResolverRejectsMultiplePrimaryNonRootUsers(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Users: map[string]UserConfig{
+				"infra": {Primary: boolPtr(true)},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"ops": {Primary: boolPtr(true)},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{Mac: "0c:42:a1:c3:52:96"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `multiple primary non-root users configured: [infra ops]`)
+}
+
+func TestResolverDoesNotLeakResolvedUsersBetweenBoots(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Users: map[string]UserConfig{
+					"infra": {
+						FullName:        "Infrastructure User",
+						PasswordCrypted: map[string]any{"env": "INFRA_PASSWORD_CRYPTED"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{
+			{
+				Mac:           "0c:42:a1:c3:52:96",
+				DefaultTarget: "debian13",
+				Targets:       []string{"debian13"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	first, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "$6$first", true
+		},
+	})
+	require.NoError(t, err)
+	mutated := first.Users["infra"]
+	mutated.FullName = "mutated"
+	mutated.PasswordCrypted = "mutated"
+	first.Users["infra"] = mutated
+
+	second, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "$6$second", true
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "Infrastructure User", second.Users["infra"].FullName)
+	assert.Equal(t, "$6$second", second.Users["infra"].PasswordCrypted)
+}
+
+func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Locale: LocaleConfig{Language: "en_US.UTF-8", Keyboard: "us"},
+			Time:   TimeConfig{Timezone: "UTC", UTC: boolPtr(true), NTP: boolPtr(true)},
+			Network: NetworkConfig{
+				Bootproto:   "dhcp",
+				Nameservers: []string{"1.1.1.1", "8.8.8.8"},
+			},
+			Packages: PackagesConfig{
+				Install:      []string{"openssh-server", "curl"},
+				Groups:       []string{"core"},
+				UpdatePolicy: "none",
+			},
+			Storage: StorageConfig{
+				Mode:        "lvm",
+				VolumeGroup: "vg0",
+				Filesystems: map[string]FilesystemConfig{
+					"root": {Mountpoint: "/", FSType: "ext4", Size: "grow"},
+					"swap": {FSType: "swap", SizeMiB: intPtr(8192)},
+				},
+			},
+			Boot: BootConfig{
+				Firmware:  "uefi",
+				Netboot:   NetbootConfig{Method: "ipxe", KernelArgs: []string{"console=ttyS0", "loglevel=6"}},
+				Installed: InstalledBootConfig{Bootloader: "grub", TimeoutSeconds: intPtr(5), KernelArgs: []string{"consoleblank=0"}},
+			},
+			Repos: ReposConfig{
+				OSMirror: "https://deb.debian.org/debian",
+				Release:  "bookworm",
+				Firmware: boolPtr(true),
+				Contrib:  boolPtr(true),
+				NonFree:  boolPtr(false),
+			},
+			Installer: InstallerConfig{
+				ConfigTemplate: "preseed/debian",
+				ConfigParams: map[string]any{
+					"encrypt_home": false,
+				},
+				ExtraTemplate: "provisioning/extra",
+			},
+			Params: map[string]any{"release": "legacy-param"},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script:   "debian.ipxe",
+				Network:  NetworkConfig{Nameservers: []string{"9.9.9.9"}},
+				Packages: PackagesConfig{Install: []string{"qemu-guest-agent"}},
+				Storage: StorageConfig{
+					Disk: "/dev/nvme0n1",
+					Filesystems: map[string]FilesystemConfig{
+						"root": {FSType: "xfs"},
+						"home": {Mountpoint: "/home", FSType: "ext4", Size: "grow"},
+					},
+				},
+				Repos: ReposConfig{Release: "trixie", NonFree: boolPtr(true)},
+				Installer: InstallerConfig{
+					ConfigParams: map[string]any{
+						"locale": "en_US",
+					},
+				},
+				Params: map[string]any{"release": "target-param"},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+			Locale:        LocaleConfig{Keyboard: "de"},
+			Storage: StorageConfig{
+				Filesystems: map[string]FilesystemConfig{
+					"swap": {Absent: boolPtr(true)},
+				},
+			},
+			Boot: BootConfig{
+				Netboot: NetbootConfig{KernelArgs: []string{"console=ttyS1"}},
+			},
+			Installer: InstallerConfig{
+				ConfigParams: map[string]any{
+					"secret": map[string]any{"env": "INSTALL_SECRET"},
+				},
+			},
+			Params: map[string]any{"role": "database"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			if key == "INSTALL_SECRET" {
+				return "resolved-secret", true
+			}
+			return "", false
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "target-param", result.Params["release"])
+	assert.Equal(t, "database", result.Params["role"])
+	assert.Equal(t, "en_US.UTF-8", result.Provisioning.Locale.Language)
+	assert.Equal(t, "de", result.Provisioning.Locale.Keyboard)
+	assert.Equal(t, "UTC", result.Provisioning.Time.Timezone)
+	require.NotNil(t, result.Provisioning.Time.UTC)
+	assert.True(t, *result.Provisioning.Time.UTC)
+	assert.Equal(t, "dhcp", result.Provisioning.Network.Bootproto)
+	assert.Equal(t, []string{"9.9.9.9"}, result.Provisioning.Network.Nameservers)
+	assert.Equal(t, []string{"qemu-guest-agent"}, result.Provisioning.Packages.Install)
+	assert.Equal(t, []string{"core"}, result.Provisioning.Packages.Groups)
+	assert.Equal(t, "/dev/nvme0n1", result.Provisioning.Storage.Disk)
+	assert.Equal(t, "lvm", result.Provisioning.Storage.Mode)
+	assert.Equal(t, "vg0", result.Provisioning.Storage.VolumeGroup)
+	assert.Equal(t, FilesystemConfig{Mountpoint: "/", FSType: "xfs", Size: "grow"}, result.Provisioning.Storage.Filesystems["root"])
+	assert.Equal(t, FilesystemConfig{Mountpoint: "/home", FSType: "ext4", Size: "grow"}, result.Provisioning.Storage.Filesystems["home"])
+	assert.NotContains(t, result.Provisioning.Storage.Filesystems, "swap")
+	assert.Equal(t, "uefi", result.Provisioning.Boot.Firmware)
+	assert.Equal(t, "ipxe", result.Provisioning.Boot.Netboot.Method)
+	assert.Equal(t, []string{"console=ttyS1"}, result.Provisioning.Boot.Netboot.KernelArgs)
+	assert.Equal(t, "grub", result.Provisioning.Boot.Installed.Bootloader)
+	require.NotNil(t, result.Provisioning.Boot.Installed.TimeoutSeconds)
+	assert.Equal(t, 5, *result.Provisioning.Boot.Installed.TimeoutSeconds)
+	assert.Equal(t, "https://deb.debian.org/debian", result.Provisioning.Repos.OSMirror)
+	assert.Equal(t, "trixie", result.Provisioning.Repos.Release)
+	require.NotNil(t, result.Provisioning.Repos.NonFree)
+	assert.True(t, *result.Provisioning.Repos.NonFree)
+	assert.Equal(t, "preseed/debian", result.Provisioning.Installer.ConfigTemplate)
+	assert.Equal(t, "provisioning/extra", result.Provisioning.Installer.ExtraTemplate)
+	assert.Equal(t, map[string]any{
+		"encrypt_home": false,
+		"locale":       "en_US",
+		"secret":       "resolved-secret",
+	}, result.Provisioning.Installer.ConfigParams)
+}
+
+func TestResolverDoesNotLeakResolvedProvisioningBetweenBoots(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Installer: InstallerConfig{
+					ConfigTemplate: "preseed/debian",
+					ConfigParams: map[string]any{
+						"token": map[string]any{"env": "INSTALL_TOKEN"},
+					},
+				},
+				Packages: PackagesConfig{Install: []string{"curl"}},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	first, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "first", true
+		},
+	})
+	require.NoError(t, err)
+	first.Provisioning.Installer.ConfigParams["token"] = "mutated"
+	first.Provisioning.Packages.Install[0] = "mutated"
+
+	second, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "second", true
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "second", second.Provisioning.Installer.ConfigParams["token"])
+	assert.Equal(t, []string{"curl"}, second.Provisioning.Packages.Install)
+}
+
+func TestResolverReturnsMissingEnvironmentVariableErrorForStructuredInstallerParams(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Installer: InstallerConfig{
+					ConfigTemplate: "preseed/debian",
+					ConfigParams: map[string]any{
+						"token": map[string]any{"env": "INSTALL_TOKEN"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "", false
+		},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `parameter "installer.configParams.token" references missing environment variable "INSTALL_TOKEN"`)
+}
+
 func newTestResolver(t *testing.T) *Resolver {
 	t.Helper()
 
@@ -393,4 +812,12 @@ func newEnvTestResolver(t *testing.T) *Resolver {
 	})
 	require.NoError(t, err)
 	return resolver
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
 }

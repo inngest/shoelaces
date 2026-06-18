@@ -3,10 +3,10 @@
 
 echo Debian {{.release}} netboot (this will erase disks)
 
-set mirror http://ftp.debian.org/debian/dists/{{.release}}/main/installer-amd64/current/images/netboot/debian-installer/amd64
+set mirror {{.repo_debian_mirror}}/dists/{{.release}}/main/installer-amd64/current/images/netboot/debian-installer/amd64
 
-# Choose interface: use `.iface` from mappings if set; else auto
-set iface {{ if .iface }}{{ .iface }}{{ else }}auto{{ end }}
+# Choose interface: defaults to auto unless mappings provide `.iface`.
+set iface {{ .iface }}
 
 chain http://{{.baseURL}}/configs/linux.cfg?hostname={{.hostname}}
 
@@ -24,8 +24,8 @@ kernel ${mirror}/linux \
   hostname={{ .hostname }} \
   domain=local \
   firmware=1 \
-  preseed/url=http://{{ .baseURL }}/configs/preseed/debian?encrypt_home={{ .encrypt_home }}&ansible_repo_url={{ .ansible_repo_url | urlquery }}&ansible_branch={{ .ansible_branch | urlquery }}&ansible_playbook={{ .ansible_playbook | urlquery }} \
-  {{if .linuxargs}}{{ .linuxargs }}{{end}}
+  preseed/url=http://{{ .baseURL }}/configs/{{ .debian_installer_config_template }}?encrypt_home={{ .encrypt_home }}{{ .installer_config_query_suffix }} \
+  {{.linuxargs}}
 
 initrd ${mirror}/initrd.gz
 boot

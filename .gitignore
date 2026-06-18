@@ -1,4 +1,5 @@
 .claude/
 /.direnv/
+/.venv/
 dist**
 /bin/

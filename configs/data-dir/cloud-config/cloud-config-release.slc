@@ -1,13 +1,31 @@
 {{define "cloudconfig-coreos" -}}
 #cloud-config
-{{template "cloudconfig-coreos-users"}}
-
-hostname:{{.hostname}}
-coreos:
-  update:
-    reboot-strategy: off
-  units:
-    - name: update-engine.service
-      enable: true
-      command: start
+preserve_hostname: false
+hostname: {{.hostname}}
+{{with $users := index . "users" -}}
+{{if $users.List -}}
+users:
+{{range $users.List }}
+  - name: {{ .Name }}
+    lock_passwd: {{ .Locked }}
+{{if .FullName }}    gecos: {{ printf "%q" .FullName }}
+{{end -}}
+{{if .Shell }}    shell: {{ .Shell }}
+{{end -}}
+{{if .PasswordCrypted }}    passwd: {{ printf "%q" .PasswordCrypted }}
+{{end -}}
+{{if .Groups }}    groups:
+{{range .Groups }}      - {{ . }}
+{{end -}}
+{{end -}}
+{{if .Sudo }}    sudo: {{ printf "%q" .Sudo }}
+{{end -}}
+{{if .SSHAuthorizedKeys }}    ssh_authorized_keys:
+{{range .SSHAuthorizedKeys }}      - {{ printf "%q" . }}
+{{end -}}
+{{end -}}
+{{end -}}
+{{end -}}
+{{end -}}
+{{.installerExtra}}
 {{end}}

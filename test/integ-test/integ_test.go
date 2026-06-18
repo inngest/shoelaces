@@ -199,7 +199,80 @@ func TestShoelacesIntegration(t *testing.T) {
 	}
 }
 
+func TestShoelacesStartsWithEmbeddedProvisioningDefaults(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+targets:
+  debian12:
+    script: debian.ipxe
+    params:
+      encrypt_home: false
+    boot:
+      netboot:
+        kernelArgs:
+          - console=ttyS1
+    installer:
+      configTemplate: preseed/debian
+      configParams:
+        site: integ
+    repos:
+      osMirror: https://deb.example/debian
+      release: bookworm
+networkMaps:
+  - network: 127.0.0.1/32
+    defaultTarget: debian12
+    targets:
+      - debian12
+`), 0o644); err != nil {
+		t.Fatalf("write mappings: %v", err)
+	}
+
+	proc := startShoelacesWithDataDir(t, dataDir)
+	defer proc.stop(t)
+
+	proc.assertGETContains(t, "/poll/1/06-66-de-ad-be-ef", nil, []string{
+		"Debian bookworm netboot",
+		"set mirror https://deb.example/debian/dists/bookworm/",
+		"preseed/url=http://localhost:18888/configs/preseed/debian?",
+		"encrypt_home=false",
+		"site=integ",
+		"provisioning=",
+		"console=ttyS1",
+	})
+	proc.assertGETContains(t, "/configs/preseed/debian", url.Values{"encrypt_home": {"false"}}, []string{
+		"d-i user-setup/encrypt-home boolean false",
+		"d-i finish-install/reboot_in_progress note",
+	})
+	proc.assertGETContains(t, "/configs/static/provisioning-default.txt", nil, []string{
+		"generic embedded provisioning static asset",
+	})
+
+	for _, tt := range []struct {
+		script   string
+		expected []string
+	}{
+		{script: "debian.ipxe", expected: []string{"encrypt_home"}},
+		{script: "preseed/debian", expected: []string{"encrypt_home"}},
+	} {
+		t.Run("embedded template variables "+tt.script, func(t *testing.T) {
+			var got []string
+			proc.getJSONWithQuery(t, "/ajax/script/params", url.Values{
+				"script": {tt.script},
+			}, &got)
+
+			for _, expected := range tt.expected {
+				assertStringInSlice(t, got, expected)
+			}
+		})
+	}
+}
+
 func startShoelaces(t *testing.T) *shoelacesProcess {
+	t.Helper()
+	return startShoelacesWithDataDir(t, "integ-test-configs")
+}
+
+func startShoelacesWithDataDir(t *testing.T, dataDir string) *shoelacesProcess {
 	t.Helper()
 
 	testDir, err := os.Getwd()
@@ -220,11 +293,11 @@ func startShoelaces(t *testing.T) *shoelacesProcess {
 
 	configPath := filepath.Join(t.TempDir(), "shoelaces.toml")
 	config := fmt.Sprintf(`bind-addr = "%s"
-data-dir = "integ-test-configs"
+data-dir = "%s"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
 debug = true
-`, apiAddr)
+`, apiAddr, dataDir)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)
 	}
@@ -343,6 +416,26 @@ func (p *shoelacesProcess) assertGETFixtureWithQuery(t *testing.T, path string, 
 	}
 }
 
+func (p *shoelacesProcess) assertGETContains(t *testing.T, path string, query url.Values, expected []string) {
+	t.Helper()
+
+	resp := p.get(t, path, query)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET %s status = %d, want 200\n%s", path, resp.StatusCode, body)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read GET %s response: %v", path, err)
+	}
+	for _, want := range expected {
+		if !bytes.Contains(got, []byte(want)) {
+			t.Fatalf("GET %s response missing %q\nresponse:\n%s", path, want, got)
+		}
+	}
+}
+
 func (p *shoelacesProcess) getJSON(t *testing.T, path string, out any) {
 	t.Helper()
 	p.getJSONWithQuery(t, path, nil, out)
@@ -360,6 +453,16 @@ func (p *shoelacesProcess) getJSONWithQuery(t *testing.T, path string, query url
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		t.Fatalf("decode GET %s JSON: %v", path, err)
 	}
+}
+
+func assertStringInSlice(t *testing.T, got []string, expected string) {
+	t.Helper()
+	for _, item := range got {
+		if item == expected {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %#v", expected, got)
 }
 
 func (p *shoelacesProcess) get(t *testing.T, path string, query url.Values) *http.Response {

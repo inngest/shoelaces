@@ -1,5 +1,5 @@
 [Unit]
-Description=Run first-boot bootstrap and then exit
+Description=Run example firstboot hook and then exit
 After=network-online.target
 Wants=network-online.target
 

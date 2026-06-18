@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
 )
 
@@ -39,6 +40,10 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for key, val := range r.URL.Query() {
 		variablesMap[key] = val[0]
+	}
+	if err := mappings.HydrateInstallerConfigQuery(variablesMap); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	env := envFromRequest(r)

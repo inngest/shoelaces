@@ -1,9 +1,13 @@
 defaults:
   params:
+    # Keep the development profile non-destructive by default.
     encrypt_home: "false"
-    linuxargs: ""
+    # Serial console output is useful when exercising generated boot configs.
+    linuxargs: "console=ttyS0"
 
 targets:
+  # These targets use the embedded generic provisioning templates unless a local
+  # .slc override is added under dev/data-dir.
   debian12:
     script: debian.ipxe
     label: Debian 12 Bookworm
@@ -22,52 +26,42 @@ targets:
     params:
       release: noble
 
-  ubuntu2604:
-    script: ubuntu-minimal.ipxe
-    label: Ubuntu 26.04 LTS
+  centos8:
+    script: centos.ipxe
+    label: CentOS 8
     params:
-      release: resolute
+      release: "8"
 
 networkMaps:
-  - network: 104.225.9.96/27
+  - network: 127.0.0.1/32
     defaultTarget: debian12
     targets:
       - debian12
       - debian13
       - ubuntu2404
-      - ubuntu2604
+      - centos8
     params:
-      hostnamePrefix: iad-
+      hostname: local-dev
 
-  - network: 198.51.100.0/24
+  - network: 192.0.2.0/24
     targets:
       - debian12
       - debian13
       - ubuntu2404
-      - ubuntu2604
+      - centos8
 
 hostnameMaps:
-  - hostname: '^debian13-[0-9]+\.example\.com$'
+  - hostname: '^debian13-dev$'
     defaultTarget: debian13
     targets:
       - debian13
 
-  - hostname: '^ubuntu24-[0-9]+\.example\.com$'
+  - hostname: '^ubuntu24-dev$'
     defaultTarget: ubuntu2404
     targets:
       - ubuntu2404
 
-macMaps:
-  - mac: "0c:42:a1:c3:52:96"
-    defaultTarget: ubuntu2604
+  - hostname: '^centos8-dev$'
+    defaultTarget: centos8
     targets:
-      - ubuntu2604
-    params:
-      hostname: ubuntu2604-example
-
-ipMaps:
-  - ip: 2001:db8::10
-    defaultTarget: debian12
-    targets:
-      - debian12
-      - debian13
+      - centos8

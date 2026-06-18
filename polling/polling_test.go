@@ -140,6 +140,36 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 				"role":           "db",
 			},
 		},
+		{
+			name: "network match with structured hostname",
+			srv:  server.New("06:66:de:ad:be:ef", "192.0.2.10", ""),
+			resolver: mustResolver(t, &mappings.Mappings{
+				Targets: map[string]mappings.Target{
+					"db": {
+						Script: "test.ipxe",
+						Network: mappings.NetworkConfig{
+							Hostname: "structured-db",
+						},
+						Params: map[string]interface{}{
+							"role": "db",
+						},
+					},
+				},
+				NetworkMaps: []mappings.NetworkMapConfig{{
+					Network:       "192.0.2.0/24",
+					DefaultTarget: "db",
+					Targets:       []string{"db"},
+				}},
+			}),
+			wantBootType: event.SubnetMatchBoot,
+			wantHostname: "structured-db",
+			wantRendered: "boot structured-db",
+			wantParams: map[string]interface{}{
+				"baseURL":  "127.0.0.1:8081",
+				"hostname": "structured-db",
+				"role":     "db",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -167,6 +197,85 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			assert.Equal(t, tt.wantParams, got.Params)
 		})
 	}
+}
+
+func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
+	events := &event.Log{}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script: "debian.ipxe",
+				Params: map[string]interface{}{
+					"encrypt_home": false,
+					"release":      "bookworm",
+				},
+			},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian12",
+			Targets:       []string{"debian12"},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	rendered, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		&server.States{Servers: make(map[string]*server.State)},
+		resolver,
+		events,
+		newEmbeddedProvisioningTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "Debian bookworm netboot")
+	assert.Contains(t, rendered, "hostname=06-66-de-ad-be-ef")
+	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
+	require.Len(t, events.Events[srv.Mac], 1)
+	assert.Equal(t, event.HostBoot, events.Events[srv.Mac][0].Type)
+	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
+}
+
+func TestPollPassesStructuredUsersToTemplates(t *testing.T) {
+	events := &event.Log{}
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script: "test.ipxe",
+				Params: map[string]interface{}{
+					"role": "web",
+				},
+				Users: map[string]mappings.UserConfig{
+					"infra": {
+						Primary: boolPtr(true),
+					},
+				},
+			},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian12",
+			Targets:       []string{"debian12"},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+
+	rendered, err := Poll(
+		log.MakeLogger(testLogWriter{}),
+		&server.States{Servers: make(map[string]*server.State)},
+		resolver,
+		events,
+		newTestTemplates(t),
+		"127.0.0.1:8081",
+		srv,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "user infra")
+	require.Len(t, events.Events[srv.Mac], 1)
+	assert.NotContains(t, events.Events[srv.Mac][0].Params, "users")
 }
 
 func TestUpdateTargetStoresManualSelection(t *testing.T) {
@@ -327,6 +436,8 @@ func newTestTemplates(t *testing.T) *templates.ShoelacesTemplates {
 boot {{.hostname}}
 base {{.baseURL}}
 role {{.role}}
+{{with $users := index . "users"}}{{with $users.Primary}}user {{.Name}}
+{{end}}{{end}}
 {{end}}
 `),
 		0o644,
@@ -334,6 +445,14 @@ role {{.role}}
 
 	templateRenderer := templates.New()
 	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", nil, ".slc")
+	return templateRenderer
+}
+
+func newEmbeddedProvisioningTemplates(t *testing.T) *templates.ShoelacesTemplates {
+	t.Helper()
+
+	templateRenderer := templates.New()
+	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), t.TempDir(), "env_overrides", nil, ".slc")
 	return templateRenderer
 }
 
@@ -351,4 +470,8 @@ func targetOptionNames(options []server.TargetOption) []string {
 		names = append(names, option.Name)
 	}
 	return names
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

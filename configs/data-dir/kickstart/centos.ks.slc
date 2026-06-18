@@ -2,35 +2,88 @@
 logging --level=info
 cmdline
 
-url  --url="http://mirror.netcologne.de/centos/{{.release}}/os/x86_64"
+url  --url="{{.kickstart_centos_mirror}}/{{.release}}/os/x86_64"
 
-network --bootproto dhcp --hostname {{.hostname}}
+network --bootproto {{.network_bootproto}} --hostname {{.hostname}}
 
-rootpw root
-auth   --useshadow --passalgo=sha512 --enablefingerprint
+authselect --useshadow --passalgo=sha512 --enablefingerprint
+{{template "kickstart/centos/users" .}}
 
-keyboard --vckeymap=de --xlayouts='de (nodeadkeys)'
-lang      en_US.UTF-8
-timezone Europe/Berlin --isUtc
-zerombr
-clearpart --drives=sda --all --disklabel=gpt
-bootloader --append="crashkernel=auto panic=60" --location=mbr
-part biosboot --fstype=biosboot --size=1
-part /boot --fstype="ext4" --ondisk=sda --size=500 --label=/boot
-part swap --fstype="swap" --ondisk=sda --size=8000
-part pv.01 --size=1000 --grow --ondisk=sda
-volgroup vg0 pv.01
-logvol / --fstype="ext4" --vgname=vg0 --size=10000 --name=lv_root --grow
-
-%packages
-@core
-%end
-
-%post
-#!/bin/bash
-hostnamectl set-hostname {{.hostname}}
-echo -e "\n#######################\n # Finished Post Tasks\n#######################\n"
-sleep 5
-%end
+keyboard --vckeymap={{.locale_keyboard}} --xlayouts='{{.locale_keyboard}}'
+lang      {{.locale_language}}
+timezone {{.time_timezone}} {{.kickstart_utc_flag}}
+{{template "kickstart/centos/storage" .}}
+{{template "kickstart/centos/packages" .}}
+{{template "kickstart/centos/user_ssh_keys" .}}
+{{.installerExtra}}
 reboot
+{{end}}
+
+{{define "kickstart/centos/users" -}}
+{{with $users := index . "users" -}}
+{{with $root := $users.Root -}}
+{{if and (not $root.Locked) $root.PasswordCrypted -}}
+rootpw --iscrypted {{ $root.PasswordCrypted }}
+{{else -}}
+rootpw --lock
+{{end -}}
+{{else -}}
+rootpw --lock
+{{end -}}
+{{range $users.List -}}
+{{if ne .Name "root" -}}
+user --name={{ .Name }}{{ if .FullName }} --gecos={{ printf "%q" .FullName }}{{ end }}{{ if .GroupsCSV }} --groups={{ .GroupsCSV }}{{ end }}{{ if .Shell }} --shell={{ .Shell }}{{ end }}{{ if .Locked }} --lock{{ end }}{{ if .PasswordCrypted }} --iscrypted --password={{ .PasswordCrypted }}{{ end }}
+{{end -}}
+{{end -}}
+{{else -}}
+rootpw --lock
+{{end -}}
+{{end}}
+
+{{define "kickstart/centos/storage" -}}
+zerombr
+clearpart --drives={{.kickstart_storage_drive}} --all --disklabel=gpt
+bootloader --append="{{.kickstart_boot_args}}" --location=mbr
+part biosboot --fstype=biosboot --size=1
+part /boot --fstype="ext4" --ondisk={{.kickstart_storage_drive}} --size=500 --label=/boot
+part swap --fstype="swap" --ondisk={{.kickstart_storage_drive}} --size=8000
+part pv.01 --size=1000 --grow --ondisk={{.kickstart_storage_drive}}
+volgroup {{.vg_name}} pv.01
+logvol / --fstype="ext4" --vgname={{.vg_name}} --size=10000 --name=lv_root --grow
+{{end}}
+
+{{define "kickstart/centos/packages" -}}
+%packages
+{{.kickstart_package_groups}}
+{{.kickstart_packages}}
+%end
+{{end}}
+
+{{define "kickstart/centos/user_ssh_keys" -}}
+{{with $users := index . "users" -}}
+{{range $users.List -}}
+{{if .HasSSHAuthorizedKeys -}}
+%post --log=/root/ks-{{ .Name }}-ssh-keys.log
+#!/bin/bash
+set -e
+{{if eq .Name "root" -}}
+install -d -m 0700 /root/.ssh
+cat > /root/.ssh/authorized_keys <<'SHOELACES_AUTHORIZED_KEYS'
+{{else -}}
+install -d -m 0700 /home/{{ .Name }}/.ssh
+cat > /home/{{ .Name }}/.ssh/authorized_keys <<'SHOELACES_AUTHORIZED_KEYS'
+{{end -}}
+{{range .SSHAuthorizedKeys }}{{ . }}
+{{end -}}
+SHOELACES_AUTHORIZED_KEYS
+{{if eq .Name "root" -}}
+chmod 0600 /root/.ssh/authorized_keys
+{{else -}}
+chmod 0600 /home/{{ .Name }}/.ssh/authorized_keys
+chown -R {{ .Name }}:{{ .Name }} /home/{{ .Name }}/.ssh
+{{end -}}
+%end
+{{end -}}
+{{end -}}
+{{end -}}
 {{end}}

@@ -16,24 +16,24 @@
 package templates
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
+	"reflect"
 	"strings"
 	"text/template"
+	"text/template/parse"
 
+	shoelaces "github.com/inngest/shoelaces"
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
 )
 
 const defaultEnvironment = "default"
-
-var varRegex = regexp.MustCompile(`{{\.(.*?)}}`)
-var configNameRegex = regexp.MustCompile(`{{define\s+"(.*?)".*}}`)
 
 // ShoelacesTemplates holds the core attributes for handling the dyanmic configurations
 // in Shoelaces.
@@ -47,11 +47,7 @@ type ShoelacesTemplates struct {
 type shoelacesTemplateEnvironment struct {
 	templateObj  *template.Template
 	templateVars map[string][]string
-}
-
-type shoelacesTemplateInfo struct {
-	name      string
-	variables []string
+	templateRefs map[string][]string
 }
 
 // New creates and initializes a new ShoelacesTemplates instance a returns a pointer to
@@ -61,43 +57,9 @@ func New() *ShoelacesTemplates {
 	e[defaultEnvironment] = shoelacesTemplateEnvironment{
 		templateObj:  template.New(""),
 		templateVars: make(map[string][]string),
+		templateRefs: make(map[string][]string),
 	}
 	return &ShoelacesTemplates{envTemplates: e}
-}
-
-func (s *ShoelacesTemplates) parseTemplateInfo(logger log.Logger, path string) shoelacesTemplateInfo {
-	fh, err := os.Open(path)
-	if err != nil {
-		logger.Error("component", "template", "err", err.Error())
-		os.Exit(1)
-	}
-
-	defer func() { _ = fh.Close() }()
-
-	templateVars := make([]string, 0)
-	scanner := bufio.NewScanner(fh)
-	templateName := ""
-	i := 0
-	for scanner.Scan() {
-		// find variables
-		result := varRegex.FindAllStringSubmatch(scanner.Text(), -1)
-		if varRegex.MatchString(scanner.Text()) {
-			for _, v := range result {
-				// we only want the actual match, being second in the group
-				if !utils.StringInSlice(v[1], templateVars) {
-					templateVars = append(templateVars, v[1])
-				}
-			}
-		}
-		// if first line get name of template
-		if i == 0 {
-			nameResult := configNameRegex.FindAllStringSubmatch(scanner.Text(), -1)
-			templateName = nameResult[0][1]
-		}
-		i++
-	}
-
-	return shoelacesTemplateInfo{name: templateName, variables: templateVars}
 }
 
 func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment string) {
@@ -108,21 +70,136 @@ func (s *ShoelacesTemplates) checkAddEnvironment(logger log.Logger, environment 
 			os.Exit(1)
 		}
 		s.envTemplates[environment] = shoelacesTemplateEnvironment{
-			templateObj:  c,
-			templateVars: make(map[string][]string),
+			templateObj: c,
+			// Environment overrides inherit the default index, then replace entries
+			// for any templates they override.
+			templateVars: cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateVars),
+			templateRefs: cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateRefs),
 		}
 	}
 }
 
 func (s *ShoelacesTemplates) addTemplate(logger log.Logger, path string, environment string) error {
-	s.checkAddEnvironment(logger, environment)
-	i := s.parseTemplateInfo(logger, path)
-	_, err := s.envTemplates[environment].templateObj.ParseFiles(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	s.envTemplates[environment].templateVars[i.name] = i.variables
+	return s.addTemplateContent(logger, path, content, environment)
+}
+
+func (s *ShoelacesTemplates) addTemplateContent(logger log.Logger, source string, content []byte, environment string) error {
+	s.checkAddEnvironment(logger, environment)
+	sourceName := filepath.Base(source)
+	parsed, err := template.New(sourceName).Parse(string(content))
+	if err != nil {
+		return err
+	}
+
+	templateEnv := s.envTemplates[environment]
+	for _, parsedTemplate := range parsed.Templates() {
+		if parsedTemplate.Tree == nil || parsedTemplate.Root == nil {
+			continue
+		}
+		if parsedTemplate.Name() == sourceName && strings.TrimSpace(parsedTemplate.Root.String()) == "" {
+			continue
+		}
+		if _, err := templateEnv.templateObj.AddParseTree(parsedTemplate.Name(), parsedTemplate.Tree); err != nil {
+			return err
+		}
+		templateEnv.templateVars[parsedTemplate.Name()], templateEnv.templateRefs[parsedTemplate.Name()] = extractTemplateInfo(parsedTemplate.Root)
+	}
 	return nil
+}
+
+func cloneTemplateIndex(index map[string][]string) map[string][]string {
+	cloned := make(map[string][]string, len(index))
+	for name, values := range index {
+		cloned[name] = append([]string(nil), values...)
+	}
+	return cloned
+}
+
+func extractTemplateInfo(root parse.Node) ([]string, []string) {
+	// Keep direct variables and template references separate. References are
+	// resolved after parsing so disk overrides and later partial definitions
+	// participate in ListVariables and missing-variable errors.
+	var variables []string
+	var refs []string
+	walkTemplateNode(root, func(variable string) {
+		if variable != "" && !utils.StringInSlice(variable, variables) {
+			variables = append(variables, variable)
+		}
+	}, func(ref string) {
+		if ref != "" && !utils.StringInSlice(ref, refs) {
+			refs = append(refs, ref)
+		}
+	})
+	return variables, refs
+}
+
+func walkTemplateNode(node parse.Node, addVariable func(string), addRef func(string)) {
+	if node == nil {
+		return
+	}
+	// Optional branches and pipes can arrive as typed nil parse nodes.
+	value := reflect.ValueOf(node)
+	if value.Kind() == reflect.Pointer && value.IsNil() {
+		return
+	}
+	switch n := node.(type) {
+	case *parse.ActionNode:
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+	case *parse.BranchNode:
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+		walkTemplateNode(n.List, addVariable, addRef)
+		walkTemplateNode(n.ElseList, addVariable, addRef)
+	case *parse.ChainNode:
+		walkTemplateNode(n.Node, addVariable, addRef)
+		addVariable(normalizeVariableName(strings.Join(n.Field, ".")))
+	case *parse.CommandNode:
+		for _, arg := range n.Args {
+			walkTemplateNode(arg, addVariable, addRef)
+		}
+	case *parse.FieldNode:
+		addVariable(normalizeVariableName(strings.Join(n.Ident, ".")))
+	case *parse.IfNode:
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+		walkTemplateNode(n.List, addVariable, addRef)
+		walkTemplateNode(n.ElseList, addVariable, addRef)
+	case *parse.ListNode:
+		for _, child := range n.Nodes {
+			walkTemplateNode(child, addVariable, addRef)
+		}
+	case *parse.PipeNode:
+		for _, cmd := range n.Cmds {
+			walkTemplateNode(cmd, addVariable, addRef)
+		}
+	case *parse.RangeNode:
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+		walkTemplateNode(n.List, addVariable, addRef)
+		walkTemplateNode(n.ElseList, addVariable, addRef)
+	case *parse.TemplateNode:
+		// Template references are followed during variable listing so partials
+		// can be parsed or overridden independently of their callers.
+		addRef(n.Name)
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+	case *parse.WithNode:
+		walkTemplateNode(n.Pipe, addVariable, addRef)
+		walkTemplateNode(n.List, addVariable, addRef)
+		walkTemplateNode(n.ElseList, addVariable, addRef)
+	}
+}
+
+func normalizeVariableName(variable string) string {
+	variable = strings.TrimSpace(variable)
+	if variable == "" {
+		return ""
+	}
+	fields := strings.Fields(variable)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(fields[0], ".")
 }
 
 func (s *ShoelacesTemplates) getEnvFromPath(path string) string {
@@ -141,6 +218,7 @@ func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, e
 	s.tplExt = tplExt
 
 	logger.Debug("component", "template", "msg", "Template parsing started", "dir", dataDir)
+	s.parseEmbeddedProvisioningTemplates(logger)
 
 	tplScannerDefault := func(p string, info os.FileInfo, err error) error {
 		if strings.HasPrefix(p, path.Join(dataDir, envDir)) {
@@ -179,6 +257,28 @@ func (s *ShoelacesTemplates) ParseTemplates(logger log.Logger, dataDir string, e
 	logger.Debug("component", "template", "msg", "Parsing ended")
 }
 
+func (s *ShoelacesTemplates) parseEmbeddedProvisioningTemplates(logger log.Logger) {
+	defaults := shoelaces.ProvisioningDefaultsFS()
+	err := fs.WalkDir(defaults, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.HasSuffix(p, s.tplExt) {
+			logger.Info("component", "template", "msg", "Parsing embedded provisioning file", "file", p)
+			content, err := fs.ReadFile(defaults, p)
+			if err != nil {
+				return err
+			}
+			return s.addTemplateContent(logger, p, content, defaultEnvironment)
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error("component", "template", "err", err.Error())
+		os.Exit(1)
+	}
+}
+
 // RenderTemplate receives a name and a map of parameters, among other
 // arguments, and returns the rendered template. It's aware of the
 // environment, in case of any.
@@ -186,16 +286,26 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	if envName == "" {
 		envName = defaultEnvironment
 	}
+	if paramMap == nil {
+		paramMap = map[string]interface{}{}
+	}
+	provisioning, _ := paramMap["provisioning"].(mappings.ProvisioningConfig)
+	paramMap = mappings.ParamsWithProvisioning(paramMap, nil, provisioning)
+	paramMap, err := s.withInstallerExtra(paramMap, envName, configName)
+	if err != nil {
+		logger.Info("component", "template", "action", "render-installer-extra", "err", err.Error())
+		return "", err
+	}
 	logger.Info("component", "template", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
 
-	requiredVariables := s.envTemplates[envName].templateVars[configName]
+	requiredVariables := s.envTemplates[envName].listVariables(configName)
 
 	var b bytes.Buffer
-	err := s.envTemplates[envName].templateObj.ExecuteTemplate(&b, configName, paramMap)
+	err = s.envTemplates[envName].templateObj.ExecuteTemplate(&b, configName, paramMap)
 	// Fall back to default template in case this is non default environment
 	// XXX: this is temporary and will be simplified to reduce the code duplication
 	if err != nil && envName != defaultEnvironment {
-		requiredVariables = s.envTemplates[defaultEnvironment].templateVars[configName]
+		requiredVariables = s.envTemplates[defaultEnvironment].listVariables(configName)
 		err = s.envTemplates[defaultEnvironment].templateObj.ExecuteTemplate(&b, configName, paramMap)
 	}
 	if err != nil {
@@ -220,15 +330,68 @@ func (s *ShoelacesTemplates) RenderTemplate(logger log.Logger, configName string
 	return r, nil
 }
 
+func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {
+	copied := make(map[string]interface{}, len(paramMap)+1)
+	for key, value := range paramMap {
+		copied[key] = value
+	}
+	copied["installerExtra"] = ""
+	provisioning, ok := copied["provisioning"].(mappings.ProvisioningConfig)
+	if !ok || provisioning.Installer.ExtraTemplate == "" || provisioning.Installer.ExtraTemplate == configName {
+		return copied, nil
+	}
+
+	var b bytes.Buffer
+	err := s.envTemplates[envName].templateObj.ExecuteTemplate(&b, provisioning.Installer.ExtraTemplate, copied)
+	if err != nil && envName != defaultEnvironment {
+		b.Reset()
+		err = s.envTemplates[defaultEnvironment].templateObj.ExecuteTemplate(&b, provisioning.Installer.ExtraTemplate, copied)
+	}
+	if err != nil {
+		return nil, err
+	}
+	copied["installerExtra"] = b.String()
+	return copied, nil
+}
+
 // ListVariables receives a template name and return the list of variables
 // that belong to it. It's mainly used by the web frontend to provide a
 // list of dynamic fields to complete before rendering a template.
 func (s *ShoelacesTemplates) ListVariables(templateName, envName string) []string {
+	if envName == "" {
+		envName = defaultEnvironment
+	}
 	if e, ok := s.envTemplates[envName]; ok {
-		if v, ok := e.templateVars[templateName]; ok {
-			return v
-		}
+		return e.listVariables(templateName)
 	}
 	var empty []string
 	return empty
+}
+
+func (e shoelacesTemplateEnvironment) listVariables(templateName string) []string {
+	return e.collectVariables(templateName, make(map[string]bool))
+}
+
+func (e shoelacesTemplateEnvironment) collectVariables(templateName string, visited map[string]bool) []string {
+	if visited[templateName] {
+		return nil
+	}
+	// Guard against cyclic template references while still allowing shared
+	// partials to be reached from multiple top-level templates.
+	visited[templateName] = true
+
+	var variables []string
+	for _, variable := range e.templateVars[templateName] {
+		if !utils.StringInSlice(variable, variables) {
+			variables = append(variables, variable)
+		}
+	}
+	for _, ref := range e.templateRefs[templateName] {
+		for _, variable := range e.collectVariables(ref, visited) {
+			if !utils.StringInSlice(variable, variables) {
+				variables = append(variables, variable)
+			}
+		}
+	}
+	return variables
 }

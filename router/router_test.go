@@ -20,8 +20,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	shoelaces "github.com/inngest/shoelaces"
@@ -92,6 +94,51 @@ func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
 	assert.Equal(t, "from data dir\n", rr.Body.String())
 }
 
+func TestConfigsStaticRouteServesEmbeddedProvisioningAsset(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "generic embedded provisioning static asset")
+}
+
+func TestConfigsStaticRouteDiskOverridesEmbeddedProvisioningAsset(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "provisioning-default.txt"), []byte("from disk\n"), 0o644))
+	handler := newTestRouter(t, dataDir)
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "from disk\n", rr.Body.String())
+}
+
+func TestConfigsStaticRouteMissingFileReturnsNotFound(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/missing.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestStaticRouteDoesNotServeProvisioningDefaults(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/static/provisioning-default.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+}
+
 func TestConfigTemplateRouteUsesQueryParamsWithoutMappingDefaults(t *testing.T) {
 	dataDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.ipxe.slc"), []byte(`{{define "install.ipxe"}}release={{.release}}
@@ -124,6 +171,84 @@ baseURL={{.baseURL}}
 	assert.Contains(t, rr.Body.String(), "baseURL=localhost:8081")
 	assert.NotContains(t, rr.Body.String(), "mapping-release")
 	assert.NotContains(t, rr.Body.String(), "mapping-secret")
+}
+
+func TestConfigTemplateRouteRendersEmbeddedProvisioningTemplate(t *testing.T) {
+	dataDir := t.TempDir()
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates = templates.New()
+		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/preseed/debian?encrypt_home=false", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "d-i user-setup/encrypt-home boolean false")
+	assert.Contains(t, rr.Body.String(), "d-i finish-install/reboot_in_progress note")
+	assert.NotContains(t, rr.Body.String(), "d-i preseed/late_command")
+}
+
+func TestConfigTemplateRoutePreservesStructuredProvisioningFromBootURL(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "provisioning"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "provisioning", "extra.slc"), []byte(`{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
+{{end}}
+`), 0o644))
+
+	var bootScript string
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates = templates.New()
+		env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		params := mappings.ParamsWithProvisioning(map[string]interface{}{
+			"baseURL":  env.BaseURL,
+			"hostname": "boot-host",
+		}, map[string]mappings.ResolvedUser{
+			"infra": {
+				Name:            "infra",
+				Primary:         true,
+				FullName:        "Infrastructure User",
+				PasswordCrypted: "$6$infra",
+			},
+		}, mappings.ProvisioningConfig{
+			Packages: mappings.PackagesConfig{
+				Install: []string{"curl", "vim"},
+			},
+			Storage: mappings.StorageConfig{
+				Disk: "/dev/vda",
+			},
+			Repos: mappings.ReposConfig{
+				Release: "bookworm",
+			},
+			Installer: mappings.InstallerConfig{
+				ConfigTemplate: "preseed/debian",
+				ExtraTemplate:  "provisioning/extra",
+				ConfigParams: map[string]any{
+					"encrypt_home": false,
+				},
+			},
+		})
+
+		var err error
+		bootScript, err = env.Templates.RenderTemplate(env.Logger, "debian.ipxe", params, "")
+		require.NoError(t, err)
+	})
+	preseedURL := renderedPreseedURL(t, bootScript)
+	req := httptest.NewRequest(http.MethodGet, preseedURL.RequestURI(), nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	assert.Contains(t, rr.Body.String(), "d-i partman-auto/disk string /dev/vda")
+	assert.Contains(t, rr.Body.String(), "d-i pkgsel/include string curl vim")
+	assert.Contains(t, rr.Body.String(), "d-i passwd/user-fullname string Infrastructure User")
+	assert.Contains(t, rr.Body.String(), "d-i passwd/username string infra")
+	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string echo extra boot-host /dev/vda")
 }
 
 func newTestRouter(t *testing.T, dataDir string) http.Handler {
@@ -163,4 +288,18 @@ func mustMappingResolver(t *testing.T, config *mappings.Mappings) *mappings.Reso
 	resolver, err := mappings.NewResolver(config)
 	require.NoError(t, err)
 	return resolver
+}
+
+func renderedPreseedURL(t *testing.T, bootScript string) *url.URL {
+	t.Helper()
+
+	for _, field := range strings.Fields(bootScript) {
+		if strings.HasPrefix(field, "preseed/url=") {
+			parsed, err := url.Parse(strings.TrimPrefix(field, "preseed/url="))
+			require.NoError(t, err)
+			return parsed
+		}
+	}
+	t.Fatalf("rendered boot script did not contain preseed/url: %s", bootScript)
+	return nil
 }

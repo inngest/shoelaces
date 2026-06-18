@@ -30,6 +30,62 @@ func TestParseMappingsLoadsNewSchema(t *testing.T) {
 defaults:
   params:
     install_username: infra
+  locale:
+    language: en_US.UTF-8
+    keyboard: us
+  time:
+    timezone: UTC
+    utc: true
+  network:
+    bootproto: dhcp
+    nameservers:
+      - 1.1.1.1
+  packages:
+    install:
+      - openssh-server
+    groups:
+      - core
+  storage:
+    mode: lvm
+    volumeGroup: vg0
+    filesystems:
+      root:
+        mountpoint: /
+        fstype: ext4
+        size: grow
+  boot:
+    firmware: uefi
+    netboot:
+      method: ipxe
+      kernelArgs:
+        - console=ttyS0
+    installed:
+      bootloader: grub
+      timeoutSeconds: 5
+  repos:
+    osMirror: https://deb.debian.org/debian
+    release: bookworm
+    firmware: true
+  installer:
+    configTemplate: preseed/debian
+    extraTemplate: provisioning/extra
+    configParams:
+      encrypt_home: false
+  users:
+    root:
+      locked: true
+      passwordCrypted:
+        env: SHOELACES_ROOT_PASSWORD_CRYPTED
+    infra:
+      primary: true
+      fullName: Infrastructure User
+      sshAuthorizedKeys:
+        - "ssh-ed25519 AAAA example"
+        - env: SHOELACES_INFRA_SSH_KEY
+      groups:
+        - sudo
+      shell: /bin/bash
+      sudo: "ALL=(ALL) NOPASSWD:ALL"
 targets:
   debian12:
     script: debian.ipxe
@@ -37,6 +93,14 @@ targets:
     environment: testing
     params:
       release: bookworm
+    packages:
+      install:
+        - curl
+    repos:
+      release: bookworm
+    users:
+      infra:
+        fullName: Debian Infrastructure User
   debian13:
     script: debian.ipxe
     params:
@@ -49,6 +113,13 @@ networkMaps:
       - debian13
     params:
       role: network
+    networkConfig:
+      hostname: net-host
+    storage:
+      disk: /dev/nvme0n1
+    users:
+      breakglass:
+        locked: true
 hostnameMaps:
   - hostname: '^host-\d+$'
     defaultTarget: debian12
@@ -71,13 +142,55 @@ ipMaps:
 	require.NoError(t, err)
 	require.Len(t, parsed.Targets, 2)
 	assert.Equal(t, "infra", parsed.Defaults.Params["install_username"])
+	assert.Equal(t, "en_US.UTF-8", parsed.Defaults.Locale.Language)
+	assert.Equal(t, "us", parsed.Defaults.Locale.Keyboard)
+	assert.Equal(t, "UTC", parsed.Defaults.Time.Timezone)
+	require.NotNil(t, parsed.Defaults.Time.UTC)
+	assert.True(t, *parsed.Defaults.Time.UTC)
+	assert.Equal(t, "dhcp", parsed.Defaults.Network.Bootproto)
+	assert.Equal(t, []string{"1.1.1.1"}, parsed.Defaults.Network.Nameservers)
+	assert.Equal(t, []string{"openssh-server"}, parsed.Defaults.Packages.Install)
+	assert.Equal(t, []string{"core"}, parsed.Defaults.Packages.Groups)
+	assert.Equal(t, "lvm", parsed.Defaults.Storage.Mode)
+	assert.Equal(t, "vg0", parsed.Defaults.Storage.VolumeGroup)
+	assert.Equal(t, "/", parsed.Defaults.Storage.Filesystems["root"].Mountpoint)
+	assert.Equal(t, "uefi", parsed.Defaults.Boot.Firmware)
+	assert.Equal(t, "ipxe", parsed.Defaults.Boot.Netboot.Method)
+	assert.Equal(t, []string{"console=ttyS0"}, parsed.Defaults.Boot.Netboot.KernelArgs)
+	assert.Equal(t, "grub", parsed.Defaults.Boot.Installed.Bootloader)
+	require.NotNil(t, parsed.Defaults.Boot.Installed.TimeoutSeconds)
+	assert.Equal(t, 5, *parsed.Defaults.Boot.Installed.TimeoutSeconds)
+	assert.Equal(t, "https://deb.debian.org/debian", parsed.Defaults.Repos.OSMirror)
+	assert.Equal(t, "bookworm", parsed.Defaults.Repos.Release)
+	require.NotNil(t, parsed.Defaults.Repos.Firmware)
+	assert.True(t, *parsed.Defaults.Repos.Firmware)
+	assert.Equal(t, "preseed/debian", parsed.Defaults.Installer.ConfigTemplate)
+	assert.Equal(t, "provisioning/extra", parsed.Defaults.Installer.ExtraTemplate)
+	assert.Equal(t, false, parsed.Defaults.Installer.ConfigParams["encrypt_home"])
+	require.NotNil(t, parsed.Defaults.Users["root"].Locked)
+	assert.True(t, *parsed.Defaults.Users["root"].Locked)
+	assert.Equal(t, map[string]any{"env": "SHOELACES_ROOT_PASSWORD_CRYPTED"}, parsed.Defaults.Users["root"].PasswordCrypted)
+	require.NotNil(t, parsed.Defaults.Users["infra"].Primary)
+	assert.True(t, *parsed.Defaults.Users["infra"].Primary)
+	assert.Equal(t, "Infrastructure User", parsed.Defaults.Users["infra"].FullName)
+	assert.Equal(t, []any{"ssh-ed25519 AAAA example", map[string]any{"env": "SHOELACES_INFRA_SSH_KEY"}}, parsed.Defaults.Users["infra"].SSHAuthorizedKeys)
+	assert.Equal(t, []string{"sudo"}, parsed.Defaults.Users["infra"].Groups)
+	assert.Equal(t, "/bin/bash", parsed.Defaults.Users["infra"].Shell)
+	assert.Equal(t, "ALL=(ALL) NOPASSWD:ALL", parsed.Defaults.Users["infra"].Sudo)
 	assert.Equal(t, "debian.ipxe", parsed.Targets["debian12"].Script)
 	assert.Equal(t, "Debian 12 Bookworm", parsed.Targets["debian12"].Label)
 	assert.Equal(t, "testing", parsed.Targets["debian12"].Environment)
 	assert.Equal(t, "bookworm", parsed.Targets["debian12"].Params["release"])
+	assert.Equal(t, []string{"curl"}, parsed.Targets["debian12"].Packages.Install)
+	assert.Equal(t, "bookworm", parsed.Targets["debian12"].Repos.Release)
+	assert.Equal(t, "Debian Infrastructure User", parsed.Targets["debian12"].Users["infra"].FullName)
 	require.Len(t, parsed.NetworkMaps, 1)
 	assert.Equal(t, "debian12", parsed.NetworkMaps[0].DefaultTarget)
 	assert.Equal(t, []string{"debian12", "debian13"}, parsed.NetworkMaps[0].Targets)
+	assert.Equal(t, "net-host", parsed.NetworkMaps[0].NetworkSettings.Hostname)
+	assert.Equal(t, "/dev/nvme0n1", parsed.NetworkMaps[0].Storage.Disk)
+	require.NotNil(t, parsed.NetworkMaps[0].Users["breakglass"].Locked)
+	assert.True(t, *parsed.NetworkMaps[0].Users["breakglass"].Locked)
 	require.Len(t, parsed.HostnameMaps, 1)
 	require.Len(t, parsed.MacMaps, 1)
 	require.Len(t, parsed.IPMaps, 1)
@@ -167,6 +280,55 @@ hostnameMaps:
       - debian12
 `,
 			want: `hostnameMaps[0] hostname "[" is invalid`,
+		},
+		{
+			name: "invalid storage mode",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    storage:
+      mode: zfs
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`,
+			want: `targets["debian12"].storage.mode has unsupported value "zfs"`,
+		},
+		{
+			name: "invalid package list",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    packages:
+      install:
+        - ""
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`,
+			want: `targets["debian12"].packages.install[0] must not be empty`,
+		},
+		{
+			name: "invalid mirror url",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    repos:
+      osMirror: ftp://example.test/debian
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`,
+			want: `targets["debian12"].repos.osMirror must be an http or https URL`,
 		},
 	}
 

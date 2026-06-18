@@ -22,7 +22,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run unit tests
-        run: go test -race ./...
+        run: make test-race
 
   integration-test:
     name: Integration Test
@@ -36,7 +36,35 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run integration tests
-        run: go test -tags=integration ./test/integ-test
+        run: make integration
+
+  provisioning-render-validation:
+    name: Provisioning Render Validation
+    runs-on: depot-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install provisioning validators
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cloud-init debconf
+          uv sync --frozen --only-dev
+
+      - name: Run rendered provisioning validation
+        run: uv run make render-validation
+        env:
+          SHOELACES_REQUIRE_PROVISIONING_VALIDATORS: "1"
 
   build:
     name: Build

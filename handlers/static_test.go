@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,6 +122,24 @@ func TestOverlayFileServerIncludesLowerLayerDirectoryEntries(t *testing.T) {
 	body := rr.Body.String()
 	assert.Contains(t, body, `<a href="lower-dir/">lower-dir/</a>`)
 	assert.Contains(t, body, `<a href="upper-dir/">upper-dir/</a>`)
+}
+
+func TestOverlayFileServerWithFSMergesDirectoryIndex(t *testing.T) {
+	upper := t.TempDir()
+	writeTestFile(t, filepath.Join(upper, "disk.txt"), "from disk")
+	lower := fstest.MapFS{
+		"embedded.txt": {Data: []byte("from embedded")},
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	OverlayFileServerWithFS(lower, upper).ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, `<a href="disk.txt">disk.txt</a>`)
+	assert.Contains(t, body, `<a href="embedded.txt">embedded.txt</a>`)
 }
 
 func writeTestFile(t *testing.T, path string, content string) {

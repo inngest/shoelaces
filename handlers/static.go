@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +17,16 @@ package handlers
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
+
+	shoelaces "github.com/inngest/shoelaces"
 )
 
 // StaticConfigFileHandler handles static config files
@@ -30,12 +36,17 @@ func (s *StaticConfigFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	env := envFromRequest(r)
 	envName := envNameFromRequest(r)
 	basePath := path.Join(env.DataDir, "static")
+	embeddedStatic, err := fs.Sub(shoelaces.ProvisioningDefaultsFS(), "static")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if envName == "" {
-		http.FileServer(http.Dir(basePath)).ServeHTTP(w, r)
+		OverlayFileServerWithFS(embeddedStatic, basePath).ServeHTTP(w, r)
 		return
 	}
 	envPath := filepath.Join(env.DataDir, env.EnvDir, envName, "static")
-	OverlayFileServer(envPath, basePath).ServeHTTP(w, r)
+	OverlayFileServerWithFS(embeddedStatic, envPath, basePath).ServeHTTP(w, r)
 }
 
 // StaticConfigFileServer returns a StaticConfigFileHandler instance implementing http.Handler
@@ -45,100 +56,165 @@ func StaticConfigFileServer() *StaticConfigFileHandler {
 
 // OverlayFileServerHandler handles request for overlayer directories
 type OverlayFileServerHandler struct {
-	upper string
-	lower string
+	layers []overlayLayer
+}
+
+type overlayLayer struct {
+	dir  string
+	fsys fs.FS
 }
 
 // OverlayFileServer serves static content from two overlayed directories
 func OverlayFileServer(upper, lower string) *OverlayFileServerHandler {
 	return &OverlayFileServerHandler{
-		upper: upper,
-		lower: lower,
+		layers: []overlayLayer{{dir: upper}, {dir: lower}},
 	}
 }
 
-func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	fp := filepath.Clean(r.URL.Path)
-	upper := filepath.Clean(path.Join(o.upper, fp))
-	lower := filepath.Clean(path.Join(o.lower, fp))
-
-	// TODO: try to avoid stat()-ing both if not necessary
-	infoUpper, errUpper := os.Stat(upper)
-	infoLower, errLower := os.Stat(lower)
-
-	// If both upper and lower files/dirs do not exist, return 404
-	if errUpper != nil && os.IsNotExist(errUpper) &&
-		errLower != nil && os.IsNotExist(errLower) {
-		http.NotFound(w, r)
-		return
+// OverlayFileServerWithFS serves static content from disk directories first and
+// an embedded filesystem last.
+func OverlayFileServerWithFS(lower fs.FS, diskDirs ...string) *OverlayFileServerHandler {
+	layers := make([]overlayLayer, 0, len(diskDirs)+1)
+	for _, dir := range diskDirs {
+		layers = append(layers, overlayLayer{dir: dir})
 	}
+	layers = append(layers, overlayLayer{fsys: lower})
+	return &OverlayFileServerHandler{layers: layers}
+}
+
+func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fp := cleanRequestPath(r.URL.Path)
 
 	isDir := false
 	fileList := make(map[string]os.FileInfo)
+	var firstFile overlayFile
 
-	if errUpper == nil && infoUpper.IsDir() {
-		files, err := os.ReadDir(upper)
+	for _, layer := range o.layers {
+		file, info, err := layer.open(fp)
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		for _, f := range files {
-			info, err := f.Info()
+		opened := overlayFile{file: file, info: info}
+		if info.IsDir() {
+			files, err := opened.readDir()
+			_ = opened.close()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			fileList[f.Name()] = info
-		}
-		isDir = true
-	}
-	if errLower == nil && infoLower.IsDir() {
-		files, err := os.ReadDir(lower)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		for _, f := range files {
-			if _, ok := fileList[f.Name()]; !ok {
-				info, err := f.Info()
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
+			for _, f := range files {
+				if _, ok := fileList[f.Name()]; !ok {
+					info, err := f.Info()
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					fileList[f.Name()] = info
 				}
-				fileList[f.Name()] = info
 			}
+			isDir = true
+			continue
 		}
-		isDir = true
+		if firstFile.file == nil {
+			firstFile = opened
+		} else {
+			_ = opened.close()
+		}
 	}
 
-	// Generate HTML directory index
-	if isDir {
-		fileListIndex := []string{}
-		for i := range fileList {
-			fileListIndex = append(fileListIndex, i)
-		}
-		sort.Strings(fileListIndex)
-		_, _ = w.Write([]byte("<pre>\n"))
-		for _, i := range fileListIndex {
-			f := fileList[i]
-			name := f.Name()
-			if f.IsDir() {
-				name = name + "/"
-			}
-			l := fmt.Sprintf("<a href=\"%s\">%s</a>\n", name, name)
-			_, _ = w.Write([]byte(l))
-		}
-		_, _ = w.Write([]byte("</pre>\n"))
+	if !isDir && firstFile.file == nil {
+		http.NotFound(w, r)
 		return
 	}
 
-	// Serve the file from the upper layer if it exists.
-	if errUpper == nil {
-		http.ServeFile(w, r, upper)
-		// If not serve it from the lower
-	} else if errLower == nil {
-		http.ServeFile(w, r, lower)
+	if isDir {
+		if firstFile.file != nil {
+			_ = firstFile.close()
+		}
+		writeDirectoryIndex(w, fileList)
+		return
 	}
-	http.NotFound(w, r)
+
+	defer func() { _ = firstFile.close() }()
+	readSeeker, ok := firstFile.file.(io.ReadSeeker)
+	if !ok {
+		http.Error(w, fmt.Sprintf("file %q cannot be served", firstFile.info.Name()), http.StatusInternalServerError)
+		return
+	}
+	http.ServeContent(w, r, firstFile.info.Name(), firstFile.info.ModTime(), readSeeker)
+}
+
+type overlayFile struct {
+	file fs.File
+	info os.FileInfo
+}
+
+func (f overlayFile) close() error {
+	return f.file.Close()
+}
+
+func (l overlayLayer) open(fp string) (fs.File, os.FileInfo, error) {
+	if l.fsys != nil {
+		file, err := l.fsys.Open(fp)
+		if err != nil {
+			return nil, nil, err
+		}
+		info, err := file.Stat()
+		if err != nil {
+			_ = file.Close()
+			return nil, nil, err
+		}
+		return file, info, nil
+	}
+
+	file, err := os.Open(filepath.Clean(path.Join(l.dir, fp)))
+	if err != nil {
+		return nil, nil, err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, nil, err
+	}
+	return file, info, nil
+}
+
+func (f overlayFile) readDir() ([]fs.DirEntry, error) {
+	dir, ok := f.file.(fs.ReadDirFile)
+	if !ok {
+		return nil, fmt.Errorf("directory %q cannot be listed", f.info.Name())
+	}
+	return dir.ReadDir(-1)
+}
+
+func cleanRequestPath(requestPath string) string {
+	cleaned := path.Clean("/" + requestPath)
+	cleaned = strings.TrimPrefix(cleaned, "/")
+	if cleaned == "" {
+		return "."
+	}
+	return cleaned
+}
+
+func writeDirectoryIndex(w http.ResponseWriter, fileList map[string]os.FileInfo) {
+	fileListIndex := []string{}
+	for i := range fileList {
+		fileListIndex = append(fileListIndex, i)
+	}
+	sort.Strings(fileListIndex)
+	_, _ = w.Write([]byte("<pre>\n"))
+	for _, i := range fileListIndex {
+		f := fileList[i]
+		name := f.Name()
+		if f.IsDir() {
+			name = name + "/"
+		}
+		l := fmt.Sprintf("<a href=\"%s\">%s</a>\n", name, name)
+		_, _ = w.Write([]byte(l))
+	}
+	_, _ = w.Write([]byte("</pre>\n"))
 }

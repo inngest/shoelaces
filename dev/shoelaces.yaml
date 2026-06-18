@@ -1,0 +1,15 @@
+# Local HTTP profile for `make dev`. TFTP stays disabled so the server can run
+# without privileged ports or local network boot setup.
+bind-addr: "localhost:18081"
+base-url: "localhost:18081"
+data-dir: dev/data-dir
+template-extension: .slc
+mappings-file: mappings.yaml
+debug: true
+
+tftp:
+  enabled: false
+  address: ":1069"
+  root: dev/data-dir/tftp
+  readonly: true
+  timeout: "5s"

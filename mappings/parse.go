@@ -18,6 +18,7 @@ package mappings
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -48,6 +49,24 @@ type Mappings struct {
 type DefaultsMap struct {
 	// Params is the global parameter map merged before target and mapping params.
 	Params map[string]any `koanf:"params"`
+	// Users contains keyed account defaults merged before target and mapping users.
+	Users map[string]UserConfig `koanf:"users"`
+	// Locale contains global locale defaults.
+	Locale LocaleConfig `koanf:"locale"`
+	// Time contains global clock/time defaults.
+	Time TimeConfig `koanf:"time"`
+	// Network contains global network defaults.
+	Network NetworkConfig `koanf:"network"`
+	// Packages contains global package defaults.
+	Packages PackagesConfig `koanf:"packages"`
+	// Storage contains global storage defaults.
+	Storage StorageConfig `koanf:"storage"`
+	// Boot contains global boot defaults.
+	Boot BootConfig `koanf:"boot"`
+	// Repos contains global repository defaults.
+	Repos ReposConfig `koanf:"repos"`
+	// Installer contains global installer defaults.
+	Installer InstallerConfig `koanf:"installer"`
 }
 
 // Target describes a named boot target.
@@ -60,6 +79,24 @@ type Target struct {
 	Environment string `koanf:"environment"`
 	// Params is the target-specific parameter map merged after defaults.
 	Params map[string]any `koanf:"params"`
+	// Users contains target-specific account settings merged after defaults.
+	Users map[string]UserConfig `koanf:"users"`
+	// Locale contains target locale settings.
+	Locale LocaleConfig `koanf:"locale"`
+	// Time contains target clock/time settings.
+	Time TimeConfig `koanf:"time"`
+	// Network contains target network settings.
+	Network NetworkConfig `koanf:"network"`
+	// Packages contains target package settings.
+	Packages PackagesConfig `koanf:"packages"`
+	// Storage contains target storage settings.
+	Storage StorageConfig `koanf:"storage"`
+	// Boot contains target boot settings.
+	Boot BootConfig `koanf:"boot"`
+	// Repos contains target repository settings.
+	Repos ReposConfig `koanf:"repos"`
+	// Installer contains target installer settings.
+	Installer InstallerConfig `koanf:"installer"`
 }
 
 // NetworkMapConfig maps a CIDR network to one or more targets.
@@ -74,6 +111,25 @@ type NetworkMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
+	// Locale contains mapping-specific locale settings.
+	Locale LocaleConfig `koanf:"locale"`
+	// Time contains mapping-specific clock/time settings.
+	Time TimeConfig `koanf:"time"`
+	// NetworkSettings contains mapping-specific network settings. It is named
+	// differently from Network to avoid colliding with the CIDR selector field.
+	NetworkSettings NetworkConfig `koanf:"networkConfig"`
+	// Packages contains mapping-specific package settings.
+	Packages PackagesConfig `koanf:"packages"`
+	// Storage contains mapping-specific storage settings.
+	Storage StorageConfig `koanf:"storage"`
+	// Boot contains mapping-specific boot settings.
+	Boot BootConfig `koanf:"boot"`
+	// Repos contains mapping-specific repository settings.
+	Repos ReposConfig `koanf:"repos"`
+	// Installer contains mapping-specific installer settings.
+	Installer InstallerConfig `koanf:"installer"`
 }
 
 // HostnameMapConfig maps a hostname regular expression to one or more targets.
@@ -86,6 +142,24 @@ type HostnameMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
+	// Locale contains mapping-specific locale settings.
+	Locale LocaleConfig `koanf:"locale"`
+	// Time contains mapping-specific clock/time settings.
+	Time TimeConfig `koanf:"time"`
+	// Network contains mapping-specific network settings.
+	Network NetworkConfig `koanf:"network"`
+	// Packages contains mapping-specific package settings.
+	Packages PackagesConfig `koanf:"packages"`
+	// Storage contains mapping-specific storage settings.
+	Storage StorageConfig `koanf:"storage"`
+	// Boot contains mapping-specific boot settings.
+	Boot BootConfig `koanf:"boot"`
+	// Repos contains mapping-specific repository settings.
+	Repos ReposConfig `koanf:"repos"`
+	// Installer contains mapping-specific installer settings.
+	Installer InstallerConfig `koanf:"installer"`
 }
 
 // MacMapConfig maps an exact MAC address to one or more targets.
@@ -98,6 +172,24 @@ type MacMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
+	// Locale contains mapping-specific locale settings.
+	Locale LocaleConfig `koanf:"locale"`
+	// Time contains mapping-specific clock/time settings.
+	Time TimeConfig `koanf:"time"`
+	// Network contains mapping-specific network settings.
+	Network NetworkConfig `koanf:"network"`
+	// Packages contains mapping-specific package settings.
+	Packages PackagesConfig `koanf:"packages"`
+	// Storage contains mapping-specific storage settings.
+	Storage StorageConfig `koanf:"storage"`
+	// Boot contains mapping-specific boot settings.
+	Boot BootConfig `koanf:"boot"`
+	// Repos contains mapping-specific repository settings.
+	Repos ReposConfig `koanf:"repos"`
+	// Installer contains mapping-specific installer settings.
+	Installer InstallerConfig `koanf:"installer"`
 }
 
 // IPMapConfig maps an exact IP address to one or more targets.
@@ -110,6 +202,24 @@ type IPMapConfig struct {
 	Targets []string `koanf:"targets"`
 	// Params is the mapping-specific parameter map merged after target params.
 	Params map[string]any `koanf:"params"`
+	// Users contains mapping-specific account settings merged after target users.
+	Users map[string]UserConfig `koanf:"users"`
+	// Locale contains mapping-specific locale settings.
+	Locale LocaleConfig `koanf:"locale"`
+	// Time contains mapping-specific clock/time settings.
+	Time TimeConfig `koanf:"time"`
+	// Network contains mapping-specific network settings.
+	Network NetworkConfig `koanf:"network"`
+	// Packages contains mapping-specific package settings.
+	Packages PackagesConfig `koanf:"packages"`
+	// Storage contains mapping-specific storage settings.
+	Storage StorageConfig `koanf:"storage"`
+	// Boot contains mapping-specific boot settings.
+	Boot BootConfig `koanf:"boot"`
+	// Repos contains mapping-specific repository settings.
+	Repos ReposConfig `koanf:"repos"`
+	// Installer contains mapping-specific installer settings.
+	Installer InstallerConfig `koanf:"installer"`
 }
 
 var knownTopLevelMappingKeys = map[string]struct{}{
@@ -165,12 +275,18 @@ func validateTopLevelKeys(keys []string) error {
 }
 
 func validateMappings(mappings *Mappings) error {
+	if err := validateProvisioningConfig("defaults", mappings.Defaults.provisioningConfig()); err != nil {
+		return err
+	}
 	for name, target := range mappings.Targets {
 		if name == "" {
 			return fmt.Errorf("target name must not be empty")
 		}
 		if target.Script == "" {
 			return fmt.Errorf("target %q script must not be empty", name)
+		}
+		if err := validateProvisioningConfig(fmt.Sprintf("targets[%q]", name), target.provisioningConfig()); err != nil {
+			return err
 		}
 	}
 
@@ -179,6 +295,9 @@ func validateMappings(mappings *Mappings) error {
 			return fmt.Errorf("networkMaps[%d] network %q is invalid: %w", i, m.Network, err)
 		}
 		if err := validateTargetPolicy("networkMaps", i, m.Targets, m.DefaultTarget, mappings.Targets); err != nil {
+			return err
+		}
+		if err := validateProvisioningConfig(fmt.Sprintf("networkMaps[%d]", i), m.provisioningConfig()); err != nil {
 			return err
 		}
 	}
@@ -190,6 +309,9 @@ func validateMappings(mappings *Mappings) error {
 		if err := validateTargetPolicy("hostnameMaps", i, m.Targets, m.DefaultTarget, mappings.Targets); err != nil {
 			return err
 		}
+		if err := validateProvisioningConfig(fmt.Sprintf("hostnameMaps[%d]", i), m.provisioningConfig()); err != nil {
+			return err
+		}
 	}
 
 	for i, m := range mappings.MacMaps {
@@ -197,6 +319,9 @@ func validateMappings(mappings *Mappings) error {
 			return fmt.Errorf("macMaps[%d] mac %q is invalid: %w", i, m.Mac, err)
 		}
 		if err := validateTargetPolicy("macMaps", i, m.Targets, m.DefaultTarget, mappings.Targets); err != nil {
+			return err
+		}
+		if err := validateProvisioningConfig(fmt.Sprintf("macMaps[%d]", i), m.provisioningConfig()); err != nil {
 			return err
 		}
 	}
@@ -208,9 +333,91 @@ func validateMappings(mappings *Mappings) error {
 		if err := validateTargetPolicy("ipMaps", i, m.Targets, m.DefaultTarget, mappings.Targets); err != nil {
 			return err
 		}
+		if err := validateProvisioningConfig(fmt.Sprintf("ipMaps[%d]", i), m.provisioningConfig()); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func validateProvisioningConfig(path string, config ProvisioningConfig) error {
+	if err := validateOneOf(path+".network.bootproto", config.Network.Bootproto, "", "dhcp", "static"); err != nil {
+		return err
+	}
+	if err := validateStringList(path+".network.nameservers", config.Network.Nameservers); err != nil {
+		return err
+	}
+	if err := validateStringList(path+".packages.install", config.Packages.Install); err != nil {
+		return err
+	}
+	if err := validateStringList(path+".packages.groups", config.Packages.Groups); err != nil {
+		return err
+	}
+	if err := validateOneOf(path+".storage.mode", config.Storage.Mode, "", "plain", "lvm", "raid", "manual"); err != nil {
+		return err
+	}
+	if err := validateFilesystems(path+".storage.filesystems", config.Storage.Filesystems); err != nil {
+		return err
+	}
+	if err := validateOneOf(path+".boot.firmware", config.Boot.Firmware, "", "uefi", "bios"); err != nil {
+		return err
+	}
+	if err := validateOneOf(path+".boot.netboot.method", config.Boot.Netboot.Method, "", "ipxe"); err != nil {
+		return err
+	}
+	if err := validateStringList(path+".boot.netboot.kernelArgs", config.Boot.Netboot.KernelArgs); err != nil {
+		return err
+	}
+	if err := validateOneOf(path+".boot.installed.bootloader", config.Boot.Installed.Bootloader, "", "grub"); err != nil {
+		return err
+	}
+	if config.Boot.Installed.TimeoutSeconds != nil && *config.Boot.Installed.TimeoutSeconds < 0 {
+		return fmt.Errorf("%s.boot.installed.timeoutSeconds must be greater than or equal to 0", path)
+	}
+	if err := validateStringList(path+".boot.installed.kernelArgs", config.Boot.Installed.KernelArgs); err != nil {
+		return err
+	}
+	if config.Repos.OSMirror != "" {
+		parsed, err := url.Parse(config.Repos.OSMirror)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return fmt.Errorf("%s.repos.osMirror must be an http or https URL", path)
+		}
+	}
+	return nil
+}
+
+func validateFilesystems(path string, filesystems map[string]FilesystemConfig) error {
+	for name, filesystem := range filesystems {
+		if name == "" {
+			return fmt.Errorf("%s contains an empty filesystem name", path)
+		}
+		if boolValue(filesystem.Absent) {
+			continue
+		}
+		if filesystem.SizeMiB != nil && *filesystem.SizeMiB < 0 {
+			return fmt.Errorf("%s[%q].sizeMiB must be greater than or equal to 0", path, name)
+		}
+	}
+	return nil
+}
+
+func validateStringList(path string, values []string) error {
+	for i, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s[%d] must not be empty", path, i)
+		}
+	}
+	return nil
+}
+
+func validateOneOf(path string, value string, allowed ...string) error {
+	for _, candidate := range allowed {
+		if value == candidate {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s has unsupported value %q", path, value)
 }
 
 func validateTargetPolicy(section string, index int, targetNames []string, defaultTarget string, targets map[string]Target) error {

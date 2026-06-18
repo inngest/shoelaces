@@ -1,16 +1,64 @@
-{{define "preseed/common"}}
-d-i auto-install/enable boolean true
-d-i debian-installer/locale string en_US.UTF-8
-d-i console-setup/ask_detect boolean false
-d-i console-keymaps-at/keymap select us
-d-i keyboard-configuration/xkb-keymap select us
-d-i time/zone string UTC
-d-i clock-setup/utc boolean true
+{{define "preseed/common" -}}
+{{template "preseed/common/locale" .}}
+{{template "preseed/common/network" .}}
+{{template "preseed/common/time" .}}
+# Root login is disabled by default. Structured users can enable it by setting
+# users.root.locked=false and users.root.passwordCrypted.
+{{with $users := index . "users" -}}
+{{with $root := $users.Root -}}
+{{if and (not $root.Locked) $root.PasswordCrypted -}}
+d-i passwd/root-login boolean true
+d-i passwd/root-password-crypted password {{ $root.PasswordCrypted }}
+{{else -}}
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
+{{end -}}
+{{else -}}
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
+{{end -}}
 
-# create a regular user 'infra'
-d-i user-setup/allow-password-weak boolean true
+# Create the primary regular user from structured users. The password is locked
+# unless passwordCrypted is set and locked is false.
+d-i user-setup/allow-password-weak boolean false
 d-i passwd/make-user boolean true
-d-i passwd/user-fullname string engineering infrastructure
-d-i passwd/username string infra
-d-i passwd/user-password-crypted password $6$6C2rNs/iVblJ.PbR$Qu8.kmf0MmdSrSFGAMhThqFpIOoB7UT7M1LwngRo2LRfvUE.5/EYnCYQtWD0.7dea4m7szucDuSUTnVwBuu3K/
+{{with $primary := $users.Primary -}}
+d-i passwd/user-fullname string {{ if $primary.FullName }}{{ $primary.FullName }}{{ else }}{{ $primary.Name }}{{ end }}
+d-i passwd/username string {{ $primary.Name }}
+d-i passwd/user-password-crypted password {{ if $primary.Locked }}!{{ else }}{{ if $primary.PasswordCrypted }}{{ $primary.PasswordCrypted }}{{ else }}!{{ end }}{{ end }}
+{{else -}}
+d-i passwd/user-fullname string {{ if $.install_user_fullname }}{{ $.install_user_fullname }}{{ else }}Provisioning User{{ end }}
+d-i passwd/username string {{ if $.install_username }}{{ $.install_username }}{{ else }}debian{{ end }}
+d-i passwd/user-password-crypted password {{ if $.install_user_password_crypted }}{{ $.install_user_password_crypted }}{{ else }}!{{ end }}
+{{end -}}
+{{else -}}
+# Create a regular user. The default password is locked; provide
+# install_user_password_crypted from mappings or query params to enable login.
+d-i passwd/root-login boolean false
+d-i passwd/root-password-crypted password !
+d-i user-setup/allow-password-weak boolean false
+d-i passwd/make-user boolean true
+d-i passwd/user-fullname string {{ if .install_user_fullname }}{{ .install_user_fullname }}{{ else }}Provisioning User{{ end }}
+d-i passwd/username string {{ if .install_username }}{{ .install_username }}{{ else }}debian{{ end }}
+d-i passwd/user-password-crypted password {{ if .install_user_password_crypted }}{{ .install_user_password_crypted }}{{ else }}!{{ end }}
+{{end -}}
+{{end}}
+
+{{define "preseed/common/locale" -}}
+d-i auto-install/enable boolean true
+d-i debian-installer/locale string {{.locale_language}}
+d-i console-setup/ask_detect boolean false
+d-i console-keymaps-at/keymap select {{.locale_keyboard}}
+d-i keyboard-configuration/xkb-keymap select {{.locale_keyboard}}
+{{end}}
+
+{{define "preseed/common/network" -}}
+{{if .nameservers -}}
+d-i netcfg/get_nameservers string {{.nameservers}}
+{{end -}}
+{{end}}
+
+{{define "preseed/common/time" -}}
+d-i time/zone string {{.time_timezone}}
+d-i clock-setup/utc boolean {{.time_utc}}
 {{end}}

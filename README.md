@@ -1,7 +1,7 @@
 # Shoelaces at Inngest
 
 This repository is Inngest's maintained fork of [ThousandEyes Shoelaces](https://github.com/thousandeyes/shoelaces).
-Shoelaces serves iPXE, configuration, and static firstboot assets for bare-metal provisioning.
+Shoelaces serves iPXE, configuration, and static provisioning assets for bare-metal provisioning.
 At Inngest, the deployed Shoelaces binary is installed by Ansible from S3 release artifacts, so the release workflow publishes both GitHub release artifacts and the S3 compatibility path.
 
 ## Building and testing
@@ -163,7 +163,9 @@ Shoelaces accepts several parameters:
 * `data-dir`: the path to the root directory with the templates. It's advised to
   manage the templates in a VCS, such as a git repository. Refer to the [example
   data directory](configs/data-dir/) for more information.
-  Provisioning static files are served from `data-dir/static` at
+  Shoelaces embeds generic provisioning templates by default; disk templates in
+  `data-dir` override those embedded defaults. Provisioning static files are
+  served from `data-dir/static` first, then embedded generic defaults, at
   `/configs/static/*`.
 * `ui-dir`: optional path to a custom UI directory containing web templates and
   frontend assets. By default, Shoelaces uses UI assets embedded in the binary.
@@ -194,6 +196,13 @@ Configuration files can be TOML, YAML, or JSON. The parser is selected from
 the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`. Nested TFTP
 settings use a `tftp` object/table and map to the `tftp-*` CLI flags, such as
 `tftp.enabled`, `tftp.address`, and `tftp.timeout`.
+
+Generic provisioning defaults are embedded in the binary, but `mappings.yaml`
+is still external site policy and must be provided through `data-dir`. See
+[Provisioning Defaults And Overrides](docs/provisioning-overrides.md) for the
+disk overlay model, full-template overrides, structured provisioning fields,
+and `installer.extraTemplate` snippets for native installer behavior such as
+Debian `late_command`, kickstart `%post`, or cloud-init `runcmd`.
 
 Example TOML config:
 
@@ -290,9 +299,6 @@ Example mapping:
 defaults:
   params:
     encrypt_home: "false"
-    ansible_repo_url: git@example.com:infra/ansible.git
-    ansible_branch: main
-    ansible_playbook: playbooks/baremetal.yml
     linuxargs: ""
 
 targets:

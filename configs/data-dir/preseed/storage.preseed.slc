@@ -1,18 +1,18 @@
 {{define "preseed/storage" -}}
-{{template "preseed/common"}}
+{{template "preseed/common" .}}
 
 # The method should be set to "raid".
 d-i     partman-auto/method string raid
 # Specify the disks to be partitioned. They will all get the same layout,
 # so this will only work if the disks are the same size.
-d-i     partman-auto/disk string /dev/sda /dev/sdb
+d-i     partman-auto/disk string {{.storage_template_disk}}
 
 d-i     partman-lvm/device_remove_lvm boolean true
 d-i partman-lvm/device_remove_lvm_span boolean true
 d-i partman-auto/purge_lvm_from_device boolean true
 d-i     partman-md/device_remove_md boolean true
 d-i     partman-lvm/confirm boolean true
-d-i     partman-auto-lvm/new_vg_name string vg0
+d-i     partman-auto-lvm/new_vg_name string {{.vg_name}}
 
 # Next you need to specify the physical partitions that will be used.
 d-i partman-auto/expert_recipe string           \
@@ -80,21 +80,20 @@ d-i user-setup/encrypt-home boolean false
 
 d-i base-installer/install-recommends boolean false
 
-d-i clock-setup/utc boolean true
-d-i time/zone string UTC
+d-i clock-setup/utc boolean {{.time_utc}}
+d-i time/zone string {{.time_timezone}}
 
-d-i clock-setup/ntp boolean true
+d-i clock-setup/ntp boolean {{.time_ntp}}
 
 d-i debian-installer/quiet boolean false
 d-i debian-installer/splash boolean false
 
-##This should be set by Puppet instead.
-d-i pkgsel/update-policy select none
-##
+d-i pkgsel/update-policy select {{.packages_update_policy}}
 
-d-i grub-installer/timeout string 5
+d-i grub-installer/timeout string {{.boot_timeout_seconds}}
 d-i popularity-contest/participate boolean false
 
+{{.installerExtra}}
 
 d-i finish-install/keep-consoles boolean true
 d-i finish-install/reboot_in_progress note
