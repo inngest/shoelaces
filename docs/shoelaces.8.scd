@@ -104,8 +104,8 @@ variable names are uppercase flag names with hyphens converted to underscores,
 such as *DATA_DIR*, *BIND_ADDR*, and *TFTP_ENABLED*.
 
 Config files can be TOML, YAML, or JSON. The parser is selected from the file
-extension: ".toml", ".yaml", ".yml", or ".json". Hyphenated CLI/config keys
-can be written as nested config objects: "network.bindAddr" maps to
+extension: ".toml", ".yaml", ".yml", or ".json". Config files use nested
+keys for hyphenated CLI flags: "network.bindAddr" maps to
 "--bind-addr", "network.baseURL" maps to "--base-url", "data.dir" maps to
 "--data-dir", "log.level" maps to "--log-level", and "tftp.enabled" maps to
 "--tftp-enabled".
