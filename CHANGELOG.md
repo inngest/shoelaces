@@ -1,8 +1,32 @@
+## [1.5.0] - 2026-06-18
+
+### 🚀 Features
+
+- *(cli)* Replace flag parsing with urfave cli (#32)
+- Debian 13 (#34)
+- Embed web UI assets into binary (#31)
+- Add target-based provisioning mappings (#37)
+- *(prov)* Embed structured provisioning defaults (#38)
+
+### 🚜 Refactor
+
+- *(config)* Load structured configs with koanf (#33)
+- Move internal packages to root (#36)
+
+### 🧪 Testing
+
+- Migrate tests to testify and expand coverage (#30)
+
+### ⚙️ Miscellaneous Tasks
+
+- Change dry run to only run on release PRs (#28)
+- *(release)* Restore semver release flow (#35)
 ## [1.4.7] - 2026-06-12
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Publish per-platform Shoelaces artifacts (#26)
+- *(release)* V2026-06-12.05 (#27)
 ## [1.4.6] - 2026-06-12
 
 ### ⚙️ Miscellaneous Tasks
@@ -26,18 +50,14 @@
 - *(release)* Automate shoelaces release flow (#19)
 - Consolidate shoelaces release publishing (#21)
 - *(release)* V2026-06-12.02 (#20)
-## [1.4.0] - 2025-11-02
+## [1.3.2] - 2023-04-19
 
 ### 🚀 Features
 
-- Add human-friendly entry point
 - Support custom parameters in integ_test
 
 ### 💼 Other
 
-- Add docker build
-- Update dependencies
-- Use go 1.19 and tidy up deps
 - How client and server interact during poll
 
 ### 🎨 Styling
@@ -46,6 +66,29 @@
 
 ### 🧪 Testing
 
+- Add test for /start endpoint (#23)
+## [1.3.1] - 2023-01-05
+
+### 💼 Other
+
+- Use go 1.19 and tidy up deps
+## [1.3.0] - 2023-01-05
+
+### 🚀 Features
+
+- Add human-friendly entry point
+
+### 💼 Other
+
+- Update dependencies
+
+### 🧪 Testing
+
 - Ensures compatibility with Python 3
 - Fix test for behavior modified in 3233a856
-- Add test for /start endpoint (#23)
+## [1.2.0] - 2021-01-13
+
+### 💼 Other
+
+- Add docker build
+## [1.0.0] - 2018-08-03
