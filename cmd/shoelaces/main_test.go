@@ -137,6 +137,34 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 	assert.Equal(t, "json", got.LogHandler)
 }
 
+func TestCommandDebugIsCLIOnly(t *testing.T) {
+	t.Setenv("DEBUG", "true")
+
+	configValues := map[any]any{
+		"data-dir": "../../configs/data-dir",
+	}
+
+	var envOnly *environment.Environment
+	envCmd := command("test.toml", configValues, func(env *environment.Environment) error {
+		envOnly = env
+		return nil
+	})
+
+	require.NoError(t, envCmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NotNil(t, envOnly)
+	assert.False(t, envOnly.Debug)
+
+	var cliDebug *environment.Environment
+	cliCmd := command("test.toml", configValues, func(env *environment.Environment) error {
+		cliDebug = env
+		return nil
+	})
+
+	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "--debug"}))
+	require.NotNil(t, cliDebug)
+	assert.True(t, cliDebug.Debug)
+}
+
 func TestCommandUIDirPrecedence(t *testing.T) {
 	tests := []struct {
 		name      string

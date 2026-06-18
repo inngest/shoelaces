@@ -15,7 +15,6 @@ func TestReadConfigSupportsStructuredFormats(t *testing.T) {
 bind-addr = "localhost:8081"
 data-dir = "configs/data-dir/"
 ui-dir = "/srv/shoelaces/ui"
-debug = true
 log-level = "warn"
 log-handler = "json"
 
@@ -30,7 +29,6 @@ timeout = "5s"
 bind-addr: localhost:8081
 data-dir: configs/data-dir/
 ui-dir: /srv/shoelaces/ui
-debug: true
 log-level: warn
 log-handler: json
 tftp:
@@ -44,7 +42,6 @@ tftp:
   "bind-addr": "localhost:8081",
   "data-dir": "configs/data-dir/",
   "ui-dir": "/srv/shoelaces/ui",
-  "debug": true,
   "log-level": "warn",
   "log-handler": "json",
   "tftp": {
@@ -68,7 +65,6 @@ tftp:
 			assert.Equal(t, "localhost:8081", values["bind-addr"])
 			assert.Equal(t, "configs/data-dir/", values["data-dir"])
 			assert.Equal(t, "/srv/shoelaces/ui", values["ui-dir"])
-			assert.Equal(t, true, values["debug"])
 			assert.Equal(t, "warn", values["log-level"])
 			assert.Equal(t, "json", values["log-handler"])
 			assert.Equal(t, true, values["tftp-enabled"])
@@ -78,6 +74,14 @@ tftp:
 			assert.Equal(t, "5s", values["tftp-timeout"])
 		})
 	}
+}
+
+func TestReadConfigRejectsDebugConfigOption(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "shoelaces.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("debug: true\n"), 0o644))
+
+	_, err := readConfig(configPath)
+	assert.ErrorContains(t, err, "configuration variable provided but not defined: debug")
 }
 
 func TestReadConfigRejectsUnsupportedFormat(t *testing.T) {

@@ -3,6 +3,7 @@
 Shoelaces can be configured with CLI flags, environment variables, or a config file.
 Command-line flags have the highest precedence, then environment variables, then config file values, then defaults.
 Environment variable names are uppercase flag names with hyphens converted to underscores, such as `DATA_DIR`, `BIND_ADDR`, and `TFTP_ENABLED`.
+`--debug` is CLI-only; use `log-level: debug` in config files.
 
 Configuration files can be TOML, YAML, or JSON.
 The parser is selected from the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`.
@@ -19,7 +20,7 @@ Nested TFTP settings use a `tftp` object/table and map to the `tftp-*` CLI flags
 - `env-dir`: environment overrides directory inside `data-dir`. Defaults to `env_overrides`.
 - `mappings-file`: YAML mappings file path relative to `data-dir`. Defaults to `mappings.yaml`.
 - `template-extension`: template filename extension. Defaults to `.slc`.
-- `debug`: enable debug messages. This is equivalent to `log-level = "debug"`.
+- `debug`: CLI-only flag that enables debug messages. In config files, use `log-level = "debug"`.
 - `log-level`: minimum log level: `debug`, `info`, `warn`, or `error`. Defaults to `info`.
 - `log-handler`: log output format: `dev`, `text`, or `json`. Defaults to `dev`.
 - `tftp-enabled`: enable the embedded TFTP server.
@@ -55,7 +56,6 @@ bind-addr = "localhost:8081"
 data-dir = "configs/data-dir/"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
-debug = true
 log-level = "debug"
 log-handler = "dev"
 

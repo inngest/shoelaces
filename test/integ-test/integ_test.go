@@ -296,7 +296,7 @@ func startShoelacesWithDataDir(t *testing.T, dataDir string) *shoelacesProcess {
 data-dir = "%s"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
-debug = true
+log-level = "debug"
 `, apiAddr, dataDir)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)

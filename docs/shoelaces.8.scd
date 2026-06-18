@@ -20,14 +20,15 @@ shoelaces - automated server bootstrapping
 	"localhost:8081".
 
 *--config* <config>
-	Specifies a config file. All the following options can be specified in
-	the config.
+	Specifies a config file. Most options can be specified in the config;
+	*--debug* is CLI-only.
 
 *--data-dir* <directory>
 	Specifies a directory with mappings, configs, templates, etc.
 
 *--debug*
-	Enables debug mode.
+	Enables debug mode. This flag is CLI-only; use *log-level = "debug"* in
+	config files.
 
 *--env-dir* <directory>
 	Specifies a directory with environment overrides. Refer to the README of
@@ -129,7 +130,7 @@ bind-addr = "localhost:8081"
 data-dir = "/etc/shoelaces/data-dir/"
 template-extension = ".slc"
 mappings-file = "mappings.yaml"
-debug = true
+log-level = "debug"
 
 [tftp]
 enabled = true
