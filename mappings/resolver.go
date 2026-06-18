@@ -16,6 +16,7 @@ package mappings
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"regexp"
@@ -189,6 +190,7 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 			mappings.Defaults.provisioningConfig(),
 		),
 		targets: make(map[string]Target, len(mappings.Targets)),
+		logger:  log.MakeLogger(io.Discard).With("component", "mappings"),
 	}
 	for name, target := range mappings.Targets {
 		resolver.targets[name] = copyTarget(target)
@@ -242,21 +244,24 @@ func NewResolver(mappings *Mappings) (*Resolver, error) {
 // WithLogger attaches a logger to the compiled resolver and returns the same
 // resolver for call-site chaining.
 func (r *Resolver) WithLogger(logger log.Logger) *Resolver {
-	r.logger = logger
+	if logger == nil {
+		logger = log.MakeLogger(io.Discard)
+	}
+	r.logger = logger.With("component", "mappings")
 	return r
 }
 
 // Resolve selects a target using manual, MAC, IP, hostname, then network
 // precedence. When no default target is available, it returns allowed choices.
 func (r *Resolver) Resolve(request ResolveRequest) (ResolveResult, error) {
-	r.debug("Resolving boot target", "mac", request.Mac, "ip", request.IP, "hostname", request.Hostname, "manual", request.ManualTarget != "")
+	r.logger.Debug("Resolving boot target", "mac", request.Mac, "ip", request.IP, "hostname", request.Hostname, "manual", request.ManualTarget != "")
 	if request.ManualTarget != "" {
 		return r.resolveManual(request)
 	}
 
 	policy, matchType := r.findPolicy(request)
 	if policy == nil {
-		r.debug("No mapping policy matched boot target", "mac", request.Mac, "ip", request.IP, "hostname", request.Hostname)
+		r.logger.Debug("No mapping policy matched boot target", "mac", request.Mac, "ip", request.IP, "hostname", request.Hostname)
 		return ResolveResult{
 			MatchType:               MatchUnmatched,
 			AllowedTargets:          r.allTargets(),
@@ -268,36 +273,36 @@ func (r *Resolver) Resolve(request ResolveRequest) (ResolveResult, error) {
 		AllowedTargets: r.targetsByName(policy.targets),
 		MappingParams:  copyParamMap(policy.params),
 	}
-	r.debug("Matched mapping policy", "match_type", matchType, "default_target", policy.defaultTarget, "allowed_targets", result.AllowedTargetNames())
+	r.logger.Debug("Matched mapping policy", "match_type", matchType, "default_target", policy.defaultTarget, "allowed_targets", result.AllowedTargetNames())
 	if policy.defaultTarget == "" {
 		result.RequiresManualSelection = true
-		r.debug("Mapping policy requires manual target selection", "match_type", matchType, "allowed_targets", result.AllowedTargetNames())
+		r.logger.Debug("Mapping policy requires manual target selection", "match_type", matchType, "allowed_targets", result.AllowedTargetNames())
 		return result, nil
 	}
 
 	target, err := r.targetByName(policy.defaultTarget)
 	if err != nil {
-		r.error("Mapping policy references missing default target", "match_type", matchType, "target", policy.defaultTarget, "err", err)
+		r.logger.Error("Mapping policy references missing default target", "match_type", matchType, "target", policy.defaultTarget, "err", err)
 		return ResolveResult{}, err
 	}
 	result.TargetName = policy.defaultTarget
 	result.Target = target
 	result.Params, err = r.resolveParams(target, result.MappingParams, request)
 	if err != nil {
-		r.error("Failed to resolve target params", "match_type", matchType, "target", result.TargetName, "err", err)
+		r.logger.Error("Failed to resolve target params", "match_type", matchType, "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
 	result.Users, err = r.resolveUsers(target.Users, policy.users, request)
 	if err != nil {
-		r.error("Failed to resolve target users", "match_type", matchType, "target", result.TargetName, "err", err)
+		r.logger.Error("Failed to resolve target users", "match_type", matchType, "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
 	result.Provisioning, err = r.resolveProvisioning(target.Provisioning, policy.provisioning, request)
 	if err != nil {
-		r.error("Failed to resolve target provisioning", "match_type", matchType, "target", result.TargetName, "err", err)
+		r.logger.Error("Failed to resolve target provisioning", "match_type", matchType, "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
-	r.debug("Resolved boot target", "match_type", matchType, "target", result.TargetName, "script", result.Target.Script, "environment", result.Target.Environment)
+	r.logger.Debug("Resolved boot target", "match_type", matchType, "target", result.TargetName, "script", result.Target.Script, "environment", result.Target.Environment)
 	return result, nil
 }
 
@@ -307,7 +312,7 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 	mappingParams := map[string]any(nil)
 	if policy != nil {
 		if !stringInSlice(request.ManualTarget, policy.targets) {
-			r.debug("Manual target rejected by mapping policy", "target", request.ManualTarget, "allowed_targets", policy.targets)
+			r.logger.Debug("Manual target rejected by mapping policy", "target", request.ManualTarget, "allowed_targets", policy.targets)
 			return ResolveResult{}, fmt.Errorf("manual target %q is not allowed", request.ManualTarget)
 		}
 		allowedTargets = r.targetsByName(policy.targets)
@@ -316,7 +321,7 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 
 	target, err := r.targetByName(request.ManualTarget)
 	if err != nil {
-		r.error("Manual target does not exist", "target", request.ManualTarget, "err", err)
+		r.logger.Error("Manual target does not exist", "target", request.ManualTarget, "err", err)
 		return ResolveResult{}, err
 	}
 	result := ResolveResult{
@@ -328,7 +333,7 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 	}
 	result.Params, err = r.resolveParams(target, mappingParams, request)
 	if err != nil {
-		r.error("Failed to resolve manual target params", "target", result.TargetName, "err", err)
+		r.logger.Error("Failed to resolve manual target params", "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
 	var policyUsers map[string]UserConfig
@@ -337,7 +342,7 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 	}
 	result.Users, err = r.resolveUsers(target.Users, policyUsers, request)
 	if err != nil {
-		r.error("Failed to resolve manual target users", "target", result.TargetName, "err", err)
+		r.logger.Error("Failed to resolve manual target users", "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
 	var policyProvisioning ProvisioningConfig
@@ -346,25 +351,11 @@ func (r *Resolver) resolveManual(request ResolveRequest) (ResolveResult, error) 
 	}
 	result.Provisioning, err = r.resolveProvisioning(target.Provisioning, policyProvisioning, request)
 	if err != nil {
-		r.error("Failed to resolve manual target provisioning", "target", result.TargetName, "err", err)
+		r.logger.Error("Failed to resolve manual target provisioning", "target", result.TargetName, "err", err)
 		return ResolveResult{}, err
 	}
-	r.debug("Resolved manual boot target", "target", result.TargetName, "script", result.Target.Script, "environment", result.Target.Environment, "allowed_targets", result.AllowedTargetNames())
+	r.logger.Debug("Resolved manual boot target", "target", result.TargetName, "script", result.Target.Script, "environment", result.Target.Environment, "allowed_targets", result.AllowedTargetNames())
 	return result, nil
-}
-
-func (r *Resolver) debug(msg string, args ...any) {
-	if r.logger == nil {
-		return
-	}
-	r.logger.Debug(msg, append([]any{"component", "mappings"}, args...)...)
-}
-
-func (r *Resolver) error(msg string, args ...any) {
-	if r.logger == nil {
-		return
-	}
-	r.logger.Error(msg, append([]any{"component", "mappings"}, args...)...)
 }
 
 func (r *Resolver) findPolicy(request ResolveRequest) (*compiledPolicy, MatchType) {

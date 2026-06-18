@@ -16,6 +16,7 @@
 package server
 
 import (
+	"io"
 	"sync"
 	"time"
 
@@ -137,8 +138,12 @@ func StartStateCleaner(logger log.Logger, serverStates *States) {
 		expireAfterSec = 3 * 60
 		cleanInterval  = time.Minute
 	)
+	if logger == nil {
+		logger = log.MakeLogger(io.Discard)
+	}
+	logger = logger.With("component", stateCleanerComponent)
 
-	stateCleanerDebug(logger, "Starting server state cleaner", "expire_after", time.Duration(expireAfterSec)*time.Second, "interval", cleanInterval)
+	logger.Debug("Starting server state cleaner", "expire_after", time.Duration(expireAfterSec)*time.Second, "interval", cleanInterval)
 	go func() {
 		for {
 			time.Sleep(cleanInterval)
@@ -152,22 +157,15 @@ func cleanExpiredStates(logger log.Logger, serverStates *States, expireBefore in
 	serverStates.Lock()
 	defer serverStates.Unlock()
 
-	stateCleanerDebug(logger, "Sweeping server states", "before", time.Unix(int64(expireBefore), 0), "states", len(serverStates.Servers))
+	logger.Debug("Sweeping server states", "before", time.Unix(int64(expireBefore), 0), "states", len(serverStates.Servers))
 	removed := 0
 	for mac, state := range serverStates.Servers {
 		if state.LastAccess <= expireBefore {
 			delete(serverStates.Servers, mac)
 			removed++
-			stateCleanerDebug(logger, "Expired server state", "mac", mac, "ip", state.IP, "hostname", state.Hostname, "target", state.Target, "retry", state.Retry, "last_access", time.Unix(int64(state.LastAccess), 0))
+			logger.Debug("Expired server state", "mac", mac, "ip", state.IP, "hostname", state.Hostname, "target", state.Target, "retry", state.Retry, "last_access", time.Unix(int64(state.LastAccess), 0))
 		}
 	}
-	stateCleanerDebug(logger, "Completed server state sweep", "removed", removed, "remaining", len(serverStates.Servers))
+	logger.Debug("Completed server state sweep", "removed", removed, "remaining", len(serverStates.Servers))
 	return removed
-}
-
-func stateCleanerDebug(logger log.Logger, msg string, args ...any) {
-	if logger == nil {
-		return
-	}
-	logger.Debug(msg, append([]any{"component", stateCleanerComponent}, args...)...)
 }

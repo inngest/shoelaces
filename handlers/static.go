@@ -78,6 +78,7 @@ func (l overlayLayer) name() string {
 func OverlayFileServer(upper, lower string) *OverlayFileServerHandler {
 	return &OverlayFileServerHandler{
 		layers: []overlayLayer{{dir: upper}, {dir: lower}},
+		logger: log.MakeLogger(io.Discard).With("component", "static"),
 	}
 }
 
@@ -89,20 +90,23 @@ func OverlayFileServerWithFS(lower fs.FS, diskDirs ...string) *OverlayFileServer
 		layers = append(layers, overlayLayer{dir: dir})
 	}
 	layers = append(layers, overlayLayer{fsys: lower})
-	return &OverlayFileServerHandler{layers: layers}
+	return &OverlayFileServerHandler{layers: layers, logger: log.MakeLogger(io.Discard).With("component", "static")}
 }
 
-// WithLogger attaches a logger to the overlay file server. It is optional so
-// tests and standalone handlers can continue using the server without runtime
-// environment wiring.
+// WithLogger overrides the default discard logger used by standalone overlay
+// servers.
 func (o *OverlayFileServerHandler) WithLogger(logger log.Logger) *OverlayFileServerHandler {
+	if logger == nil {
+		logger = log.MakeLogger(io.Discard)
+	}
+	logger = logger.With("component", "static")
 	o.logger = logger
 	return o
 }
 
 func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fp := cleanRequestPath(r.URL.Path)
-	o.debug("Serving static overlay request", "path", fp, "layers", len(o.layers))
+	o.logger.Debug("Serving static overlay request", "path", fp, "layers", len(o.layers))
 
 	isDir := false
 	fileList := make(map[string]os.FileInfo)
@@ -112,20 +116,20 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		file, info, err := layer.open(fp)
 		if err != nil {
 			if os.IsNotExist(err) {
-				o.debug("Static overlay layer missed", "path", fp, "layer", layer.name())
+				o.logger.Debug("Static overlay layer missed", "path", fp, "layer", layer.name())
 				continue
 			}
-			o.error("Static overlay layer failed", "path", fp, "layer", layer.name(), "err", err)
+			o.logger.Error("Static overlay layer failed", "path", fp, "layer", layer.name(), "err", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		o.debug("Static overlay layer matched", "path", fp, "layer", layer.name(), "directory", info.IsDir())
+		o.logger.Debug("Static overlay layer matched", "path", fp, "layer", layer.name(), "directory", info.IsDir())
 		opened := overlayFile{file: file, info: info}
 		if info.IsDir() {
 			files, err := opened.readDir()
 			_ = opened.close()
 			if err != nil {
-				o.error("Failed to read static overlay directory", "path", fp, "layer", layer.name(), "err", err)
+				o.logger.Error("Failed to read static overlay directory", "path", fp, "layer", layer.name(), "err", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -133,27 +137,27 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 				if _, ok := fileList[f.Name()]; !ok {
 					info, err := f.Info()
 					if err != nil {
-						o.error("Failed to inspect static overlay entry", "path", fp, "layer", layer.name(), "entry", f.Name(), "err", err)
+						o.logger.Error("Failed to inspect static overlay entry", "path", fp, "layer", layer.name(), "entry", f.Name(), "err", err)
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
 					fileList[f.Name()] = info
 				}
 			}
-			o.debug("Merged static overlay directory", "path", fp, "layer", layer.name(), "entries", len(fileList))
+			o.logger.Debug("Merged static overlay directory", "path", fp, "layer", layer.name(), "entries", len(fileList))
 			isDir = true
 			continue
 		}
 		if firstFile.file == nil {
 			firstFile = opened
-			o.debug("Selected static overlay file", "path", fp, "layer", layer.name(), "file", info.Name())
+			o.logger.Debug("Selected static overlay file", "path", fp, "layer", layer.name(), "file", info.Name())
 		} else {
 			_ = opened.close()
 		}
 	}
 
 	if !isDir && firstFile.file == nil {
-		o.debug("Static overlay file not found", "path", fp)
+		o.logger.Debug("Static overlay file not found", "path", fp)
 		http.NotFound(w, r)
 		return
 	}
@@ -169,25 +173,11 @@ func (o *OverlayFileServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	defer func() { _ = firstFile.close() }()
 	readSeeker, ok := firstFile.file.(io.ReadSeeker)
 	if !ok {
-		o.error("Static overlay file cannot be served", "path", fp, "file", firstFile.info.Name())
+		o.logger.Error("Static overlay file cannot be served", "path", fp, "file", firstFile.info.Name())
 		http.Error(w, fmt.Sprintf("file %q cannot be served", firstFile.info.Name()), http.StatusInternalServerError)
 		return
 	}
 	http.ServeContent(w, r, firstFile.info.Name(), firstFile.info.ModTime(), readSeeker)
-}
-
-func (o *OverlayFileServerHandler) debug(msg string, args ...any) {
-	if o.logger == nil {
-		return
-	}
-	o.logger.Debug(msg, append([]any{"component", "static"}, args...)...)
-}
-
-func (o *OverlayFileServerHandler) error(msg string, args ...any) {
-	if o.logger == nil {
-		return
-	}
-	o.logger.Error(msg, append([]any{"component", "static"}, args...)...)
 }
 
 type overlayFile struct {
