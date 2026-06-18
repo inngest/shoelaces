@@ -3,11 +3,11 @@
 Shoelaces can be configured with CLI flags, environment variables, or a config file.
 Command-line flags have the highest precedence, then environment variables, then config file values, then defaults.
 Environment variable names are uppercase flag names with hyphens converted to underscores, such as `DATA_DIR`, `BIND_ADDR`, and `TFTP_ENABLED`.
-`--debug` is CLI-only; use `log-level: debug` in config files.
+`--debug` is CLI-only; use `log.level: debug` in config files.
 
 Configuration files can be TOML, YAML, or JSON.
 The parser is selected from the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`.
-Nested TFTP settings use a `tftp` object/table and map to the `tftp-*` CLI flags, such as `tftp.enabled`, `tftp.address`, and `tftp.timeout`.
+Hyphenated CLI/config keys can be written as nested config objects. For example, `network.bindAddr` maps to `--bind-addr`, `network.baseURL` maps to `--base-url`, `data.dir` maps to `--data-dir`, `log.level` maps to `--log-level`, and `tftp.enabled` maps to `--tftp-enabled`.
 
 ## Flags
 
@@ -20,7 +20,7 @@ Nested TFTP settings use a `tftp` object/table and map to the `tftp-*` CLI flags
 - `env-dir`: environment overrides directory inside `data-dir`. Defaults to `env_overrides`.
 - `mappings-file`: YAML mappings file path relative to `data-dir`. Defaults to `mappings.yaml`.
 - `template-extension`: template filename extension. Defaults to `.slc`.
-- `debug`: CLI-only flag that enables debug messages. In config files, use `log-level = "debug"`.
+- `debug`: CLI-only flag that enables debug messages. In config files, use `log.level = "debug"`.
 - `log-level`: minimum log level: `debug`, `info`, `warn`, or `error`. Defaults to `info`.
 - `log-handler`: log output format: `dev`, `text`, or `json`. Defaults to `dev`.
 - `tftp-enabled`: enable the embedded TFTP server.
@@ -52,12 +52,30 @@ See [Provisioning Defaults And Overrides](provisioning-overrides.md) for the dis
 ## Example
 
 ```toml
-bind-addr = "localhost:8081"
-data-dir = "configs/data-dir/"
-template-extension = ".slc"
-mappings-file = "mappings.yaml"
-log-level = "debug"
-log-handler = "dev"
+[network]
+bindAddr = "localhost:8081"
+baseURL = "localhost:8081"
+
+[data]
+dir = "configs/data-dir/"
+
+[template]
+extension = ".slc"
+
+[mappings]
+file = "mappings.yaml"
+
+[log]
+level = "debug"
+handler = "dev"
+
+[persistence]
+backend = "sqlite"
+path = "runtime/shoelaces.db"
+
+[persistence.retention]
+events = "720h"
+bootSessions = "24h"
 
 [tftp]
 enabled = true

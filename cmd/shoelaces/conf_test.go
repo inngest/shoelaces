@@ -13,11 +13,19 @@ import (
 func TestReadConfigSupportsStructuredFormats(t *testing.T) {
 	tests := map[string]string{
 		"shoelaces.toml": `
-bind-addr = "localhost:8081"
-data-dir = "configs/data-dir/"
-ui-dir = "/srv/shoelaces/ui"
-log-level = "warn"
-log-handler = "json"
+[network]
+bindAddr = "localhost:8081"
+baseURL = "shoelaces.example.test"
+
+[data]
+dir = "configs/data-dir/"
+
+[ui]
+dir = "/srv/shoelaces/ui"
+
+[log]
+level = "warn"
+handler = "json"
 
 [persistence]
 backend = "sqlite"
@@ -35,11 +43,16 @@ readonly = true
 timeout = "5s"
 `,
 		"shoelaces.yaml": `
-bind-addr: localhost:8081
-data-dir: configs/data-dir/
-ui-dir: /srv/shoelaces/ui
-log-level: warn
-log-handler: json
+network:
+  bindAddr: localhost:8081
+  baseURL: shoelaces.example.test
+data:
+  dir: configs/data-dir/
+ui:
+  dir: /srv/shoelaces/ui
+log:
+  level: warn
+  handler: json
 persistence:
   backend: sqlite
   path: runtime/test.db
@@ -54,11 +67,20 @@ tftp:
   timeout: 5s
 `,
 		"shoelaces.json": `{
-  "bind-addr": "localhost:8081",
-  "data-dir": "configs/data-dir/",
-  "ui-dir": "/srv/shoelaces/ui",
-  "log-level": "warn",
-  "log-handler": "json",
+  "network": {
+    "bindAddr": "localhost:8081",
+    "baseURL": "shoelaces.example.test"
+  },
+  "data": {
+    "dir": "configs/data-dir/"
+  },
+  "ui": {
+    "dir": "/srv/shoelaces/ui"
+  },
+  "log": {
+    "level": "warn",
+    "handler": "json"
+  },
   "persistence": {
     "backend": "sqlite",
     "path": "runtime/test.db",
@@ -86,6 +108,7 @@ tftp:
 			require.NoError(t, err)
 
 			assert.Equal(t, "localhost:8081", values["bind-addr"])
+			assert.Equal(t, "shoelaces.example.test", values["base-url"])
 			assert.Equal(t, "configs/data-dir/", values["data-dir"])
 			assert.Equal(t, "/srv/shoelaces/ui", values["ui-dir"])
 			assert.Equal(t, "warn", values["log-level"])
@@ -101,6 +124,44 @@ tftp:
 			assert.Equal(t, "5s", values["tftp-timeout"])
 		})
 	}
+}
+
+func TestReadConfigSupportsNestedHyphenatedKeys(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "shoelaces.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+network:
+  bindAddr: localhost:8081
+  baseURL: shoelaces.example.test
+data:
+  dir: configs/data-dir/
+env:
+  dir: envs
+template:
+  extension: .tmpl
+mappings:
+  file: site-mappings.yaml
+static:
+  dir: /srv/shoelaces/legacy-ui
+ui:
+  dir: /srv/shoelaces/ui
+log:
+  level: warn
+  handler: json
+`), 0o644))
+
+	values, err := readConfig(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "localhost:8081", values["bind-addr"])
+	assert.Equal(t, "shoelaces.example.test", values["base-url"])
+	assert.Equal(t, "configs/data-dir/", values["data-dir"])
+	assert.Equal(t, "envs", values["env-dir"])
+	assert.Equal(t, ".tmpl", values["template-extension"])
+	assert.Equal(t, "site-mappings.yaml", values["mappings-file"])
+	assert.Equal(t, "/srv/shoelaces/legacy-ui", values["static-dir"])
+	assert.Equal(t, "/srv/shoelaces/ui", values["ui-dir"])
+	assert.Equal(t, "warn", values["log-level"])
+	assert.Equal(t, "json", values["log-handler"])
 }
 
 func TestReadConfigSupportsFlatPersistenceKeys(t *testing.T) {

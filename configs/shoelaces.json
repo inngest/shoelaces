@@ -1,10 +1,20 @@
 {
-  "bind-addr": "localhost:8081",
-  "data-dir": "configs/data-dir/",
-  "template-extension": ".slc",
-  "mappings-file": "mappings.yaml",
-  "log-level": "debug",
-  "log-handler": "dev",
+  "network": {
+    "bindAddr": "localhost:8081"
+  },
+  "data": {
+    "dir": "configs/data-dir/"
+  },
+  "template": {
+    "extension": ".slc"
+  },
+  "mappings": {
+    "file": "mappings.yaml"
+  },
+  "log": {
+    "level": "debug",
+    "handler": "dev"
+  },
   "persistence": {
     "backend": "sqlite",
     "path": "runtime/shoelaces.db",

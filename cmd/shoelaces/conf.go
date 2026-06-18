@@ -45,6 +45,26 @@ func normalizeConfigValue(name string, value any) (string, any, error) {
 		"tftp-enabled", "tftp-addr", "tftp-root", "tftp-readonly", "tftp-timeout",
 		"persistence-backend", "persistence-path", "persistence-retention-events", "persistence-retention-boot-sessions":
 		return name, value, nil
+	case "network.bindAddr", "network.bindaddr", "network.bind-addr":
+		return "bind-addr", value, nil
+	case "network.baseURL", "network.baseurl", "network.base-url":
+		return "base-url", value, nil
+	case "data.dir":
+		return "data-dir", value, nil
+	case "ui.dir":
+		return "ui-dir", value, nil
+	case "static.dir":
+		return "static-dir", value, nil
+	case "env.dir":
+		return "env-dir", value, nil
+	case "template.extension":
+		return "template-extension", value, nil
+	case "mappings.file":
+		return "mappings-file", value, nil
+	case "log.level":
+		return "log-level", value, nil
+	case "log.handler":
+		return "log-handler", value, nil
 	case "tftp.enabled":
 		return "tftp-enabled", value, nil
 	case "tftp.address", "tftp.addr":

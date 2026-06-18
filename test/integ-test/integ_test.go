@@ -292,12 +292,23 @@ func startShoelacesWithDataDir(t *testing.T, dataDir string) *shoelacesProcess {
 	}
 
 	configPath := filepath.Join(t.TempDir(), "shoelaces.toml")
-	config := fmt.Sprintf(`bind-addr = "%s"
-data-dir = "%s"
-template-extension = ".slc"
-mappings-file = "mappings.yaml"
-log-level = "debug"
-persistence-backend = "memory"
+	config := fmt.Sprintf(`[network]
+bindAddr = "%s"
+
+[data]
+dir = "%s"
+
+[template]
+extension = ".slc"
+
+[mappings]
+file = "mappings.yaml"
+
+[log]
+level = "debug"
+
+[persistence]
+backend = "memory"
 `, apiAddr, dataDir)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)

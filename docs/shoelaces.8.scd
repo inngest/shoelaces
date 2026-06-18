@@ -27,7 +27,7 @@ shoelaces - automated server bootstrapping
 	Specifies a directory with mappings, configs, templates, etc.
 
 *--debug*
-	Enables debug mode. This flag is CLI-only; use *log-level = "debug"* in
+	Enables debug mode. This flag is CLI-only; use *log.level = "debug"* in
 	config files.
 
 *--env-dir* <directory>
@@ -104,8 +104,11 @@ variable names are uppercase flag names with hyphens converted to underscores,
 such as *DATA_DIR*, *BIND_ADDR*, and *TFTP_ENABLED*.
 
 Config files can be TOML, YAML, or JSON. The parser is selected from the file
-extension: ".toml", ".yaml", ".yml", or ".json". Nested TFTP settings use a
-"tftp" object/table and map to the "tftp-*" CLI flags.
+extension: ".toml", ".yaml", ".yml", or ".json". Hyphenated CLI/config keys
+can be written as nested config objects: "network.bindAddr" maps to
+"--bind-addr", "network.baseURL" maps to "--base-url", "data.dir" maps to
+"--data-dir", "log.level" maps to "--log-level", and "tftp.enabled" maps to
+"--tftp-enabled".
 
 The Shoelaces web UI templates and frontend assets are embedded in the binary
 by default. Use *--ui-dir* only when intentionally overriding those UI assets.
@@ -126,11 +129,29 @@ late_command, kickstart %post, or cloud-init runcmd.
 Here is an example TOML config file:
 
 ```
-bind-addr = "localhost:8081"
-data-dir = "/etc/shoelaces/data-dir/"
-template-extension = ".slc"
-mappings-file = "mappings.yaml"
-log-level = "debug"
+[network]
+bindAddr = "localhost:8081"
+baseURL = "localhost:8081"
+
+[data]
+dir = "/etc/shoelaces/data-dir/"
+
+[template]
+extension = ".slc"
+
+[mappings]
+file = "mappings.yaml"
+
+[log]
+level = "debug"
+
+[persistence]
+backend = "sqlite"
+path = "runtime/shoelaces.db"
+
+[persistence.retention]
+events = "720h"
+bootSessions = "24h"
 
 [tftp]
 enabled = true
