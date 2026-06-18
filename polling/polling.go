@@ -70,6 +70,118 @@ const (
 	TimeoutAction ManualAction = 2
 )
 
+// Service owns the dependencies needed for polling and manual target updates.
+// It keeps handlers from threading the same logger and runtime state through
+// every polling call.
+type Service struct {
+	logger           log.Logger
+	serverStates     *server.States
+	resolver         *mappings.Resolver
+	eventLog         *event.Log
+	templateRenderer *templates.ShoelacesTemplates
+	baseURL          string
+}
+
+func NewService(logger log.Logger, serverStates *server.States, resolver *mappings.Resolver, eventLog *event.Log, templateRenderer *templates.ShoelacesTemplates, baseURL string) *Service {
+	return &Service{
+		logger:           logger,
+		serverStates:     serverStates,
+		resolver:         resolver,
+		eventLog:         eventLog,
+		templateRenderer: templateRenderer,
+		baseURL:          baseURL,
+	}
+}
+
+// ListServers returns the hosts currently waiting for manual target selection.
+func (s *Service) ListServers() server.Servers {
+	return ListServers(s.serverStates)
+}
+
+// StartScript renders the initial iPXE polling script.
+func (s *Service) StartScript() string {
+	return genStartScript(s.logger, s.baseURL)
+}
+
+// UpdateTarget stores a manually selected target for a polling host.
+func (s *Service) UpdateTarget(srv server.Server, targetName string, environment string, params map[string]interface{}) (inputErr bool, err error) {
+	if !utils.IsValidMAC(srv.Mac) {
+		return true, errors.New("invalid MAC")
+	}
+	if s.resolver == nil {
+		s.resolver, err = mappings.NewResolver(nil)
+		if err != nil {
+			return false, err
+		}
+		s.resolver.WithLogger(s.logger)
+	}
+
+	s.serverStates.Lock()
+	defer s.serverStates.Unlock()
+	servers := s.serverStates.Servers
+	if servers[srv.Mac] == nil {
+		return true, errors.New("MAC is not in the booting state")
+	}
+
+	bootServer := servers[srv.Mac].Server
+	result, resolvedServer, err := resolveBootTarget(s.resolver, mappings.ResolveRequest{
+		Mac:          bootServer.Mac,
+		IP:           bootServer.IP,
+		Hostname:     bootServer.Hostname,
+		ManualTarget: targetName,
+		Params:       copyParams(params),
+	}, s.baseURL, bootServer)
+	if err != nil {
+		return true, err
+	}
+	if !result.HasTarget() {
+		return true, errors.New("manual target did not resolve to a boot script")
+	}
+
+	// Test the template before storing the selection for the polling host.
+	if _, err = s.templateRenderer.RenderTemplate(result.Target.Script, mappings.ParamsWithProvisioning(result.Params, result.Users, result.Provisioning), result.Target.Environment); err != nil {
+		return true, err
+	}
+
+	s.logger.Debug("Setting server override", "component", "polling", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
+	s.eventLog.AddEvent(event.UserSelection, resolvedServer, "", result.Target.Script, nil)
+	servers[srv.Mac].Server = resolvedServer
+	servers[srv.Mac].Target = result.Target.Script
+	servers[srv.Mac].Environment = result.Target.Environment
+	servers[srv.Mac].Params = result.Params
+	servers[srv.Mac].Users = result.Users
+	servers[srv.Mac].Provisioning = result.Provisioning
+	return false, nil
+}
+
+// Poll resolves and renders the next script for a booting host.
+func (s *Service) Poll(srv server.Server) (scriptText string, err error) {
+	if s.resolver == nil {
+		s.resolver, err = mappings.NewResolver(nil)
+		if err != nil {
+			return "", err
+		}
+		s.resolver.WithLogger(s.logger)
+	}
+
+	result, resolvedServer, err := resolveBootTarget(s.resolver, mappings.ResolveRequest{
+		Mac:      srv.Mac,
+		IP:       srv.IP,
+		Hostname: srv.Hostname,
+	}, s.baseURL, srv)
+	if err != nil {
+		return "", err
+	}
+	if result.HasTarget() {
+		s.logger.Debug("Host found", "component", "polling", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
+		s.eventLog.AddEvent(event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params)
+		return s.genBootScript(result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning), nil
+	}
+
+	s.logger.Debug("Host needs manual target selection", "component", "polling", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
+	return s.manualAction(srv, targetOptions(result.AllowedTargets))
+}
+
 // ListServers provides a list of the servers that tried to boot
 // but did not match the hostname regex or network mappings.
 func ListServers(serverStates *server.States) server.Servers {
@@ -94,53 +206,7 @@ func ListServers(serverStates *server.States) server.Servers {
 func UpdateTarget(logger log.Logger, serverStates *server.States,
 	resolver *mappings.Resolver, templateRenderer *templates.ShoelacesTemplates, eventLog *event.Log, baseURL string, srv server.Server,
 	targetName string, _ string, params map[string]interface{}) (inputErr bool, err error) {
-
-	if !utils.IsValidMAC(srv.Mac) {
-		return true, errors.New("invalid MAC")
-	}
-	if resolver == nil {
-		resolver, err = mappings.NewResolver(nil)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	serverStates.Lock()
-	defer serverStates.Unlock()
-	servers := serverStates.Servers
-	if servers[srv.Mac] == nil {
-		return true, errors.New("MAC is not in the booting state")
-	}
-
-	bootServer := servers[srv.Mac].Server
-	result, resolvedServer, err := resolveBootTarget(resolver, mappings.ResolveRequest{
-		Mac:          bootServer.Mac,
-		IP:           bootServer.IP,
-		Hostname:     bootServer.Hostname,
-		ManualTarget: targetName,
-		Params:       copyParams(params),
-	}, baseURL, bootServer)
-	if err != nil {
-		return true, err
-	}
-	if !result.HasTarget() {
-		return true, errors.New("manual target did not resolve to a boot script")
-	}
-
-	// Test the template before storing the selection for the polling host.
-	if _, err = templateRenderer.RenderTemplate(logger, result.Target.Script, mappings.ParamsWithProvisioning(result.Params, result.Users, result.Provisioning), result.Target.Environment); err != nil {
-		return true, err
-	}
-
-	logger.Debug("component", "polling", "msg", "Setting server override", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
-	eventLog.AddEvent(event.UserSelection, resolvedServer, "", result.Target.Script, nil)
-	servers[srv.Mac].Server = resolvedServer
-	servers[srv.Mac].Target = result.Target.Script
-	servers[srv.Mac].Environment = result.Target.Environment
-	servers[srv.Mac].Params = result.Params
-	servers[srv.Mac].Users = result.Users
-	servers[srv.Mac].Provisioning = result.Provisioning
-	return false, nil
+	return NewService(logger, serverStates, resolver, eventLog, templateRenderer, baseURL).UpdateTarget(srv, targetName, "", params)
 }
 
 // Poll contains the main logic of Shoelaces. It uses several heuristics to find
@@ -150,67 +216,42 @@ func Poll(logger log.Logger, serverStates *server.States,
 	resolver *mappings.Resolver,
 	eventLog *event.Log, templateRenderer *templates.ShoelacesTemplates,
 	baseURL string, srv server.Server) (scriptText string, err error) {
-
-	if resolver == nil {
-		resolver, err = mappings.NewResolver(nil)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	result, resolvedServer, err := resolveBootTarget(resolver, mappings.ResolveRequest{
-		Mac:      srv.Mac,
-		IP:       srv.IP,
-		Hostname: srv.Hostname,
-	}, baseURL, srv)
-	if err != nil {
-		return "", err
-	}
-	if result.HasTarget() {
-		logger.Debug("component", "polling", "msg", "Host found", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
-		eventLog.AddEvent(event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params)
-		return genBootScript(logger, templateRenderer, result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning), nil
-	}
-
-	logger.Debug("component", "polling", "msg", "Host needs manual target selection", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
-	return manualAction(logger, serverStates, templateRenderer, eventLog, baseURL, srv, targetOptions(result.AllowedTargets))
+	return NewService(logger, serverStates, resolver, eventLog, templateRenderer, baseURL).Poll(srv)
 }
 
-func manualAction(logger log.Logger, serverStates *server.States, templateRenderer *templates.ShoelacesTemplates,
-	eventLog *event.Log, baseURL string, srv server.Server, allowedTargets []server.TargetOption) (scriptText string, err error) {
+func (s *Service) manualAction(srv server.Server, allowedTargets []server.TargetOption) (scriptText string, err error) {
 
-	script, action := chooseManualAction(logger, serverStates, eventLog, srv, allowedTargets)
-	logger.Debug("component", "polling", "target-script-name", script, "action", action)
+	script, action := s.chooseManualAction(srv, allowedTargets)
+	s.logger.Debug("Manual action selected", "component", "polling", "target-script-name", script, "action", action)
 
 	switch action {
 	case BootAction:
 		setHostName(script.Params, srv.Mac)
 		srv.Hostname = script.Params["hostname"].(string)
-		eventLog.AddEvent(event.HostBoot, srv, event.ManualBoot, script.Name, script.Params)
-		return genBootScript(logger, templateRenderer, script.Name, script.Environment, script.Params, script.Users, script.Provisioning), nil
+		s.eventLog.AddEvent(event.HostBoot, srv, event.ManualBoot, script.Name, script.Params)
+		return s.genBootScript(script.Name, script.Environment, script.Params, script.Users, script.Provisioning), nil
 
 	case RetryAction:
-		return genRetryScript(logger, baseURL, srv.Mac), nil
+		return s.genRetryScript(srv.Mac), nil
 
 	case TimeoutAction:
 		return timeoutScript, nil
 
 	default:
-		logger.Info("component", "polling", "msg", "Unknown action")
+		s.logger.Info("Unknown action", "component", "polling")
 		return "", fmt.Errorf("%s", "Unknown action")
 	}
 }
 
-func chooseManualAction(logger log.Logger, serverStates *server.States,
-	eventLog *event.Log, srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction) {
+func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction) {
 
-	serverStates.Lock()
-	defer serverStates.Unlock()
+	s.serverStates.Lock()
+	defer s.serverStates.Unlock()
 
-	if m := serverStates.Servers[srv.Mac]; m != nil {
+	if m := s.serverStates.Servers[srv.Mac]; m != nil {
 		if m.Target != server.InitTarget {
-			serverStates.DeleteServer(srv.Mac)
-			logger.Debug("component", "polling", "msg", "Server boot", "mac", srv.Mac)
+			s.serverStates.DeleteServer(srv.Mac)
+			s.logger.Debug("Server boot", "component", "polling", "mac", srv.Mac)
 			return &mappings.Script{
 				Name:         m.Target,
 				Environment:  m.Environment,
@@ -220,18 +261,18 @@ func chooseManualAction(logger log.Logger, serverStates *server.States,
 		} else if m.Retry <= maxRetry {
 			m.Retry++
 			m.LastAccess = int(time.Now().UTC().Unix())
-			logger.Debug("component", "polling", "msg", "Retrying reboot", "mac", srv.Mac)
+			s.logger.Debug("Retrying reboot", "component", "polling", "mac", srv.Mac)
 			return nil, RetryAction
 		} else {
-			serverStates.DeleteServer(srv.Mac)
-			logger.Debug("component", "polling", "msg", "Timing out server", "mac", srv.Mac)
+			s.serverStates.DeleteServer(srv.Mac)
+			s.logger.Debug("Timing out server", "component", "polling", "mac", srv.Mac)
 			return nil, TimeoutAction
 		}
 	}
 
-	serverStates.AddServerWithTargets(srv, allowedTargets)
-	logger.Debug("component", "polling", "msg", "New server", "mac", srv.Mac)
-	eventLog.AddEvent(event.HostPoll, srv, "", "", nil)
+	s.serverStates.AddServerWithTargets(srv, allowedTargets)
+	s.logger.Debug("New server", "component", "polling", "mac", srv.Mac)
+	s.eventLog.AddEvent(event.HostPoll, srv, "", "", nil)
 
 	return nil, RetryAction
 }
@@ -330,48 +371,52 @@ func setHostName(params map[string]interface{}, mac string) {
 }
 
 func GenStartScript(logger log.Logger, baseURL string) string {
+	return genStartScript(logger, baseURL)
+}
+
+func genStartScript(logger log.Logger, baseURL string) string {
 	variablesMap := map[string]interface{}{}
 	parsedTemplate := &bytes.Buffer{}
 
 	tmpl, err := template.New("retry").Parse(startScript)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error parsing start template")
+		logger.Info("Error parsing start template", "component", "polling")
 		panic(err)
 	}
 
 	variablesMap["baseURL"] = baseURL
 	err = tmpl.Execute(parsedTemplate, variablesMap)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error executing start template")
+		logger.Info("Error executing start template", "component", "polling")
 		panic(err)
 	}
 
 	return parsedTemplate.String()
 }
 
-func genBootScript(logger log.Logger, templateRenderer *templates.ShoelacesTemplates, scriptName, envName string, params map[string]interface{}, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) string {
-	text, err := templateRenderer.RenderTemplate(logger, scriptName, mappings.ParamsWithProvisioning(params, users, provisioning), envName)
+func (s *Service) genBootScript(scriptName, envName string, params map[string]interface{}, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) string {
+	text, err := s.templateRenderer.RenderTemplate(scriptName, mappings.ParamsWithProvisioning(params, users, provisioning), envName)
 	if err != nil {
 		panic(err)
 	}
 	return text
 }
 
-func genRetryScript(logger log.Logger, baseURL string, mac string) string {
+func (s *Service) genRetryScript(mac string) string {
 	variablesMap := map[string]interface{}{}
 	parsedTemplate := &bytes.Buffer{}
 
 	tmpl, err := template.New("retry").Parse(retryScript)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error parsing retry template", "mac", mac)
+		s.logger.Info("Error parsing retry template", "component", "polling", "mac", mac)
 		panic(err)
 	}
 
-	variablesMap["baseURL"] = baseURL
+	variablesMap["baseURL"] = s.baseURL
 	variablesMap["macAddress"] = utils.MacColonToDash(mac)
 	err = tmpl.Execute(parsedTemplate, variablesMap)
 	if err != nil {
-		logger.Info("component", "polling", "msg", "Error executing retry template", "mac", mac)
+		s.logger.Info("Error executing retry template", "component", "polling", "mac", mac)
 		panic(err)
 	}
 

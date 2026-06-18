@@ -28,6 +28,7 @@ import (
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
 )
@@ -41,6 +42,7 @@ type Environment struct {
 	MappingResolver *mappings.Resolver
 	ServerStates    *server.States
 	EventLog        *event.Log
+	Polling         *polling.Service
 	ParamsBlacklist []string
 	Templates       *templates.ShoelacesTemplates // Dynamic slc templates
 	StaticTemplates *template.Template            // Static Templates
@@ -57,19 +59,23 @@ type Environment struct {
 	TemplateExtension string
 	MappingsFile      string
 	Debug             bool
+	LogLevel          string
+	LogHandler        string
 }
 
 // New returns an initialized environment structure
 func New(options Options) *Environment {
 	env := defaultEnvironment()
 	env.applyOptions(options)
+	logOptions := []log.Option{log.WithLevelString(env.LogLevel), log.WithHandlerString(env.LogHandler)}
+	if env.Debug {
+		logOptions = append(logOptions, log.WithLevel(log.LevelDebug))
+	}
+	env.Logger = log.MakeLogger(os.Stdout, logOptions...)
+	env.Templates = templates.New(env.Logger)
 
 	if env.TFTP != nil && env.TFTP.Root == "./tftp" && env.DataDir != "" {
 		env.TFTP.Root = env.DataDir + "/tftp"
-	}
-
-	if env.Debug {
-		env.Logger = log.AllowDebug(env.Logger)
 	}
 
 	if env.BaseURL == "" {
@@ -77,21 +83,39 @@ func New(options Options) *Environment {
 	}
 
 	env.Environments = env.initEnvOverrides()
-
 	env.EventLog = &event.Log{}
 
-	env.Logger.Info("component", "environment", "msg", "Override found", "environment", env.Environments)
+	env.logStartupConfig()
+	env.Logger.Info("Discovered environment overrides", "component", "environment", "count", len(env.Environments), "environments", env.Environments)
 
 	mappingsPath := path.Join(env.DataDir, env.MappingsFile)
+	env.Logger.Info("Loading mappings", "component", "environment", "source", mappingsPath)
 	if err := env.initMappings(mappingsPath); err != nil {
 		panic(err)
 	}
 
 	env.initStaticTemplates()
-	env.Templates.ParseTemplates(env.Logger, env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 	server.StartStateCleaner(env.Logger, env.ServerStates)
 
 	return env
+}
+
+func (env *Environment) logStartupConfig() {
+	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler)
+	if env.TFTP == nil {
+		env.Logger.Info("Configured TFTP", "component", "environment", "enabled", false)
+		return
+	}
+	env.Logger.Info("Configured TFTP", "component", "environment", "enabled", env.TFTP.Enabled, "addr", env.TFTP.Addr, "root", env.TFTP.Root, "readonly", env.TFTP.Readonly, "timeout", env.TFTP.Timeout)
+}
+
+func (env *Environment) uiSource() string {
+	if env.UsesUIOverride() {
+		return env.UIDir
+	}
+	return "embedded"
 }
 
 func defaultEnvironment() *Environment {
@@ -99,10 +123,12 @@ func defaultEnvironment() *Environment {
 	env.NetworkMaps = make([]mappings.NetworkMap, 0)
 	env.HostnameMaps = make([]mappings.HostnameMap, 0)
 	env.ServerStates = &server.States{Servers: make(map[string]*server.State)}
+	env.EventLog = &event.Log{}
 	env.ParamsBlacklist = []string{"baseURL"}
-	env.Templates = templates.New()
 	env.Environments = make([]string, 0)
 	env.Logger = log.MakeLogger(os.Stdout)
+	env.Templates = templates.New(env.Logger)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 
 	return env
 }
@@ -164,6 +190,7 @@ func (env *Environment) initMappings(mappingsPath string) error {
 	if err != nil {
 		return err
 	}
+	env.MappingResolver.WithLogger(env.Logger)
 
 	for _, configNetMap := range configMappings.NetworkMaps {
 		_, ipnet, err := net.ParseCIDR(configNetMap.Network)

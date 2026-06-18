@@ -16,6 +16,7 @@
 package server
 
 import (
+	"io"
 	"sync"
 	"time"
 
@@ -26,6 +27,8 @@ import (
 const (
 	// InitTarget is an initial dummy target assigned to the servers
 	InitTarget = "NOTARGET"
+
+	stateCleanerComponent = "state_cleaner"
 )
 
 // TargetOption is a boot target that can be selected for a waiting server.
@@ -132,28 +135,37 @@ func (m *States) DeleteServer(mac string) {
 // have been inactive in Shoelaces for more than 3 minutes.
 func StartStateCleaner(logger log.Logger, serverStates *States) {
 	const (
-		// 3 minutes
 		expireAfterSec = 3 * 60
 		cleanInterval  = time.Minute
 	)
-	// Clean up the server states. Expire after 3 minutes
+	if logger == nil {
+		logger = log.MakeLogger(io.Discard)
+	}
+	logger = logger.With("component", stateCleanerComponent)
+
+	logger.Debug("Starting server state cleaner", "expire_after", time.Duration(expireAfterSec)*time.Second, "interval", cleanInterval)
 	go func() {
 		for {
 			time.Sleep(cleanInterval)
-
-			servers := serverStates.Servers
-			expire := int(time.Now().UTC().Unix()) - expireAfterSec
-
-			logger.Debug("component", "polling", "msg", "Cleaning", "before", time.Unix(int64(expire), 0))
-
-			serverStates.Lock()
-			for mac, state := range servers {
-				if state.LastAccess <= expire {
-					delete(servers, mac)
-					logger.Debug("component", "polling", "msg", "Mac cleaned", "mac", mac)
-				}
-			}
-			serverStates.Unlock()
+			expireBefore := int(time.Now().UTC().Unix()) - expireAfterSec
+			cleanExpiredStates(logger, serverStates, expireBefore)
 		}
 	}()
+}
+
+func cleanExpiredStates(logger log.Logger, serverStates *States, expireBefore int) int {
+	serverStates.Lock()
+	defer serverStates.Unlock()
+
+	logger.Debug("Sweeping server states", "before", time.Unix(int64(expireBefore), 0), "states", len(serverStates.Servers))
+	removed := 0
+	for mac, state := range serverStates.Servers {
+		if state.LastAccess <= expireBefore {
+			delete(serverStates.Servers, mac)
+			removed++
+			logger.Debug("Expired server state", "mac", mac, "ip", state.IP, "hostname", state.Hostname, "target", state.Target, "retry", state.Retry, "last_access", time.Unix(int64(state.LastAccess), 0))
+		}
+	}
+	logger.Debug("Completed server state sweep", "removed", removed, "remaining", len(serverStates.Servers))
+	return removed
 }

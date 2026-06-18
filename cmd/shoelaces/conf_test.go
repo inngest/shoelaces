@@ -16,6 +16,8 @@ bind-addr = "localhost:8081"
 data-dir = "configs/data-dir/"
 ui-dir = "/srv/shoelaces/ui"
 debug = true
+log-level = "warn"
+log-handler = "json"
 
 [tftp]
 enabled = true
@@ -29,6 +31,8 @@ bind-addr: localhost:8081
 data-dir: configs/data-dir/
 ui-dir: /srv/shoelaces/ui
 debug: true
+log-level: warn
+log-handler: json
 tftp:
   enabled: true
   address: ":69"
@@ -41,6 +45,8 @@ tftp:
   "data-dir": "configs/data-dir/",
   "ui-dir": "/srv/shoelaces/ui",
   "debug": true,
+  "log-level": "warn",
+  "log-handler": "json",
   "tftp": {
     "enabled": true,
     "address": ":69",
@@ -63,6 +69,8 @@ tftp:
 			assert.Equal(t, "configs/data-dir/", values["data-dir"])
 			assert.Equal(t, "/srv/shoelaces/ui", values["ui-dir"])
 			assert.Equal(t, true, values["debug"])
+			assert.Equal(t, "warn", values["log-level"])
+			assert.Equal(t, "json", values["log-handler"])
 			assert.Equal(t, true, values["tftp-enabled"])
 			assert.Equal(t, ":69", values["tftp-addr"])
 			assert.Equal(t, "/var/lib/shoelaces/tftp", values["tftp-root"])

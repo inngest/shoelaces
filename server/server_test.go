@@ -15,9 +15,12 @@
 package server
 
 import (
+	"io"
 	"sort"
 	"testing"
+	"time"
 
+	"github.com/inngest/shoelaces/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,4 +62,37 @@ func TestServersSortByMAC(t *testing.T) {
 	assert.Equal(t, "00:00:00:00:00:01", servers[0].Mac)
 	assert.Equal(t, "00:00:00:00:00:02", servers[1].Mac)
 	assert.Equal(t, "ff:ff:ff:ff:ff:ff", servers[2].Mac)
+}
+
+func TestCleanExpiredStatesRemovesInactiveServers(t *testing.T) {
+	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
+	expireBefore := int(now.Add(-3 * time.Minute).Unix())
+	states := &States{Servers: map[string]*State{
+		"00:00:00:00:00:01": {
+			Server:     New("00:00:00:00:00:01", "192.0.2.1", "expired"),
+			Target:     InitTarget,
+			Retry:      2,
+			LastAccess: expireBefore - 1,
+		},
+		"00:00:00:00:00:02": {
+			Server:     New("00:00:00:00:00:02", "192.0.2.2", "boundary"),
+			Target:     InitTarget,
+			Retry:      1,
+			LastAccess: expireBefore,
+		},
+		"00:00:00:00:00:03": {
+			Server:     New("00:00:00:00:00:03", "192.0.2.3", "active"),
+			Target:     InitTarget,
+			Retry:      1,
+			LastAccess: expireBefore + 1,
+		},
+	}}
+
+	removed := cleanExpiredStates(log.MakeLogger(io.Discard), states, expireBefore)
+
+	assert.Equal(t, 2, removed)
+	assert.Nil(t, states.Servers["00:00:00:00:00:01"])
+	assert.Nil(t, states.Servers["00:00:00:00:00:02"])
+	require.NotNil(t, states.Servers["00:00:00:00:00:03"])
+	assert.Equal(t, "active", states.Servers["00:00:00:00:00:03"].Hostname)
 }

@@ -17,6 +17,7 @@ package mappings
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"regexp"
@@ -233,7 +234,11 @@ var knownTopLevelMappingKeys = map[string]struct{}{
 
 // ParseMappings parses the mappings YAML file into the new mappings schema.
 func ParseMappings(logger log.Logger, mappingsFile string) (*Mappings, error) {
-	logger.Info("component", "config", "msg", "Reading mappings", "source", mappingsFile)
+	if logger == nil {
+		logger = log.MakeLogger(io.Discard)
+	}
+	logger = logger.With("component", "config")
+	logger.Info("Reading mappings", "source", mappingsFile)
 
 	k := koanf.New(".")
 	if err := k.Load(file.Provider(mappingsFile), yaml.Parser()); err != nil {
@@ -250,6 +255,7 @@ func ParseMappings(logger log.Logger, mappingsFile string) (*Mappings, error) {
 	if err := validateMappings(mappings); err != nil {
 		return nil, err
 	}
+	logger.Info("Validated mappings", "source", mappingsFile, "targets", len(mappings.Targets), "network_maps", len(mappings.NetworkMaps), "hostname_maps", len(mappings.HostnameMaps), "mac_maps", len(mappings.MacMaps), "ip_maps", len(mappings.IPMaps))
 
 	return mappings, nil
 }

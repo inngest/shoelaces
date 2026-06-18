@@ -41,7 +41,7 @@ func configValuesFromKoanf(k *koanf.Koanf) (map[any]any, error) {
 
 func normalizeConfigValue(name string, value any) (string, any, error) {
 	switch name {
-	case "bind-addr", "base-url", "data-dir", "ui-dir", "static-dir", "env-dir", "template-extension", "mappings-file", "debug",
+	case "bind-addr", "base-url", "data-dir", "ui-dir", "static-dir", "env-dir", "template-extension", "mappings-file", "debug", "log-level", "log-handler",
 		"tftp-enabled", "tftp-addr", "tftp-root", "tftp-readonly", "tftp-timeout":
 		return name, value, nil
 	case "tftp.enabled":

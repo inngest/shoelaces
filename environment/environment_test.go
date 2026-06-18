@@ -125,7 +125,7 @@ networkMaps:
 		BindAddr: "localhost:0",
 		DataDir:  dataDir,
 	})
-	rendered, err := env.Templates.RenderTemplate(log.MakeLogger(io.Discard), "debian.ipxe", map[string]interface{}{
+	rendered, err := env.Templates.RenderTemplate("debian.ipxe", map[string]interface{}{
 		"baseURL":      "127.0.0.1:8081",
 		"encrypt_home": false,
 		"hostname":     "embedded-startup",

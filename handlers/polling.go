@@ -24,7 +24,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/inngest/shoelaces/log"
-	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/utils"
 )
@@ -33,7 +32,7 @@ import (
 func StartPollingHandler(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 
-	script := polling.GenStartScript(env.Logger, env.BaseURL)
+	script := env.Polling.StartScript()
 
 	_, _ = w.Write([]byte(script))
 }
@@ -46,6 +45,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
+		env.Logger.Error("Failed to parse polling remote address", "component", "handler", "remote_addr", r.RemoteAddr, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -57,6 +57,7 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = validateMACAndIP(env.Logger, mac, ip)
 	if err != nil {
+		env.Logger.Error("Rejected polling request", "component", "handler", "mac", mac, "ip", ip, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -66,11 +67,10 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server := server.New(mac, ip, host)
-	script, err := polling.Poll(
-		env.Logger, env.ServerStates, env.MappingResolver,
-		env.EventLog, env.Templates, env.BaseURL, server)
+	script, err := env.Polling.Poll(server)
 
 	if err != nil {
+		env.Logger.Error("Polling request failed", "component", "handler", "mac", mac, "ip", ip, "host", host, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -82,9 +82,9 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 func ServerListHandler(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 
-	servers, err := json.Marshal(polling.ListServers(env.ServerStates))
+	servers, err := json.Marshal(env.Polling.ListServers())
 	if err != nil {
-		env.Logger.Error("component", "handler", "err", err)
+		env.Logger.Error("Failed to marshal server list", "component", "handler", "err", err)
 		os.Exit(1)
 	}
 
@@ -99,33 +99,37 @@ func UpdateTargetHandler(w http.ResponseWriter, r *http.Request) {
 
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
+		env.Logger.Error("Failed to parse update target remote address", "component", "handler", "remote_addr", r.RemoteAddr, "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
+		env.Logger.Error("Failed to parse update target form", "component", "handler", "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	mac, scriptName, environment, params := parsePostForm(r.PostForm)
 	if mac == "" || scriptName == "" {
+		env.Logger.Error("Rejected update target request", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "reason", "missing required field")
 		http.Error(w, "MAC address and target must not be empty", http.StatusBadRequest)
 		return
 	}
 
 	server := server.New(mac, ip, "")
-	inputErr, err := polling.UpdateTarget(
-		env.Logger, env.ServerStates, env.MappingResolver, env.Templates, env.EventLog, env.BaseURL, server,
-		scriptName, environment, params)
+	inputErr, err := env.Polling.UpdateTarget(server, scriptName, environment, params)
 
 	if err != nil {
 		if inputErr {
+			env.Logger.Error("Rejected update target request", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "err", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else {
+			env.Logger.Error("Update target request failed", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "err", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
+	env.Logger.Info("Accepted update target request", "component", "handler", "mac", mac, "target", scriptName, "environment", environment, "remote_ip", ip, "params", len(params))
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -148,16 +152,16 @@ func parsePostForm(form map[string][]string) (mac, scriptName, environment strin
 
 func validateMACAndIP(logger log.Logger, mac string, ip string) (err error) {
 	if !utils.IsValidMAC(mac) {
-		logger.Error("component", "polling", "msg", "Invalid MAC", "mac", mac)
+		logger.Error("Invalid MAC", "component", "polling", "mac", mac)
 		return errors.New("invalid MAC")
 	}
 
 	if !utils.IsValidIP(ip) {
-		logger.Error("component", "polling", "msg", "Invalid IP", "ip", ip)
+		logger.Error("Invalid IP", "component", "polling", "ip", ip)
 		return errors.New("invalid IP")
 	}
 
-	logger.Debug("component", "polling", "msg", "MAC and IP validated", "mac", mac, "ip", ip)
+	logger.Debug("MAC and IP validated", "component", "polling", "mac", mac, "ip", ip)
 
 	return nil
 }
@@ -165,7 +169,7 @@ func validateMACAndIP(logger log.Logger, mac string, ip string) (err error) {
 func resolveHostname(logger log.Logger, ip string) string {
 	host := utils.ResolveHostname(ip)
 	if host == "" {
-		logger.Info("component", "polling", "msg", "Can't resolve IP", "ip", ip)
+		logger.Info("Can't resolve IP", "component", "polling", "ip", ip)
 	}
 
 	return host

@@ -28,11 +28,11 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	r := mux.NewRouter()
 
 	// Main UI page
-	r.Handle("/", handlers.RenderDefaultTemplate("index")).Methods("GET")
+	r.Handle("/", handlers.RenderDefaultTemplate("index", env)).Methods("GET")
 	// Event Log History page
-	r.Handle("/events", handlers.RenderDefaultTemplate("events")).Methods("GET")
+	r.Handle("/events", handlers.RenderDefaultTemplate("events", env)).Methods("GET")
 	// Currently configured mappings page
-	r.Handle("/mappings", handlers.RenderDefaultTemplate("mappings")).Methods("GET")
+	r.Handle("/mappings", handlers.RenderDefaultTemplate("mappings", env)).Methods("GET")
 	// Static files used by the UI
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", staticFileServer(env)))
 	// Manual boot parameters POST endpoint
@@ -43,7 +43,7 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	// Event Log History JSON endpoint
 	r.HandleFunc("/ajax/events", handlers.ListEvents).Methods("GET")
 	// Provides the list of possible parameters for a given template
-	r.HandleFunc("/ajax/script/params", handlers.GetTemplateParams)
+	r.Handle("/ajax/script/params", handlers.TemplateParamsServer(env))
 
 	// Static configuration files endpoint
 	r.PathPrefix("/configs/static/").Handler(http.StripPrefix("/configs/static/",
@@ -51,7 +51,7 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 
 	// Dynamic configuration endpoint
 	r.PathPrefix("/configs/").Handler(http.StripPrefix("/configs/",
-		handlers.TemplateServer()))
+		handlers.TemplateServer(env)))
 
 	// Starting point for iPXE boot agents, usualy defined by DHCP server.
 	// Gets the iPXE boot agents into the polling loop.

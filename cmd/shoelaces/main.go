@@ -53,23 +53,15 @@ func runServer(env *environment.Environment) error {
 	app := handlers.MiddlewareChain(env).Then(router.ShoelacesRouter(env))
 
 	if env.TFTP != nil && env.TFTP.Enabled {
-		tf := tftpserver.New(env.TFTP.Addr, env.TFTP.Root, env.TFTP.Readonly, env.TFTP.Timeout)
+		tf := tftpserver.New(env.TFTP.Addr, env.TFTP.Root, env.TFTP.Readonly, env.TFTP.Timeout).WithLogger(env.Logger)
 		go func() {
-			env.Logger.Info(
-				"component", "tftp",
-				"transport", "udp",
-				"addr", env.TFTP.Addr,
-				"root", env.TFTP.Root,
-				"readonly", env.TFTP.Readonly,
-				"msg", "listening",
-			)
 			if err := tf.ListenAndServe(); err != nil {
-				env.Logger.Error("component", "tftp", "err", err)
+				env.Logger.Error("TFTP server failed", "component", "tftp", "err", err)
 			}
 		}()
 	}
 
-	env.Logger.Info("component", "main", "transport", "http", "addr", env.BindAddr, "msg", "listening")
+	env.Logger.Info("listening", "component", "main", "transport", "http", "addr", env.BindAddr)
 	return http.ListenAndServe(env.BindAddr, app)
 }
 
@@ -166,6 +158,18 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 				Usage:   "Enable debug mode",
 				Sources: flagSources("debug", "DEBUG"),
 			},
+			&cli.StringFlag{
+				Name:    "log-level",
+				Value:   defaults.LogLevel,
+				Usage:   "Log level: debug, info, warn, or error",
+				Sources: flagSources("log-level", "LOG_LEVEL"),
+			},
+			&cli.StringFlag{
+				Name:    "log-handler",
+				Value:   defaults.LogHandler,
+				Usage:   "Log handler: dev, text, or json",
+				Sources: flagSources("log-handler", "LOG_HANDLER"),
+			},
 			&cli.BoolFlag{
 				Name:    "tftp-enabled",
 				Value:   tftpDefaults.Enabled,
@@ -241,6 +245,8 @@ func optionsFromCommand(cmd *cli.Command) environment.Options {
 		TemplateExtension: cmd.String("template-extension"),
 		MappingsFile:      cmd.String("mappings-file"),
 		Debug:             cmd.Bool("debug"),
+		LogLevel:          cmd.String("log-level"),
+		LogHandler:        cmd.String("log-handler"),
 		TFTP:              tftp,
 	}
 }

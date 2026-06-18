@@ -47,7 +47,7 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 		states,
 		nil,
 		events,
-		templates.New(),
+		templates.New(log.MakeLogger(testLogWriter{})),
 		"127.0.0.1:8081",
 		srv,
 	)
@@ -62,7 +62,7 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 			states,
 			nil,
 			events,
-			templates.New(),
+			templates.New(log.MakeLogger(testLogWriter{})),
 			"127.0.0.1:8081",
 			srv,
 		)
@@ -443,16 +443,16 @@ role {{.role}}
 		0o644,
 	))
 
-	templateRenderer := templates.New()
-	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), dataDir, "env_overrides", nil, ".slc")
+	templateRenderer := templates.New(log.MakeLogger(testLogWriter{}))
+	templateRenderer.ParseTemplates(dataDir, "env_overrides", nil, ".slc")
 	return templateRenderer
 }
 
 func newEmbeddedProvisioningTemplates(t *testing.T) *templates.ShoelacesTemplates {
 	t.Helper()
 
-	templateRenderer := templates.New()
-	templateRenderer.ParseTemplates(log.MakeLogger(testLogWriter{}), t.TempDir(), "env_overrides", nil, ".slc")
+	templateRenderer := templates.New(log.MakeLogger(testLogWriter{}))
+	templateRenderer.ParseTemplates(t.TempDir(), "env_overrides", nil, ".slc")
 	return templateRenderer
 }
 
