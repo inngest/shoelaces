@@ -32,42 +32,69 @@ Provisioning static files are served from `/configs/static/*` in this order:
 
 The UI route `/static/*` is separate and serves only web UI assets.
 
-## Provisioning Flow
+## Rendering And Override Flow
 
 ```mermaid
 flowchart TD
-    bootReq["Boot request: /poll or manual target"] --> resolve["Resolve mappings.yaml policy"]
-    resolve --> merge["Merge defaults, target, matched mapping, runtime values"]
-    merge --> project["Project structured provisioning into render params"]
-    project --> bootTpl["Render selected boot template, for example debian.ipxe"]
+    selected["Selected target from mappings.yaml"] --> merged["Merge defaults, target, matched mapping, runtime values"]
+    merged --> projected["Project structured users and provisioning into render params"]
 
     embedded["Embedded generic provisioning templates"] --> loader["Template loader"]
-    diskTpl["Disk data-dir template overrides"] --> loader
-    envTpl["Environment overrides"] --> loader
-    loader --> bootTpl
+    disk["Disk templates under data-dir"] --> loader
+    env["Environment overrides under data-dir/env_overrides/<env>"] --> loader
+    loader --> precedence["Later definitions override earlier template definitions"]
 
-    bootTpl --> configReq["Installer fetches /configs/{template}"]
-    configReq --> query["Apply explicit query params for stateless direct renders"]
-    query --> project
-    project --> installCfg["Render preseed, kickstart, or cloud-init config"]
+    projected --> renderBoot["Render boot template, for example debian.ipxe"]
+    precedence --> renderBoot
+    projected --> renderConfig["Render installer config: preseed, kickstart, or cloud-init"]
+    precedence --> renderConfig
 
-    installCfg --> extraDecision{"installer.extraTemplate selected?"}
-    extraDecision -- yes --> extraTpl["Render selected native installer snippet verbatim"]
+    renderConfig --> extraDecision{"installer.extraTemplate selected?"}
+    extraDecision -- yes --> extra["Render selected native installer snippet verbatim"]
     extraDecision -- no --> noop["Use embedded no-op provisioning/extra"]
-    extraTpl --> response["Final installer config response"]
-    noop --> response
-
-    staticReq["Installer fetches /configs/static/*"] --> diskStatic["Serve data-dir/static first"]
-    diskStatic --> embeddedStatic["Fallback to embedded generic provisioning static files"]
-
-    uiReq["Browser fetches /static/*"] --> uiAssets["Serve UI assets only"]
+    extra --> final["Final rendered installer config"]
+    noop --> final
 
     classDef embedded fill:#eef7ff,stroke:#4c8eda,color:#0f172a;
     classDef disk fill:#fff7e6,stroke:#d99a2b,color:#0f172a;
+    classDef render fill:#ecfdf5,stroke:#10b981,color:#0f172a;
+    class embedded,noop embedded;
+    class disk,env,extra disk;
+    class renderBoot,renderConfig,final render;
+```
+
+## Shoelaces Request Flow
+
+```mermaid
+flowchart TD
+    firmware["Machine firmware / iPXE client"] --> poll["GET /poll/{version}/{mac}"]
+    operator["Operator selects target in UI"] --> update["POST /update/target"]
+    update --> poll
+
+    poll --> resolve["Resolve target from mappings.yaml"]
+    resolve --> boot["Return rendered boot script"]
+
+    boot --> installer["OS installer"]
+    installer --> configs["GET /configs/{template}?query=params"]
+    configs --> configRender["Render embedded or disk installer template"]
+    configRender --> installer
+
+    installer --> cfgStatic["GET /configs/static/*"]
+    cfgStatic --> staticDisk["Serve data-dir/static first"]
+    staticDisk --> staticEmbedded["Fallback to embedded provisioning static defaults"]
+
+    browser["Browser"] --> uiRoutes["GET /, /events, /mappings"]
+    browser --> uiStatic["GET /static/*"]
+    uiStatic --> uiAssets["Serve embedded or ui-dir UI assets only"]
+
+    classDef api fill:#eef7ff,stroke:#4c8eda,color:#0f172a;
+    classDef installer fill:#ecfdf5,stroke:#10b981,color:#0f172a;
+    classDef static fill:#fff7e6,stroke:#d99a2b,color:#0f172a;
     classDef ui fill:#f1f5f9,stroke:#64748b,color:#0f172a;
-    class embedded,embeddedStatic,noop embedded;
-    class diskTpl,envTpl,diskStatic,extraTpl disk;
-    class uiReq,uiAssets ui;
+    class poll,update,configs api;
+    class firmware,installer,boot,configRender installer;
+    class cfgStatic,staticDisk,staticEmbedded static;
+    class browser,uiRoutes,uiStatic,uiAssets ui;
 ```
 
 ## Full Template Overrides
