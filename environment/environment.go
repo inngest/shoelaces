@@ -45,7 +45,7 @@ type Environment struct {
 	// MappingResolver holds the new target resolver for the mappings.yaml
 	// schema used by polling and manual boot paths.
 	MappingResolver *mappings.Resolver
-	ServerStates    *server.States
+	ServerStates    server.StateStore
 	EventLog        *event.Log
 	Polling         *polling.Service
 	ParamsBlacklist []string
@@ -92,6 +92,7 @@ func New(options Options) *Environment {
 	env.Environments = env.initEnvOverrides()
 	env.RuntimeStore = env.initPersistence()
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
+	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
 	env.cleanupEventRetention()
 
 	env.logStartupConfig()
@@ -106,7 +107,7 @@ func New(options Options) *Environment {
 	env.initStaticTemplates()
 	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
-	server.StartStateCleaner(env.Logger, env.ServerStates)
+	server.StartStateStoreCleaner(env.Logger, env.ServerStates)
 
 	return env
 }
@@ -138,7 +139,6 @@ func defaultEnvironment() *Environment {
 	env := &Environment{}
 	env.NetworkMaps = make([]mappings.NetworkMap, 0)
 	env.HostnameMaps = make([]mappings.HostnameMap, 0)
-	env.ServerStates = &server.States{Servers: make(map[string]*server.State)}
 	env.ParamsBlacklist = []string{"baseURL"}
 	env.Environments = make([]string, 0)
 	env.Logger = log.MakeLogger(os.Stdout)
@@ -146,6 +146,7 @@ func defaultEnvironment() *Environment {
 	env.PersistenceConfig = persistence.DefaultConfig()
 	env.RuntimeStore = memory.New()
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
+	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
 	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 
 	return env

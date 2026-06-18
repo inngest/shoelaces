@@ -20,7 +20,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/inngest/shoelaces/log"
@@ -81,10 +80,17 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 func ServerListHandler(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 
-	servers, err := json.Marshal(env.Polling.ListServers())
+	waitingServers, err := env.Polling.ListServers()
+	if err != nil {
+		env.Logger.Error("Failed to list waiting servers", "component", "handler", "err", err)
+		http.Error(w, "failed to list waiting servers", http.StatusInternalServerError)
+		return
+	}
+	servers, err := json.Marshal(waitingServers)
 	if err != nil {
 		env.Logger.Error("Failed to marshal server list", "component", "handler", "err", err)
-		os.Exit(1)
+		http.Error(w, "failed to marshal server list", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

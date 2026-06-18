@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +16,15 @@
 package server
 
 import (
+	"context"
 	"io"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/persistence/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,4 +99,94 @@ func TestCleanExpiredStatesRemovesInactiveServers(t *testing.T) {
 	assert.Nil(t, states.Servers["00:00:00:00:00:02"])
 	require.NotNil(t, states.Servers["00:00:00:00:00:03"])
 	assert.Equal(t, "active", states.Servers["00:00:00:00:00:03"].Hostname)
+}
+
+func TestPersistentStateStorePersistsWaitingAndSelectedState(t *testing.T) {
+	backend := memory.New()
+	t.Cleanup(func() { require.NoError(t, backend.Close()) })
+
+	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
+	store := NewPersistentStateStore(backend, backend)
+	store.now = func() time.Time { return now }
+	ctx := context.Background()
+
+	waitingServer := New("00:00:00:00:00:02", "192.0.2.2", "waiting")
+	require.NoError(t, store.QueueServer(ctx, waitingServer, []TargetOption{
+		{Name: "debian12", Script: "debian.ipxe", Label: "Debian 12"},
+	}))
+
+	waiting, err := store.ListWaiting(ctx)
+	require.NoError(t, err)
+	require.Len(t, waiting, 1)
+	assert.Equal(t, "00:00:00:00:00:02", waiting[0].Mac)
+	assert.Equal(t, []TargetOption{{Name: "debian12", Script: "debian.ipxe", Label: "Debian 12"}}, waiting[0].AllowedTargets)
+
+	state, err := store.GetState(ctx, waitingServer.Mac)
+	require.NoError(t, err)
+	assert.Equal(t, InitTarget, state.Target)
+	assert.Equal(t, 1, state.Retry)
+	assert.Equal(t, int(now.Unix()), state.LastAccess)
+
+	state.Target = "debian.ipxe"
+	state.Environment = "prod"
+	state.Params = map[string]interface{}{"baseURL": "shoelaces.test", "release": "trixie"}
+	state.Users = map[string]mappings.ResolvedUser{
+		"infra": {Name: "infra", Primary: true, Groups: []string{"sudo"}},
+	}
+	state.Provisioning = mappings.ProvisioningConfig{
+		Repos: mappings.ReposConfig{Release: "trixie"},
+	}
+	state.Retry = 3
+	state.LastAccess = int(now.Add(time.Minute).Unix())
+	require.NoError(t, store.SaveState(ctx, state))
+
+	selected, err := store.GetState(ctx, waitingServer.Mac)
+	require.NoError(t, err)
+	assert.Equal(t, "debian.ipxe", selected.Target)
+	assert.Equal(t, "prod", selected.Environment)
+	assert.Equal(t, "trixie", selected.Params["release"])
+	assert.Equal(t, "infra", selected.Users["infra"].Name)
+	assert.Equal(t, []string{"sudo"}, selected.Users["infra"].Groups)
+	assert.Equal(t, "trixie", selected.Provisioning.Repos.Release)
+	assert.Equal(t, 3, selected.Retry)
+
+	waiting, err = store.ListWaiting(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, waiting)
+
+	require.NoError(t, store.DeleteState(ctx, waitingServer.Mac))
+	_, err = store.GetState(ctx, waitingServer.Mac)
+	assert.ErrorIs(t, err, ErrStateNotFound)
+}
+
+func TestCleanExpiredStatesUsesPersistentStateStore(t *testing.T) {
+	backend := memory.New()
+	t.Cleanup(func() { require.NoError(t, backend.Close()) })
+
+	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
+	store := NewPersistentStateStore(backend, backend)
+	ctx := context.Background()
+
+	require.NoError(t, store.SaveState(ctx, &State{
+		Server:     New("00:00:00:00:00:01", "192.0.2.1", "expired"),
+		Target:     InitTarget,
+		Retry:      1,
+		LastAccess: int(now.Add(-StateExpireAfter - time.Second).Unix()),
+	}))
+	require.NoError(t, store.SaveState(ctx, &State{
+		Server:     New("00:00:00:00:00:02", "192.0.2.2", "active"),
+		Target:     InitTarget,
+		Retry:      1,
+		LastAccess: int(now.Unix()),
+	}))
+
+	removed, err := CleanExpiredStates(log.MakeLogger(io.Discard), store, now.Add(-StateExpireAfter))
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), removed)
+
+	_, err = store.GetState(ctx, "00:00:00:00:00:01")
+	assert.ErrorIs(t, err, ErrStateNotFound)
+	active, err := store.GetState(ctx, "00:00:00:00:00:02")
+	require.NoError(t, err)
+	assert.Equal(t, "active", active.Hostname)
 }
