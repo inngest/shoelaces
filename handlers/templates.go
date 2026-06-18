@@ -33,7 +33,7 @@ type TemplateHandler struct {
 // TemplateHandler is the dynamic configuration provider endpoint. It
 // receives a key and maybe an environment.
 func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	variablesMap := map[string]interface{}{}
+	variablesMap := map[string]any{}
 	configName := filepath.Clean(r.URL.Path)
 	env := t.env
 

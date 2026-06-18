@@ -19,7 +19,7 @@ type BootSession struct {
 }
 
 type Event struct {
-	ID                 int64  `json:"id"`
+	ID                 []byte `json:"id"`
 	EventType          int64  `json:"event_type"`
 	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano"`
 	Mac                string `json:"mac"`

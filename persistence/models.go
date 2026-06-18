@@ -14,12 +14,16 @@
 
 package persistence
 
-import "time"
+import (
+	"time"
+
+	"github.com/oklog/ulid/v2"
+)
 
 // EventRecord is the persisted, already-redacted form of a Shoelaces event.
 type EventRecord struct {
-	// ID is assigned by durable backends after insertion.
-	ID int64
+	// ID is the public, sortable event identifier returned by APIs.
+	ID ulid.ULID
 	// Type is the event type value from the event package.
 	Type int
 	// OccurredAt records when the event happened.

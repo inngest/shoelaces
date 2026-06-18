@@ -21,12 +21,12 @@ import (
 	"time"
 
 	"github.com/inngest/shoelaces/persistence"
+	"github.com/oklog/ulid/v2"
 )
 
 // store is an in-process implementation of the persistence CQRS interfaces.
 type store struct {
 	mu           sync.RWMutex
-	nextEventID  int64
 	events       []persistence.EventRecord
 	serverStates map[string]persistence.ServerStateRecord
 	bootSessions map[string]persistence.BootSessionRecord
@@ -41,12 +41,13 @@ func New() persistence.Store {
 }
 
 // AppendEvent persists an event in memory.
-func (s *store) AppendEvent(_ context.Context, event persistence.EventRecord) (int64, error) {
+func (s *store) AppendEvent(_ context.Context, event persistence.EventRecord) (ulid.ULID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.nextEventID++
-	event.ID = s.nextEventID
+	if event.ID.IsZero() {
+		event.ID = ulid.Make()
+	}
 	s.events = append(s.events, copyEvent(event))
 	return event.ID, nil
 }

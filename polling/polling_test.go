@@ -16,6 +16,7 @@
 package polling
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/persistence/memory"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +41,7 @@ func TestGenStartScriptUsesBaseURL(t *testing.T) {
 
 func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 	states := &server.States{Servers: make(map[string]*server.State)}
-	events := &event.Log{}
+	events := newEventLog()
 	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
 
 	script, err := Poll(
@@ -54,7 +56,7 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, script, "chain -ar http://127.0.0.1:8081/poll/1/06-66-de-ad-be-ef")
 	require.NotNil(t, states.Servers[srv.Mac])
-	assert.Len(t, events.Events[srv.Mac], 1)
+	assert.Len(t, eventsForMAC(t, events, srv.Mac), 1)
 
 	for i := 0; i <= maxRetry; i++ {
 		script, err = Poll(
@@ -81,7 +83,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 		wantBootType string
 		wantHostname string
 		wantRendered string
-		wantParams   map[string]interface{}
+		wantParams   map[string]any
 	}{
 		{
 			name: "hostname match keeps resolved hostname",
@@ -90,7 +92,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 				Targets: map[string]mappings.Target{
 					"web": {
 						Script: "test.ipxe",
-						Params: map[string]interface{}{
+						Params: map[string]any{
 							"hostname": "target-host",
 							"role":     "web",
 						},
@@ -105,7 +107,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			wantBootType: event.PtrMatchBoot,
 			wantHostname: "matched-host",
 			wantRendered: "boot matched-host",
-			wantParams: map[string]interface{}{
+			wantParams: map[string]any{
 				"baseURL":  "127.0.0.1:8081",
 				"hostname": "matched-host",
 				"role":     "web",
@@ -118,7 +120,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 				Targets: map[string]mappings.Target{
 					"db": {
 						Script: "test.ipxe",
-						Params: map[string]interface{}{
+						Params: map[string]any{
 							"hostnamePrefix": "rack-",
 							"role":           "db",
 						},
@@ -133,7 +135,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			wantBootType: event.SubnetMatchBoot,
 			wantHostname: "rack-06-66-de-ad-be-ef",
 			wantRendered: "boot rack-06-66-de-ad-be-ef",
-			wantParams: map[string]interface{}{
+			wantParams: map[string]any{
 				"baseURL":        "127.0.0.1:8081",
 				"hostname":       "rack-06-66-de-ad-be-ef",
 				"hostnamePrefix": "rack-",
@@ -150,7 +152,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 						Network: mappings.NetworkConfig{
 							Hostname: "structured-db",
 						},
-						Params: map[string]interface{}{
+						Params: map[string]any{
 							"role": "db",
 						},
 					},
@@ -164,7 +166,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			wantBootType: event.SubnetMatchBoot,
 			wantHostname: "structured-db",
 			wantRendered: "boot structured-db",
-			wantParams: map[string]interface{}{
+			wantParams: map[string]any{
 				"baseURL":  "127.0.0.1:8081",
 				"hostname": "structured-db",
 				"role":     "db",
@@ -174,7 +176,7 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			events := &event.Log{}
+			events := newEventLog()
 			rendered, err := Poll(
 				log.MakeLogger(testLogWriter{}),
 				&server.States{Servers: make(map[string]*server.State)},
@@ -188,8 +190,9 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			require.NoError(t, err)
 			assert.Contains(t, rendered, tt.wantRendered)
 			assert.Contains(t, rendered, "base 127.0.0.1:8081")
-			require.Len(t, events.Events[tt.srv.Mac], 1)
-			got := events.Events[tt.srv.Mac][0]
+			hostEvents := eventsForMAC(t, events, tt.srv.Mac)
+			require.Len(t, hostEvents, 1)
+			got := hostEvents[0]
 			assert.Equal(t, event.HostBoot, got.Type)
 			assert.Equal(t, tt.wantBootType, got.BootType)
 			assert.Equal(t, "test.ipxe", got.Script)
@@ -200,12 +203,12 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 }
 
 func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
-	events := &event.Log{}
+	events := newEventLog()
 	resolver := mustResolver(t, &mappings.Mappings{
 		Targets: map[string]mappings.Target{
 			"debian12": {
 				Script: "debian.ipxe",
-				Params: map[string]interface{}{
+				Params: map[string]any{
 					"encrypt_home": false,
 					"release":      "bookworm",
 				},
@@ -233,13 +236,14 @@ func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
 	assert.Contains(t, rendered, "Debian bookworm netboot")
 	assert.Contains(t, rendered, "hostname=06-66-de-ad-be-ef")
 	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false")
-	require.Len(t, events.Events[srv.Mac], 1)
-	assert.Equal(t, event.HostBoot, events.Events[srv.Mac][0].Type)
-	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
+	hostEvents := eventsForMAC(t, events, srv.Mac)
+	require.Len(t, hostEvents, 1)
+	assert.Equal(t, event.HostBoot, hostEvents[0].Type)
+	assert.Equal(t, "debian.ipxe", hostEvents[0].Script)
 }
 
 func TestPollNetworkDefaultTargetRendersTargetRepoRelease(t *testing.T) {
-	events := &event.Log{}
+	events := newEventLog()
 	resolver := mustResolver(t, &mappings.Mappings{
 		Defaults: mappings.DefaultsMap{
 			Params: map[string]any{
@@ -291,19 +295,20 @@ func TestPollNetworkDefaultTargetRendersTargetRepoRelease(t *testing.T) {
 	assert.Contains(t, rendered, "Debian trixie netboot")
 	assert.Contains(t, rendered, "http://ftp.debian.org/debian/dists/trixie/")
 	assert.NotContains(t, rendered, "bookworm")
-	require.Len(t, events.Events[srv.Mac], 1)
-	assert.Equal(t, event.HostBoot, events.Events[srv.Mac][0].Type)
-	assert.Equal(t, event.SubnetMatchBoot, events.Events[srv.Mac][0].BootType)
-	assert.Equal(t, "debian.ipxe", events.Events[srv.Mac][0].Script)
+	hostEvents := eventsForMAC(t, events, srv.Mac)
+	require.Len(t, hostEvents, 1)
+	assert.Equal(t, event.HostBoot, hostEvents[0].Type)
+	assert.Equal(t, event.SubnetMatchBoot, hostEvents[0].BootType)
+	assert.Equal(t, "debian.ipxe", hostEvents[0].Script)
 }
 
 func TestPollPassesStructuredUsersToTemplates(t *testing.T) {
-	events := &event.Log{}
+	events := newEventLog()
 	resolver := mustResolver(t, &mappings.Mappings{
 		Targets: map[string]mappings.Target{
 			"debian12": {
 				Script: "test.ipxe",
-				Params: map[string]interface{}{
+				Params: map[string]any{
 					"role": "web",
 				},
 				Users: map[string]mappings.UserConfig{
@@ -333,13 +338,14 @@ func TestPollPassesStructuredUsersToTemplates(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "user infra")
-	require.Len(t, events.Events[srv.Mac], 1)
-	assert.NotContains(t, events.Events[srv.Mac][0].Params, "users")
+	hostEvents := eventsForMAC(t, events, srv.Mac)
+	require.Len(t, hostEvents, 1)
+	assert.NotContains(t, hostEvents[0].Params, "users")
 }
 
 func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	states := &server.States{Servers: make(map[string]*server.State)}
-	events := &event.Log{}
+	events := newEventLog()
 	templateRenderer := newTestTemplates(t)
 	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "manual-host")
 	states.AddServer(srv)
@@ -347,11 +353,11 @@ func TestUpdateTargetStoresManualSelection(t *testing.T) {
 		Targets: map[string]mappings.Target{
 			"manual": {
 				Script: "test.ipxe",
-				Params: map[string]interface{}{"role": "target"},
+				Params: map[string]any{"role": "target"},
 			},
 		},
 	})
-	params := map[string]interface{}{"role": "manual"}
+	params := map[string]any{"role": "manual"}
 
 	inputErr, err := UpdateTarget(
 		log.MakeLogger(testLogWriter{}),
@@ -373,9 +379,10 @@ func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	assert.Equal(t, "06-66-de-ad-be-ef", states.Servers[srv.Mac].Params["hostname"])
 	assert.Equal(t, "127.0.0.1:8081", states.Servers[srv.Mac].Params["baseURL"])
 	assert.Equal(t, "manual", states.Servers[srv.Mac].Params["role"])
-	require.Len(t, events.Events[srv.Mac], 1)
-	assert.Equal(t, event.UserSelection, events.Events[srv.Mac][0].Type)
-	assert.Equal(t, "test.ipxe", events.Events[srv.Mac][0].Script)
+	hostEvents := eventsForMAC(t, events, srv.Mac)
+	require.Len(t, hostEvents, 1)
+	assert.Equal(t, event.UserSelection, hostEvents[0].Type)
+	assert.Equal(t, "test.ipxe", hostEvents[0].Script)
 }
 
 func TestPollQueuesRestrictedManualTargets(t *testing.T) {
@@ -400,7 +407,7 @@ func TestPollQueuesRestrictedManualTargets(t *testing.T) {
 		log.MakeLogger(testLogWriter{}),
 		states,
 		resolver,
-		&event.Log{},
+		newEventLog(),
 		newTestTemplates(t),
 		"127.0.0.1:8081",
 		srv,
@@ -420,12 +427,12 @@ func TestPollQueuesRestrictedManualTargets(t *testing.T) {
 		states,
 		resolver,
 		newTestTemplates(t),
-		&event.Log{},
+		newEventLog(),
 		"127.0.0.1:8081",
 		srv,
 		"ubuntu24",
 		"",
-		map[string]interface{}{},
+		map[string]any{},
 	)
 	assert.True(t, inputErr)
 	require.Error(t, err)
@@ -446,7 +453,7 @@ func TestPollQueuesUnrestrictedManualTargets(t *testing.T) {
 		log.MakeLogger(testLogWriter{}),
 		states,
 		resolver,
-		&event.Log{},
+		newEventLog(),
 		newTestTemplates(t),
 		"127.0.0.1:8081",
 		srv,
@@ -521,6 +528,19 @@ func mustResolver(t *testing.T, mappingsConfig *mappings.Mappings) *mappings.Res
 	resolver, err := mappings.NewResolver(mappingsConfig)
 	require.NoError(t, err)
 	return resolver
+}
+
+func newEventLog() *event.Log {
+	store := memory.New()
+	return event.NewLog(store, store)
+}
+
+func eventsForMAC(t *testing.T, log *event.Log, mac string) []event.Event {
+	t.Helper()
+
+	grouped, err := log.ListEvents(context.Background())
+	require.NoError(t, err)
+	return grouped[mac]
 }
 
 func targetOptionNames(options []server.TargetOption) []string {

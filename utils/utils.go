@@ -47,13 +47,13 @@ func StringInSlice(a string, list []string) bool {
 }
 
 // KeyInMap checks wheter the received key exists in the received map.
-func KeyInMap(key string, mapInput map[string]interface{}) bool {
+func KeyInMap(key string, mapInput map[string]any) bool {
 	_, found := mapInput[key]
 	return found
 }
 
 // MapToString provides a string representation of a map of strings.
-func MapToString(mapInput map[string]interface{}) string {
+func MapToString(mapInput map[string]any) string {
 	result := ""
 	for k, v := range mapInput {
 		if len(result) > 0 {

@@ -123,17 +123,18 @@ persistence:
 
 *** Phase 2: Persistent Event History
 
-- [ ] Replace direct use of =event.Log.Events= with an event repository API.
-- [ ] Model event writes through an event command interface and event reads
+- [X] Replace direct use of =event.Log.Events= with an event repository API.
+- [X] Model event writes through an event command interface and event reads
   through an event query interface.
-- [ ] Keep event writes redacted before persistence.
-- [ ] Update =/ajax/events= to read from the repository.
-- [ ] Preserve existing JSON response shape for the UI.
-- [ ] Add event retention cleanup for old records.
-- [ ] Add unit tests for appending, listing, sorting/grouping by MAC, redaction,
+- [X] Keep event writes redacted before persistence.
+- [X] Update =/ajax/events= to read from the repository.
+- [X] Preserve existing grouped JSON response shape for the UI while adding
+  event IDs and renaming event timestamps to =occurred_at=.
+- [X] Add event retention cleanup for old records.
+- [X] Add unit tests for appending, listing, sorting/grouping by MAC, redaction,
   and retention deletion.
-- [ ] Add router tests proving =/ajax/events= still returns the existing shape.
-- [ ] Add an integration test that records events, restarts Shoelaces with the
+- [X] Add router tests proving =/ajax/events= still returns the existing shape.
+- [X] Add an integration test that records events, restarts Shoelaces with the
   same =data-dir=, and verifies the events are still available.
 
 *** Phase 3: Persistent Waiting Server State

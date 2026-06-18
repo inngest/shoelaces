@@ -23,6 +23,7 @@ import (
 
 	"github.com/inngest/shoelaces/persistence"
 	sqlitedb "github.com/inngest/shoelaces/persistence/sqlite/db"
+	"github.com/oklog/ulid/v2"
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
@@ -75,9 +76,13 @@ func (s *store) migrate(ctx context.Context) error {
 	return nil
 }
 
-// AppendEvent persists an event and returns its database ID.
-func (s *store) AppendEvent(ctx context.Context, event persistence.EventRecord) (int64, error) {
-	return s.queries.InsertEvent(ctx, sqlitedb.InsertEventParams{
+// AppendEvent persists an event and returns its durable ULID.
+func (s *store) AppendEvent(ctx context.Context, event persistence.EventRecord) (ulid.ULID, error) {
+	if event.ID.IsZero() {
+		event.ID = ulid.Make()
+	}
+	id, err := s.queries.InsertEvent(ctx, sqlitedb.InsertEventParams{
+		ID:                 event.ID[:],
 		EventType:          int64(event.Type),
 		OccurredAtUnixNano: unixNano(event.OccurredAt),
 		Mac:                event.MAC,
@@ -86,8 +91,12 @@ func (s *store) AppendEvent(ctx context.Context, event persistence.EventRecord) 
 		BootType:           event.BootType,
 		Script:             event.Script,
 		Message:            event.Message,
-		ParamsJson:         cloneBytes(event.ParamsJSON),
+		ParamsJson:         defaultJSONObject(event.ParamsJSON),
 	})
+	if err != nil {
+		return ulid.ULID{}, err
+	}
+	return ulidFromBytes(id)
 }
 
 // DeleteEventsBefore removes events older than the cutoff.
@@ -103,8 +112,12 @@ func (s *store) ListEvents(ctx context.Context) ([]persistence.EventRecord, erro
 	}
 	events := make([]persistence.EventRecord, len(rows))
 	for i, row := range rows {
+		id, err := ulidFromBytes(row.ID)
+		if err != nil {
+			return nil, err
+		}
 		events[i] = persistence.EventRecord{
-			ID:         row.ID,
+			ID:         id,
 			Type:       int(row.EventType),
 			OccurredAt: fromUnixNano(row.OccurredAtUnixNano),
 			MAC:        row.Mac,
@@ -238,6 +251,22 @@ func fromUnixNano(n int64) time.Time {
 	return time.Unix(0, n).UTC()
 }
 
+func ulidFromBytes(value []byte) (ulid.ULID, error) {
+	var id ulid.ULID
+	if len(value) != len(id) {
+		return ulid.ULID{}, fmt.Errorf("invalid ULID byte length %d", len(value))
+	}
+	copy(id[:], value)
+	return id, nil
+}
+
 func cloneBytes(value []byte) []byte {
 	return append([]byte(nil), value...)
+}
+
+func defaultJSONObject(value []byte) []byte {
+	if len(value) == 0 {
+		return []byte(`{}`)
+	}
+	return cloneBytes(value)
 }

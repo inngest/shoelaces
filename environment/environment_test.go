@@ -17,15 +17,19 @@ package environment
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/persistence"
+	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -129,7 +133,7 @@ networkMaps:
 	t.Cleanup(func() {
 		require.NoError(t, env.RuntimeStore.Close())
 	})
-	rendered, err := env.Templates.RenderTemplate("debian.ipxe", map[string]interface{}{
+	rendered, err := env.Templates.RenderTemplate("debian.ipxe", map[string]any{
 		"baseURL":      "127.0.0.1:8081",
 		"encrypt_home": false,
 		"hostname":     "embedded-startup",
@@ -172,6 +176,50 @@ func TestNewSupportsMemoryPersistence(t *testing.T) {
 
 	assert.Equal(t, persistence.BackendMemory, env.PersistenceConfig.Backend)
 	assert.NoFileExists(t, filepath.Join(dataDir, "runtime", "shoelaces.db"))
+}
+
+func TestNewCleansUpOldPersistentEvents(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+	dbPath := filepath.Join(dataDir, "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	now := time.Now()
+	_, err = store.AppendEvent(context.Background(), persistence.EventRecord{
+		Type:       int(event.HostPoll),
+		OccurredAt: now.Add(-2 * time.Hour),
+		MAC:        "06:66:de:ad:be:ef",
+		Message:    "old",
+	})
+	require.NoError(t, err)
+	_, err = store.AppendEvent(context.Background(), persistence.EventRecord{
+		Type:       int(event.HostBoot),
+		OccurredAt: now.Add(-10 * time.Minute),
+		MAC:        "06:66:de:ad:be:f0",
+		Message:    "new",
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	env := New(Options{
+		BindAddr: "localhost:0",
+		DataDir:  dataDir,
+		Persistence: persistence.Config{
+			Backend: persistence.BackendSQLite,
+			Retention: persistence.RetentionConfig{
+				Events:       time.Hour,
+				BootSessions: time.Hour,
+			},
+		},
+	})
+	t.Cleanup(func() {
+		require.NoError(t, env.RuntimeStore.Close())
+	})
+
+	events, err := env.EventLog.ListEvents(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, events["06:66:de:ad:be:ef"])
+	require.Len(t, events["06:66:de:ad:be:f0"], 1)
+	assert.Equal(t, "new", events["06:66:de:ad:be:f0"][0].Message)
 }
 
 func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {

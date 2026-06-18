@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	shoelaces "github.com/inngest/shoelaces"
 	"github.com/inngest/shoelaces/event"
@@ -89,8 +90,9 @@ func New(options Options) *Environment {
 	}
 
 	env.Environments = env.initEnvOverrides()
-	env.EventLog = &event.Log{}
 	env.RuntimeStore = env.initPersistence()
+	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
+	env.cleanupEventRetention()
 
 	env.logStartupConfig()
 	env.Logger.Info("Discovered environment overrides", "component", "environment", "count", len(env.Environments), "environments", env.Environments)
@@ -137,14 +139,14 @@ func defaultEnvironment() *Environment {
 	env.NetworkMaps = make([]mappings.NetworkMap, 0)
 	env.HostnameMaps = make([]mappings.HostnameMap, 0)
 	env.ServerStates = &server.States{Servers: make(map[string]*server.State)}
-	env.EventLog = &event.Log{}
 	env.ParamsBlacklist = []string{"baseURL"}
 	env.Environments = make([]string, 0)
 	env.Logger = log.MakeLogger(os.Stdout)
 	env.Templates = templates.New(env.Logger)
-	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 	env.PersistenceConfig = persistence.DefaultConfig()
 	env.RuntimeStore = memory.New()
+	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 
 	return env
 }
@@ -165,6 +167,22 @@ func (env *Environment) initPersistence() persistence.Store {
 		return store
 	default:
 		panic(fmt.Errorf("unsupported persistence backend %q", env.PersistenceConfig.Backend))
+	}
+}
+
+func (env *Environment) cleanupEventRetention() {
+	retention := env.PersistenceConfig.Retention.Events
+	if retention <= 0 || env.EventLog == nil {
+		return
+	}
+	cutoff := time.Now().Add(-retention)
+	deleted, err := env.EventLog.DeleteEventsBefore(context.Background(), cutoff)
+	if err != nil {
+		env.Logger.Error("Failed to clean up old events", "component", "environment", "err", err)
+		return
+	}
+	if deleted > 0 {
+		env.Logger.Info("Cleaned up old events", "component", "environment", "deleted", deleted, "retention", retention.String())
 	}
 }
 
@@ -279,7 +297,7 @@ func initScriptForTarget(configMappings *mappings.Mappings, targetName string, m
 	mappingScript := &mappings.Script{
 		Name:        target.Script,
 		Environment: target.Environment,
-		Params:      make(map[string]interface{}),
+		Params:      make(map[string]any),
 	}
 	for key, value := range configMappings.Defaults.Params {
 		mappingScript.Params[key] = fmt.Sprint(value)
