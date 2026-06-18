@@ -1,3 +1,13 @@
+## [1.6.1] - 2026-06-18
+
+### 🐛 Bug Fixes
+
+- Make structured repo release canonical (#45)
+
+### 🚜 Refactor
+
+- Add slog-backed component logging (#42)
+- Switch HTTP router to chi (#44)
 ## [1.6.0] - 2026-06-18
 
 ### 🚀 Features
@@ -7,6 +17,7 @@
 ### ⚙️ Miscellaneous Tasks
 
 - *(go)* Update toolchain and docs (#39)
+- *(release)* V1.6.0 (#41)
 ## [1.5.0] - 2026-06-18
 
 ### 🚀 Features
