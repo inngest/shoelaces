@@ -57,19 +57,22 @@ type Environment struct {
 	TemplateExtension string
 	MappingsFile      string
 	Debug             bool
+	LogLevel          string
+	LogHandler        string
 }
 
 // New returns an initialized environment structure
 func New(options Options) *Environment {
 	env := defaultEnvironment()
 	env.applyOptions(options)
+	logOptions := []log.Option{log.WithLevelString(env.LogLevel), log.WithHandlerString(env.LogHandler)}
+	if env.Debug {
+		logOptions = append(logOptions, log.WithLevel(log.LevelDebug))
+	}
+	env.Logger = log.MakeLogger(os.Stdout, logOptions...)
 
 	if env.TFTP != nil && env.TFTP.Root == "./tftp" && env.DataDir != "" {
 		env.TFTP.Root = env.DataDir + "/tftp"
-	}
-
-	if env.Debug {
-		env.Logger = log.AllowDebug(env.Logger)
 	}
 
 	if env.BaseURL == "" {
@@ -80,7 +83,7 @@ func New(options Options) *Environment {
 
 	env.EventLog = &event.Log{}
 
-	env.Logger.Info("component", "environment", "msg", "Override found", "environment", env.Environments)
+	env.Logger.Info("Override found", "component", "environment", "environment", env.Environments)
 
 	mappingsPath := path.Join(env.DataDir, env.MappingsFile)
 	if err := env.initMappings(mappingsPath); err != nil {

@@ -20,6 +20,10 @@ type Options struct {
 	MappingsFile string
 	// Debug enables debug-level logging.
 	Debug bool
+	// LogLevel controls the minimum log level when Debug is false.
+	LogLevel string
+	// LogHandler controls log output format: dev, text, or json.
+	LogHandler string
 	// TFTP controls the optional embedded TFTP server. A nil value means use defaults.
 	TFTP *TFTPConfig
 }
@@ -64,5 +68,7 @@ func (env *Environment) applyOptions(options Options) {
 	env.TemplateExtension = options.TemplateExtension
 	env.MappingsFile = options.MappingsFile
 	env.Debug = options.Debug
+	env.LogLevel = options.LogLevel
+	env.LogHandler = options.LogHandler
 	env.TFTP = options.TFTP
 }

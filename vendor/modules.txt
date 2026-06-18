@@ -5,13 +5,6 @@ github.com/davecgh/go-spew/spew
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
-# github.com/go-kit/log v0.2.1
-## explicit; go 1.17
-github.com/go-kit/log
-github.com/go-kit/log/level
-# github.com/go-logfmt/logfmt v0.5.1
-## explicit; go 1.17
-github.com/go-logfmt/logfmt
 # github.com/go-viper/mapstructure/v2 v2.4.0
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
