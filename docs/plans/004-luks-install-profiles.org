@@ -7,71 +7,170 @@
 
 ** Goal
 
-Add explicit install profiles for encrypted and unencrypted operating system
-installs after the provisioning config model can represent multiple targets and
-runtime params.
+Add first-class install profiles for encrypted and unencrypted operating system
+installs using the structured provisioning model from Plans 002 and 003.
+LUKS should be represented as data in =mappings.yaml=, not as ad hoc flat
+template params, while still leaving =installer.extraTemplate= available for
+site-specific native installer behavior.
 
 ** Boundaries
 
-- Depends on Plan 002 for named targets and resolved params.
-- May depend on Plan 003 if LUKS-capable preseeds are shipped as embedded
-  defaults.
+- Depends on Plan 002 for named targets, koanf parsing, environment-backed
+  values, and structured runtime mappings.
+- Depends on Plan 003 for embedded generic provisioning defaults, structured
+  users, structured provisioning fields, and =installer.extraTemplate=.
+- Does not reintroduce per-feature partial hooks. Common LUKS behavior should
+  be modeled as structured fields; arbitrary installer snippets remain the job
+  of =installer.extraTemplate=.
 - Does not change UI embedding behavior.
+- Does not require ansible changes in this repo, but examples should make it
+  clear how an operator can pass LUKS secrets through systemd environment
+  variables.
 
 ** Current State
 
 - Current preseed files do not configure full-disk LUKS.
 - =encrypt_home= only maps to =user-setup/encrypt-home= and is not LUKS.
-- Debian currently uses LVM without crypto.
-- Storage uses RAID/LVM without crypto.
-- Ubuntu minimal uses regular partitioning without crypto.
+- Structured mappings now support multiple targets and structured sections for
+  =users=, =storage=, =boot=, =repos=, =installer=, and other provisioning data.
+- =storage.mode= currently supports =plain=, =lvm=, =raid=, and =manual=.
+- Structured users already support raw values and ={ env: ENV_VAR }= values for
+  password hashes and SSH keys.
+- Structured installer config is serialized into =installer_config_query= so
+  installer config requests can render without disk state. Secret-bearing LUKS
+  fields must not be added to that serialized query path without a safer
+  transport design.
+- Embedded provisioning templates currently render generic Debian, Ubuntu,
+  CentOS, and CoreOS installer paths without LUKS.
 
 ** Phased Implementation Plan
 
-*** Phase 1: Install Parameter Model
+*** Phase 1: Storage Encryption Schema
 
-- [ ] Define install params for disk selection, partitioning mode, volume group,
-  root password hash, install user, and SSH keys.
-- [ ] Define LUKS params such as =luks_enabled=, =luks_passphrase=,
-  =luks_cipher=, and =luks_key_size=.
-- [ ] Support raw and environment-backed secret values through the Plan 002
-  parameter resolver.
-- [ ] Add tests for LUKS param resolution and redaction.
+- [ ] Extend =StorageConfig= with a structured encryption block, for example:
 
-*** Phase 2: LUKS-Capable Templates
+  #+begin_src yaml
+  storage:
+    mode: lvm
+    disk: /dev/sda
+    volumeGroup: vg0
+    encryption:
+      enabled: true
+      passphrase:
+        env: SHOELACES_LUKS_PASSPHRASE
+      cipher: aes-xts-plain64
+      keySize: 512
+      hash: sha512
+  #+end_src
 
-- [ ] Add a Debian LUKS preseed target or a separate =preseed/debian-luks=
-  template.
-- [ ] Keep the existing unencrypted LVM path available.
-- [ ] Pass LUKS-specific params from the selected target to the preseed.
-- [ ] Add template rendering tests for encrypted and unencrypted profiles.
+- [ ] Keep =storage.mode= focused on layout family and use
+  =storage.encryption.enabled= to select encrypted variants. Avoid adding a
+  separate =luks= mode unless templates prove the combined state is ambiguous.
+- [ ] Support raw and environment-backed passphrases through the same resolver
+  style as structured users, while treating raw values as lab-only.
+- [ ] Validate encryption fields: passphrase is required when enabled, cipher
+  and hash must be non-empty when provided, and key size must be positive.
+- [ ] Add parser tests for valid/invalid encryption YAML.
+- [ ] Add resolver tests for raw and ={ env: ENV_VAR }= passphrases.
+- [ ] Add merge-order tests proving defaults, targets, and matched mappings can
+  override encryption settings.
 
-*** Phase 3: Target Examples
+*** Phase 2: Secret Transport And Redaction
 
-- [ ] Add example targets for Debian 12 unencrypted, Debian 12 LUKS, Debian 13,
-  Ubuntu 24.04, and Ubuntu 26.04 where appropriate.
-- [ ] Add examples showing per-host LUKS passphrase environment variables.
-- [ ] Add examples showing raw lab-only values with warnings.
+- [ ] Decide how installer config rendering receives secret-bearing
+  provisioning values without placing raw LUKS passphrases in the rendered iPXE
+  boot script or long query strings.
+- [ ] Prefer passing non-secret target/request identity through the boot URL and
+  resolving secret values server-side during =/configs/*= rendering.
+- [ ] If a short-lived token/cache is used, document its lifetime and failure
+  behavior, and make it independent of browser/UI state.
+- [ ] Redact encryption passphrases anywhere provisioning structures are logged,
+  stored in events, or exposed through debug/template render logs.
+- [ ] Add unit tests proving =installer_config_query= does not contain raw LUKS
+  passphrases.
+- [ ] Add log/event redaction tests for raw and environment-resolved
+  passphrases.
+- [ ] Add integration tests covering =/poll/*= and =/configs/preseed/*= so the
+  boot script can select an encrypted install without exposing the secret in
+  the boot script body.
 
-*** Phase 4: Documentation And Verification
+*** Phase 3: Debian LUKS Rendering
 
-- [ ] Document LUKS security tradeoffs, especially serving preseed over HTTP.
-- [ ] Document recommended use of per-host secrets and TLS/trusted networks.
-- [ ] Run =go test ./...=.
-- [ ] Run the plan status checker.
+- [ ] Update the embedded Debian preseed template to render encrypted storage
+  when =storage.encryption.enabled= is true.
+- [ ] Keep the existing unencrypted plain/LVM rendering path available.
+- [ ] Generate Debian preseed crypto/LVM directives from structured storage
+  fields instead of flat =luks_*= params.
+- [ ] Preserve =installer.extraTemplate= after structured sections so advanced
+  sites can still add native Debian commands.
+- [ ] Add rendering tests for Debian unencrypted LVM, encrypted LVM, and
+  encrypted non-default disk/volume group settings.
+- [ ] Run the Debian render validation target so the encrypted and unencrypted
+  preseed outputs remain syntactically valid.
+
+*** Phase 4: Ubuntu And Other Installer Coverage
+
+- [ ] Determine whether Ubuntu minimal, CentOS kickstart, and CoreOS should
+  support structured LUKS in this phase or explicitly reject/ignore it with
+  clear validation errors.
+- [ ] For each supported OS template, render native encrypted storage from the
+  same structured storage encryption block.
+- [ ] For unsupported OS templates, document the limitation and recommend
+  =installer.extraTemplate= or full template override as the escape hatch.
+- [ ] Add rendering tests for every supported OS/storage combination.
+- [ ] Add validation tests for unsupported combinations so misconfigured targets
+  fail clearly.
+
+*** Phase 5: Target Examples And Development Config
+
+- [ ] Add sample targets for Debian 12 unencrypted and Debian 12 LUKS.
+- [ ] Add placeholders for Debian 13, Ubuntu 24.04, and Ubuntu 26.04 only where
+  the corresponding templates are validated by this plan.
+- [ ] Add an example showing a per-host or per-target LUKS passphrase loaded via
+  ={ env: ENV_VAR }= from the systemd service environment.
+- [ ] Add a raw-value example only if it is clearly marked as lab-only and not
+  suitable for production.
+- [ ] Update =dev/= config so local development can exercise both encrypted and
+  unencrypted targets without real secrets.
+- [ ] Add tests or render-validation fixtures that load the example mappings.
+
+*** Phase 6: Documentation And Verification
+
+- [ ] Document the structured =storage.encryption= schema and merge behavior.
+- [ ] Document LUKS security tradeoffs, especially serving installer config over
+  HTTP and exposing unattended install secrets to machines on the provisioning
+  network.
+- [ ] Document recommended use of per-host secrets, trusted networks, and TLS or
+  network isolation where available.
+- [ ] Document how =installer.extraTemplate= remains the escape hatch for
+  native installer behavior that is not covered by structured storage fields.
+- [ ] Run =make test=.
+- [ ] Run =make integration=.
+- [ ] Run the render validation target.
+- [ ] Run =make lint=.
+- [ ] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 
 - [ ] LUKS and non-LUKS install targets can coexist.
-- [ ] LUKS secrets can come from explicit environment-backed params.
+- [ ] LUKS configuration is represented under structured =storage= fields.
+- [ ] LUKS secrets can come from explicit environment-backed values.
+- [ ] Raw LUKS secret values are supported only as documented lab-only inputs.
 - [ ] Existing non-LUKS installs continue to render.
-- [ ] Sensitive LUKS values are redacted from logs/events.
-- [ ] =go test ./...= passes.
+- [ ] Sensitive LUKS values are redacted from logs/events and do not appear in
+  rendered boot-script URLs.
+- [ ] Debian encrypted and unencrypted render-validation fixtures pass.
+- [ ] =make test=, =make integration=, render validation, =make lint=, and the
+  plan status checker pass.
 
 ** Notes And Risks
 
 - Full-disk encryption through preseed exposes sensitive material to the
   installer. This should be restricted to trusted networks or HTTPS.
 - Prefer per-host LUKS passphrases over shared global passphrases.
-- Keep LUKS work separate from the mapping parser so boot-target semantics can
-  stabilize first.
+- LUKS support should not bypass the structured mappings model. Add fields to
+  =StorageConfig= and renderer projections instead of adding new flat
+  =params= conventions.
+- The current stateless installer config query design is convenient, but it is
+  not suitable for raw secret transport. Solve secret transport before rendering
+  LUKS preseeds from real passphrases.
