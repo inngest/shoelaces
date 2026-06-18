@@ -5,7 +5,6 @@ base-url: "localhost:18081"
 data-dir: dev/data-dir
 template-extension: .slc
 mappings-file: mappings.yaml
-debug: true
 log-level: debug
 log-handler: dev
 

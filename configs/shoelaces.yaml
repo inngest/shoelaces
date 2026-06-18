@@ -2,7 +2,6 @@ bind-addr: localhost:8081
 data-dir: configs/data-dir/
 template-extension: .slc
 mappings-file: mappings.yaml
-debug: true
 log-level: debug
 log-handler: dev
 

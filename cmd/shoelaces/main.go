@@ -153,10 +153,9 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 				Sources: flagSources("mappings-file", "MAPPINGS_FILE"),
 			},
 			&cli.BoolFlag{
-				Name:    "debug",
-				Value:   defaults.Debug,
-				Usage:   "Enable debug mode",
-				Sources: flagSources("debug", "DEBUG"),
+				Name:  "debug",
+				Value: defaults.Debug,
+				Usage: "Enable debug mode (CLI only)",
 			},
 			&cli.StringFlag{
 				Name:    "log-level",
