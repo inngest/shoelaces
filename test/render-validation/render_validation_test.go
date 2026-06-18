@@ -66,7 +66,7 @@ var structuredRenderUsers = map[string]mappings.ResolvedUser{
 }
 
 var siteOnlyMarkers = []string{
-	"git@github.com:inngest/ansible.git",
+	"git@example.com:infra/provisioning.git",
 	"/static/firstboot",
 	"/static/authorized_keys",
 	"/static/id_ansible",

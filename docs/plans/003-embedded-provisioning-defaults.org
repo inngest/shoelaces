@@ -37,8 +37,10 @@ defaults.
 
 ** Current Repo Audit Notes
 
-- Phase 1 classified current =configs/data-dir= files in
-  =docs/provisioning-defaults-audit.md=.
+- Phase 1 classified current =configs/data-dir= files before embedding. The
+  resulting generic/site-only split is now enforced by
+  =provisioning_defaults_test.go= and documented in
+  =docs/provisioning-overrides.md=.
 - =configs/data-dir/static/firstboot.sh=,
   =configs/data-dir/static/firstboot.service=, SSH key references, and Ansible
   bootstrap behavior are site-shaped examples and must not become embedded
