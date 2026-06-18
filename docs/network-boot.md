@@ -7,13 +7,36 @@ The web UI also shows detected hosts and lets operators choose a boot target whe
 
 ## Flow
 
-1. A host starts a network boot.
-2. DHCP points the host at an iPXE executable served by TFTP.
-3. The host chainloads into iPXE and makes a second DHCP request.
-4. DHCP detects iPXE and returns the Shoelaces `/start` URL.
-5. The iPXE agent enters the polling loop at `/poll/1/{mac}`.
-6. Shoelaces resolves a boot target from mappings or waits for manual selection in the UI.
-7. Shoelaces renders and serves the selected templates and static assets.
+This chart shows the two-stage boot path. DHCP and TFTP only get the host into
+iPXE; after that, iPXE talks to Shoelaces over HTTP so Shoelaces can resolve a
+target, render the selected boot template, and serve provisioning assets.
+
+```mermaid
+flowchart TD
+    host["Host starts PXE network boot"] --> dhcp1["DHCP request"]
+    dhcp1 --> pxeDecision{"Client is already iPXE?"}
+
+    pxeDecision -- no --> tftp["DHCP returns TFTP boot loader"]
+    tftp --> loader["Host downloads iPXE executable over TFTP"]
+    loader --> ipxe["Host chainloads into iPXE"]
+    ipxe --> dhcp2["iPXE sends second DHCP request"]
+    dhcp2 --> pxeDecision
+
+    pxeDecision -- yes --> start["DHCP returns Shoelaces /start URL"]
+    start --> poll["iPXE enters /poll/1/{mac} loop"]
+    poll --> identity["Shoelaces records MAC, source IP, and reverse DNS hostname"]
+    identity --> mapping{"Automatic mapping resolves target?"}
+
+    mapping -- yes --> render["Shoelaces renders selected boot template"]
+    mapping -- no --> queue["Host waits for manual target selection in UI"]
+    queue --> operator["Operator selects target"]
+    operator --> render
+
+    render --> bootScript["Shoelaces serves iPXE boot script"]
+    bootScript --> configs["Host requests /configs/* installer templates"]
+    configs --> static["Host requests /configs/static/* provisioning assets as needed"]
+    static --> install["OS installer continues"]
+```
 
 ![Shoelaces overview](screenshots/shoelaces-overview.png)
 
