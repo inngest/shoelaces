@@ -385,6 +385,32 @@ func TestRenderedDebianPreseedStorageModeSelection(t *testing.T) {
 	}
 }
 
+func TestRenderedDebianPreseedPreservesStorageFlow(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
+
+	assertInOrder(t, rendered,
+		"d-i apt-setup/contrib boolean",
+		"d-i partman-auto/disk string",
+		"d-i partman/early_command string",
+		"d-i partman-auto/method string",
+		"d-i partman-partitioning/confirm_write_new_label boolean true",
+		"d-i grub2/linux_cmdline string",
+		"d-i user-setup/encrypt-home boolean",
+		"d-i grub-installer/timeout string",
+	)
+}
+
+func TestRenderedDebianPreseedPreservesExplicitLVMRecipe(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_mode", "lvm"))
+
+	assert.Contains(t, rendered, "d-i partman-auto/method string lvm")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-lvm")
+	assert.Contains(t, rendered, "vg_name{ vg0 }")
+	assert.Contains(t, rendered, "lv_name{ root }")
+	assert.Contains(t, rendered, "lv_name{ swap }")
+}
+
 func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -622,6 +648,18 @@ func renderTemplateError(t *testing.T, renderer *templates.ShoelacesTemplates, n
 
 	_, err := renderer.RenderTemplate(name, params, "")
 	return err
+}
+
+func assertInOrder(t *testing.T, text string, needles ...string) {
+	t.Helper()
+
+	previous := -1
+	for _, needle := range needles {
+		current := strings.Index(text, needle)
+		require.NotEqualf(t, -1, current, "missing %q", needle)
+		require.Greaterf(t, current, previous, "%q was not after previous marker", needle)
+		previous = current
+	}
 }
 
 func assertValidIPXEScript(t *testing.T, rendered string) []string {
