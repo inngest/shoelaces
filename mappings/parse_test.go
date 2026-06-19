@@ -50,6 +50,13 @@ defaults:
     volumeGroup: vg0
     wipeDiskPatterns:
       - /dev/nvme*n*
+    encryption:
+      enabled: true
+      passphrase:
+        env: SHOELACES_LUKS_PASSPHRASE
+      cipher: aes-xts-plain64
+      keySize: 512
+      hash: sha512
     filesystems:
       root:
         mountpoint: /
@@ -158,6 +165,13 @@ ipMaps:
 	assert.Equal(t, "lvm", parsed.Defaults.Storage.Mode)
 	assert.Equal(t, "vg0", parsed.Defaults.Storage.VolumeGroup)
 	assert.Equal(t, []string{"/dev/nvme*n*"}, parsed.Defaults.Storage.WipeDiskPatterns)
+	require.NotNil(t, parsed.Defaults.Storage.Encryption.Enabled)
+	assert.True(t, *parsed.Defaults.Storage.Encryption.Enabled)
+	assert.Equal(t, map[string]any{"env": "SHOELACES_LUKS_PASSPHRASE"}, parsed.Defaults.Storage.Encryption.Passphrase)
+	assert.Equal(t, "aes-xts-plain64", parsed.Defaults.Storage.Encryption.Cipher)
+	require.NotNil(t, parsed.Defaults.Storage.Encryption.KeySize)
+	assert.Equal(t, 512, *parsed.Defaults.Storage.Encryption.KeySize)
+	assert.Equal(t, "sha512", parsed.Defaults.Storage.Encryption.Hash)
 	assert.Equal(t, "/", parsed.Defaults.Storage.Filesystems["root"].Mountpoint)
 	assert.Equal(t, "uefi", parsed.Defaults.Boot.Firmware)
 	assert.Equal(t, "ipxe", parsed.Defaults.Boot.Netboot.Method)
@@ -260,6 +274,39 @@ networkMaps:
 	assert.Equal(t, []string{"/dev/nvme0n1", "/dev/nvme1n1"}, parsed.Targets["debian12"].Storage.RAID.Devices)
 	require.NotNil(t, parsed.Targets["debian12"].Storage.RAID.BootDegraded)
 	assert.True(t, *parsed.Targets["debian12"].Storage.RAID.BootDegraded)
+}
+
+func TestParseMappingsLoadsStructuredStorageEncryption(t *testing.T) {
+	mappingsPath := writeMappingsFile(t, `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      mode: lvm
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        cipher: aes-xts-plain64
+        keySize: 512
+        hash: sha512
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian13
+    targets:
+      - debian13
+`)
+
+	parsed, err := ParseMappings(log.MakeLogger(io.Discard), mappingsPath)
+
+	require.NoError(t, err)
+	encryption := parsed.Targets["debian13"].Storage.Encryption
+	require.NotNil(t, encryption.Enabled)
+	assert.True(t, *encryption.Enabled)
+	assert.Equal(t, "lab-passphrase", encryption.Passphrase)
+	assert.Equal(t, "aes-xts-plain64", encryption.Cipher)
+	require.NotNil(t, encryption.KeySize)
+	assert.Equal(t, 512, *encryption.KeySize)
+	assert.Equal(t, "sha512", encryption.Hash)
 }
 
 func TestParseMappingsReturnsErrors(t *testing.T) {
@@ -487,6 +534,61 @@ targets:
           - /dev/nvme1n1
 `,
 			want: `targets["debian12"].boot.firmware must be "uefi" when storage.mode is raid`,
+		},
+		{
+			name: "encryption passphrase must be non-empty",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: ""
+`,
+			want: `targets["debian13"].storage.encryption.passphrase must not be empty`,
+		},
+		{
+			name: "encryption passphrase env reference must be valid",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase:
+          env: ""
+`,
+			want: `targets["debian13"].storage.encryption.passphrase: environment reference "env" must be a non-empty string`,
+		},
+		{
+			name: "encryption passphrase rejects unsupported shape",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase:
+          secretRef: luks
+`,
+			want: `targets["debian13"].storage.encryption.passphrase must be a string or { env: ENV_VAR } reference`,
+		},
+		{
+			name: "encryption key size must be positive",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        keySize: 0
+`,
+			want: `targets["debian13"].storage.encryption.keySize must be greater than 0`,
 		},
 		{
 			name: "invalid mirror url",

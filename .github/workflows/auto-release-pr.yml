@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   create-release-pr:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
 
     steps:
       - name: Validate release token
