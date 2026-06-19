@@ -498,6 +498,28 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 	assert.NotContains(t, rendered, "<no value>")
 }
 
+func TestRenderTemplateAppliesBooleanInstallerEncryptionParam(t *testing.T) {
+	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "127.0.0.1:8081",
+		"hostname": "encrypted-host",
+	}, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			ConfigParams: map[string]any{
+				"storage_encryption_enabled":    true,
+				"storage_encryption_passphrase": "luks-passphrase",
+			},
+		},
+	})
+
+	rendered, err := renderer.RenderTemplate("preseed/debian", params, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "d-i partman-auto/method string crypto")
+	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
+	assert.NotContains(t, rendered, "<no value>")
+}
+
 func TestEmbeddedUserRenderingDoesNotRequireDiskUserPartials(t *testing.T) {
 	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
 	params := mappings.ParamsWithUsers(map[string]interface{}{

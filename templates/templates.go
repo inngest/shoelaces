@@ -371,6 +371,7 @@ func validateDebianEncryptionPreseedParams(paramMap map[string]interface{}) erro
 	if enabled != "true" && enabled != "false" {
 		return errors.New(`preseed/debian storage_encryption_enabled must be "true" or "false", got ` + strconv.Quote(enabled))
 	}
+	paramMap["storage_encryption_enabled"] = enabled
 	if enabled == "false" {
 		return nil
 	}
