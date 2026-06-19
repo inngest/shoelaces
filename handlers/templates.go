@@ -48,6 +48,7 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queryParams := firstQueryValues(r)
+	envName := envNameFromRequest(r)
 	ref := queryParams[bootsession.QueryParam]
 	if ref != "" {
 		if env.BootSessions == nil {
@@ -66,6 +67,9 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to resolve boot reference", http.StatusInternalServerError)
 			return
 		}
+		if snapshot.Environment != "" {
+			envName = snapshot.Environment
+		}
 		delete(queryParams, bootsession.QueryParam)
 
 		params := make(map[string]any, len(snapshot.Params)+len(queryParams))
@@ -83,7 +87,6 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		variablesMap[key] = val
 	}
 
-	envName := envNameFromRequest(r)
 	variablesMap["baseURL"] = utils.BaseURLforEnvName(env.BaseURL, envName)
 
 	configString, err := env.Templates.RenderTemplate(configName, variablesMap, envName)
