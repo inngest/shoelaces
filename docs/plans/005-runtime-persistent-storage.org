@@ -158,23 +158,23 @@ persistence:
 
 *** Phase 4: Boot Session And Config References
 
-- [ ] Add a boot-session/reference repository for resolved boot data.
-- [ ] Model reference creation/update through commands and =/configs/*=
+- [X] Add a boot-session/reference repository for resolved boot data.
+- [X] Model reference creation/update through commands and =/configs/*=
   resolution through queries.
-- [ ] Generate opaque references when polling resolves a target.
-- [ ] Store the resolved target, environment, server identity, params, users,
+- [X] Generate opaque references when polling resolves a target.
+- [X] Store the resolved target, environment, server identity, params, users,
   and provisioning config under the reference.
-- [ ] Render boot URLs with a reference parameter, for example
+- [X] Render boot URLs with a reference parameter, for example
   =/configs/preseed/debian?ref=<opaque-id>=, instead of serializing the full
   structured installer config into the query string.
-- [ ] Preserve explicit query params as an override/escape hatch where existing
+- [X] Preserve explicit query params as an override/escape hatch where existing
   routes support them.
-- [ ] Expire references independently from event history.
-- [ ] Add unit tests for reference creation, lookup, expiry, missing references,
+- [X] Expire references independently from event history.
+- [X] Add unit tests for reference creation, lookup, expiry, missing references,
   and query-param override precedence.
-- [ ] Add render tests proving boot scripts contain references and do not expose
+- [X] Add render tests proving boot scripts contain references and do not expose
   sensitive or large structured values directly.
-- [ ] Add router/integration tests for =/poll/*= followed by =/configs/*?ref=...=
+- [X] Add router/integration tests for =/poll/*= followed by =/configs/*?ref=...=
   across a process restart.
 
 *** Phase 5: Data Reuse And Reference APIs
