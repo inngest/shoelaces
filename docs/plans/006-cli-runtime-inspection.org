@@ -136,14 +136,14 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 3: Shared Output Formatting
 
-- [ ] Add an =--output= flag for inspection commands with =table= and =json=
+- [X] Add an =--output= flag for inspection commands with =table= and =json=
   values.
-- [ ] Implement JSON output with =encoding/json= and deterministic indentation
+- [X] Implement JSON output with =encoding/json= and deterministic indentation
   only if needed for readability.
-- [ ] Implement table output with the standard library =text/tabwriter=.
-- [ ] Keep table formatting dependency-free unless wrapping, terminal width,
+- [X] Implement table output with the standard library =text/tabwriter=.
+- [X] Keep table formatting dependency-free unless wrapping, terminal width,
   borders, or colors become explicit requirements.
-- [ ] Add tests for invalid output formats, table headers, table row rendering,
+- [X] Add tests for invalid output formats, table headers, table row rendering,
   and JSON shape.
 
 *** Phase 4: Event Inspection

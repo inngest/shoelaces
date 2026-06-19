@@ -24,6 +24,7 @@ import (
 
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/persistence"
+	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,31 @@ func TestOpenInspectionStoreRejectsInvalidBackend(t *testing.T) {
 	})
 
 	assert.ErrorContains(t, err, `unsupported persistence backend "postgres"`)
+}
+
+func TestWithInspectionStoreOpensReadOnlySQLiteStore(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	dbPath := filepath.Join(dataDir, "runtime", "shoelaces.db")
+	writableStore, err := persistencesqlite.Open(ctx, dbPath)
+	require.NoError(t, err)
+	require.NoError(t, writableStore.Close())
+
+	err = withInspectionStore(ctx, environment.Options{
+		DataDir: dataDir,
+		Persistence: persistence.Config{
+			Backend: persistence.BackendSQLite,
+			Path:    filepath.Join("runtime", "shoelaces.db"),
+		},
+	}, func(store *inspectionStore) error {
+		assert.Equal(t, dbPath, store.Path)
+
+		events, err := store.Queries.ListEvents(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, events)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestWithInspectionStoreClosesOnSuccess(t *testing.T) {

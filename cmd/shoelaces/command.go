@@ -62,30 +62,26 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 		},
 		Commands: []*cli.Command{
 			runCommand(configValues, run),
-			{
-				Name:      "events",
-				Usage:     "Inspect persisted event history",
-				UsageText: "shoelaces [options...] events <command>",
-				Action: func(_ context.Context, cmd *cli.Command) error {
-					return cli.ShowSubcommandHelp(cmd)
-				},
-			},
-			{
-				Name:      "servers",
-				Usage:     "Inspect persisted server state",
-				UsageText: "shoelaces [options...] servers <command>",
-				Action: func(_ context.Context, cmd *cli.Command) error {
-					return cli.ShowSubcommandHelp(cmd)
-				},
-			},
-			{
-				Name:      "boot-sessions",
-				Usage:     "Inspect persisted boot-session references",
-				UsageText: "shoelaces [options...] boot-sessions <command>",
-				Action: func(_ context.Context, cmd *cli.Command) error {
-					return cli.ShowSubcommandHelp(cmd)
-				},
-			},
+			inspectionCommand("events", "Inspect persisted event history"),
+			inspectionCommand("servers", "Inspect persisted server state"),
+			inspectionCommand("boot-sessions", "Inspect persisted boot-session references"),
+		},
+	}
+}
+
+func inspectionCommand(name, usage string) *cli.Command {
+	return &cli.Command{
+		Name:      name,
+		Usage:     usage,
+		UsageText: fmt.Sprintf("shoelaces [options...] %s [inspection options...] <command>", name),
+		Flags: []cli.Flag{
+			inspectionOutputFlag(),
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			if _, err := outputFormatFromCommand(cmd); err != nil {
+				return err
+			}
+			return cli.ShowSubcommandHelp(cmd)
 		},
 	}
 }
