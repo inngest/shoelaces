@@ -97,10 +97,6 @@ d-i partman-auto/choose_recipe select uefi-regular
 {{end}}
 
 {{define "preseed/debian/storage/lvm" -}}
-{{template "preseed/debian/storage/legacy-lvm-layout" .}}
-{{end}}
-
-{{define "preseed/debian/storage/legacy-lvm-layout" -}}
 d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4
 
 # Use selected storage method
