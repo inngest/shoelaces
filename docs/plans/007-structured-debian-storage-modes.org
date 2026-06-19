@@ -249,23 +249,23 @@ With one failed disk, the expected impact should be:
 
 *** Phase 5: Regular/Wipe Validation Milestone
 
-- [ ] Add a regular-mode Debian preseed render test that asserts:
+- [X] Add a regular-mode Debian preseed render test that asserts:
   - no LVM directives are present
   - no =partman-auto-lvm/new_vg_name= is present
   - no =lvm2-udeb= or =partman-lvm= requirement is present
   - EFI, =/boot=, root, and swap partition stanzas are present
   - the selected disk appears in =partman-auto/disk=
-- [ ] Add wipe rendering tests proving:
+- [X] Add wipe rendering tests proving:
   - =wipe=true= includes =partman/early_command=
   - =wipe=false= omits destructive wipe commands
   - broad globs skip partition devices
-- [ ] Update the existing structured Debian preseed test so
+- [X] Update the existing structured Debian preseed test so
   =Mode: "regular"= no longer expects =vg_name= output.
-- [ ] Keep boot ref and query behavior covered by existing router and polling
+- [X] Keep boot ref and query behavior covered by existing router and polling
   tests, adding assertions only if the ref path changes.
-- [ ] Run focused tests for the early milestone:
+- [X] Run focused tests for the early milestone:
   =go test ./test/render-validation ./templates ./mappings ./router ./polling=
-- [ ] Begin real install testing for the default regular path after this phase,
+- [X] Begin real install testing for the default regular path after this phase,
   while LVM cleanup and RAID support continue in later phases.
 
 *** Phase 6: LVM Storage Recipe
