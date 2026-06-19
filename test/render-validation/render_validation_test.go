@@ -996,6 +996,7 @@ func TestRenderedTemplatesRejectUnsupportedStructuredEncryption(t *testing.T) {
 		{name: "centos kickstart", template: "centos.ks", params: encryptedUnsupportedParams(kickstartRenderParams)},
 		{name: "coreos cloud config", template: "cloudconfig-coreos", params: encryptedUnsupportedParams(defaultRenderParams)},
 		{name: "ubuntu ipxe", template: "ubuntu-minimal.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "legacy storage ipxe", template: "storage.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
 		{name: "centos ipxe", template: "centos.ipxe", params: encryptedUnsupportedParams(kickstartRenderParams)},
 		{name: "coreos ipxe", template: "coreos.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
 	}
@@ -1012,7 +1013,7 @@ func TestRenderedTemplatesRejectUnsupportedStructuredEncryption(t *testing.T) {
 	}
 }
 
-func TestCustomNonDebianInstallerTemplatesRejectStructuredEncryption(t *testing.T) {
+func TestDiskBackedNonDebianInstallerTemplatesAllowStructuredEncryption(t *testing.T) {
 	dataDir := t.TempDir()
 	writeRenderTemplate(t, dataDir, "preseed/custom.slc", `{{define "preseed/custom" -}}custom preseed{{end}}`)
 	writeRenderTemplate(t, dataDir, "kickstart/custom.ks.slc", `{{define "kickstart/custom.ks" -}}custom kickstart{{end}}`)
@@ -1021,12 +1022,52 @@ func TestCustomNonDebianInstallerTemplatesRejectStructuredEncryption(t *testing.
 
 	for _, templateName := range []string{"preseed/custom", "kickstart/custom.ks", "cloud-config/custom"} {
 		t.Run(templateName, func(t *testing.T) {
-			err := renderTemplateError(t, renderer, templateName, encryptedUnsupportedParams(defaultRenderParams))
+			rendered := renderTemplate(t, renderer, templateName, encryptedUnsupportedParams(defaultRenderParams))
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), templateName+" does not support structured storage encryption")
+			assert.NotEmpty(t, rendered)
 		})
 	}
+}
+
+func TestDiskOverridesAllowStructuredEncryptionForUnsupportedEmbeddedTemplates(t *testing.T) {
+	dataDir := t.TempDir()
+	writeRenderTemplate(t, dataDir, "preseed/ubuntu-minimal.preseed.slc", `{{define "preseed/ubuntu-minimal" -}}
+native encrypted ubuntu for {{.hostname}} {{.storage_encryption_enabled}}
+{{end}}
+`)
+	renderer := newRendererWithDataDir(t, dataDir)
+
+	rendered := renderTemplate(t, renderer, "preseed/ubuntu-minimal", encryptedUnsupportedParams(defaultRenderParams))
+
+	assert.Contains(t, rendered, "native encrypted ubuntu for render-validation-host true")
+}
+
+func TestInstallerExtraAllowsStructuredEncryptionForUnsupportedEmbeddedTemplates(t *testing.T) {
+	dataDir := t.TempDir()
+	writeRenderTemplate(t, dataDir, "provisioning/extra.slc", `{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo native encryption {{.storage_encryption_enabled}}
+{{end}}
+`)
+	renderer := newRendererWithDataDir(t, dataDir)
+	enabled := true
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "shoelaces.example.test:8081",
+		"hostname": "extra-encrypted-host",
+	}, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			ExtraTemplate: "provisioning/extra",
+		},
+		Storage: mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    &enabled,
+				Passphrase: "luks-passphrase",
+			},
+		},
+	})
+
+	rendered := renderTemplate(t, renderer, "preseed/ubuntu-minimal", params)
+
+	assert.Contains(t, rendered, "d-i preseed/late_command string echo native encryption true")
 }
 
 func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
