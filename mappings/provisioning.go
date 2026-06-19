@@ -438,7 +438,9 @@ func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {
 		setDefaultParamValue(params, "storage_raid_level", raid.Level)
 	}
 	if len(raid.Devices) > 0 {
-		setDefaultParamValue(params, "storage_raid_devices", strings.Join(raid.Devices, " "))
+		devices := strings.Join(raid.Devices, " ")
+		setDefaultParamValue(params, "storage_raid_devices", devices)
+		setDefaultParamValue(params, "storage_wipe_disks", devices)
 		setDefaultParamValue(params, "storage_raid_device_0", raid.Devices[0])
 		if len(raid.Devices) > 1 {
 			setDefaultParamValue(params, "storage_raid_device_1", raid.Devices[1])
