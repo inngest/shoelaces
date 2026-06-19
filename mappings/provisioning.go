@@ -176,6 +176,15 @@ func ParamsWithProvisioning(params map[string]interface{}, users map[string]Reso
 }
 
 func projectProvisioningParams(params map[string]interface{}, users map[string]ResolvedUser, provisioning ProvisioningConfig) {
+	_, explicitDebianRegularPartmanModules := params["debian_regular_partman_modules"]
+	_, explicitDebianLVMPartmanModules := params["debian_lvm_partman_modules"]
+	if _, ok := provisioning.Installer.ConfigParams["debian_regular_partman_modules"]; ok {
+		explicitDebianRegularPartmanModules = true
+	}
+	if _, ok := provisioning.Installer.ConfigParams["debian_lvm_partman_modules"]; ok {
+		explicitDebianLVMPartmanModules = true
+	}
+
 	// Preserve explicit caller/query parameters first, project structured
 	// provisioning fields second, then fill remaining keys with built-in
 	// defaults. This lets /configs/* query params override mapping policy while
@@ -273,6 +282,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 		setDefaultParamValue(params, "kickstart_centos_mirror", centosMirror)
 	}
 	setProvisioningDefaults(params)
+	deriveDebianPartmanModules(params, explicitDebianRegularPartmanModules, explicitDebianLVMPartmanModules)
 }
 
 func setProvisioningDefaults(params map[string]interface{}) {
@@ -492,6 +502,35 @@ func debianLVMPartmanModules(filesystems map[string]FilesystemConfig) string {
 		if fstype == "" {
 			fstype = "ext4"
 		}
+		module := debianPartmanModule(fstype)
+		if module == "" || seen[module] {
+			continue
+		}
+		modules = append(modules, module)
+		seen[module] = true
+	}
+	return strings.Join(modules, " ")
+}
+
+func deriveDebianPartmanModules(params map[string]interface{}, explicitRegularModules, explicitLVMModules bool) {
+	if !explicitRegularModules {
+		params["debian_regular_partman_modules"] = debianPartmanModulesForFinalParams(params, "debian_regular", false)
+	}
+	if !explicitLVMModules {
+		params["debian_lvm_partman_modules"] = debianPartmanModulesForFinalParams(params, "debian_lvm", true)
+	}
+}
+
+func debianPartmanModulesForFinalParams(params map[string]interface{}, prefix string, lvm bool) string {
+	modules := make([]string, 0, 4)
+	seen := map[string]bool{}
+	if lvm {
+		modules = append(modules, "lvm2-udeb", "partman-lvm")
+		seen["lvm2-udeb"] = true
+		seen["partman-lvm"] = true
+	}
+	for _, name := range []string{"boot", "root"} {
+		fstype := strings.TrimSpace(fmt.Sprint(params[prefix+"_"+name+"_fstype"]))
 		module := debianPartmanModule(fstype)
 		if module == "" || seen[module] {
 			continue

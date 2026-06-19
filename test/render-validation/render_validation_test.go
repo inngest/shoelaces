@@ -573,6 +573,16 @@ func TestRenderedDebianPreseedLVMRecipeAppliesStructuredFilesystems(t *testing.T
 	assert.NotContains(t, rendered, "20000 100000000 -1 ext4")
 }
 
+func TestRenderedDebianPreseedLVMModulesFollowFinalFilesystemOverrides(t *testing.T) {
+	params := paramsWith(defaultRenderParams, "storage_mode", "lvm")
+	params = paramsWith(params, "debian_lvm_root_fstype", "xfs")
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4 partman-xfs")
+	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ xfs }")
+}
+
 func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 	tests := []struct {
 		name   string

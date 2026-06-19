@@ -269,3 +269,20 @@ func TestParamsWithProvisioningProjectsStructuredLVMFilesystems(t *testing.T) {
 	assert.Equal(t, "-1", params["debian_lvm_root_max_size_mib"])
 	assert.Equal(t, "xfs", params["debian_lvm_root_fstype"])
 }
+
+func TestParamsWithProvisioningInfersLVMPartmanModulesFromConfigParamFilesystems(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Mode: "lvm",
+		},
+		Installer: InstallerConfig{
+			ConfigParams: map[string]any{
+				"debian_lvm_root_fstype": "xfs",
+			},
+		},
+	})
+
+	assert.Equal(t, "lvm", params["storage_mode"])
+	assert.Equal(t, "xfs", params["debian_lvm_root_fstype"])
+	assert.Equal(t, "lvm2-udeb partman-lvm partman-ext4 partman-xfs", params["debian_lvm_partman_modules"])
+}
