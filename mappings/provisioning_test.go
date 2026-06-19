@@ -221,3 +221,51 @@ func TestParamsWithProvisioningInfersMixedRegularPartmanModules(t *testing.T) {
 	assert.Equal(t, "ext4", params["debian_regular_boot_fstype"])
 	assert.Equal(t, "xfs", params["debian_regular_root_fstype"])
 }
+
+func TestParamsWithProvisioningProjectsStructuredLVMFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Filesystems: map[string]FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+	})
+
+	assert.Equal(t, "lvm2-udeb partman-lvm partman-xfs", params["debian_lvm_partman_modules"])
+	assert.Equal(t, "768", params["debian_lvm_esp_min_size_mib"])
+	assert.Equal(t, "768", params["debian_lvm_esp_priority"])
+	assert.Equal(t, "768", params["debian_lvm_esp_max_size_mib"])
+	assert.Equal(t, "/efi", params["debian_lvm_esp_mountpoint"])
+	assert.Equal(t, "2048", params["debian_lvm_boot_min_size_mib"])
+	assert.Equal(t, "2048", params["debian_lvm_boot_priority"])
+	assert.Equal(t, "2048", params["debian_lvm_boot_max_size_mib"])
+	assert.Equal(t, "xfs", params["debian_lvm_boot_fstype"])
+	assert.Equal(t, "4096", params["debian_lvm_swap_min_size_mib"])
+	assert.Equal(t, "4096", params["debian_lvm_swap_priority"])
+	assert.Equal(t, "4096", params["debian_lvm_swap_max_size_mib"])
+	assert.Equal(t, "65536", params["debian_lvm_root_min_size_mib"])
+	assert.Equal(t, "100000000", params["debian_lvm_root_priority"])
+	assert.Equal(t, "-1", params["debian_lvm_root_max_size_mib"])
+	assert.Equal(t, "xfs", params["debian_lvm_root_fstype"])
+}

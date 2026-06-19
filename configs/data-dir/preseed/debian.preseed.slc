@@ -97,7 +97,7 @@ d-i partman-auto/choose_recipe select uefi-regular
 {{end}}
 
 {{define "preseed/debian/storage/lvm" -}}
-d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4
+d-i anna/choose_modules string {{.debian_lvm_partman_modules}}
 
 # Use selected storage method
 d-i partman-auto/method string {{.storage_mode}}
@@ -116,36 +116,38 @@ d-i partman-md/confirm_nooverwrite boolean true
 # LVM recipe: ESP + PV on nvme0n1 + LVs (root, swap)
 d-i partman-auto/expert_recipe string \
   uefi-lvm ::                                                            \
-    512 512 512 fat32                                                    \
+    {{.debian_lvm_esp_min_size_mib}} {{.debian_lvm_esp_priority}} {{.debian_lvm_esp_max_size_mib}} {{.debian_lvm_esp_fstype}} \
         $primary{ } $iflabel{ gpt }                                      \
         method{ efi } format{ }                                          \
-        mountpoint{ /boot/efi }                                          \
+        mountpoint{ {{.debian_lvm_esp_mountpoint}} }                     \
     .                                                                    \
-    1024 1024 1024 ext4                                                  \
+    {{.debian_lvm_boot_min_size_mib}} {{.debian_lvm_boot_priority}} {{.debian_lvm_boot_max_size_mib}} {{.debian_lvm_boot_fstype}} \
         $primary{ } $iflabel{ gpt }                                      \
         method{ format } format{ }                                       \
-        use_filesystem{ } filesystem{ ext4 }                             \
-        mountpoint{ /boot }                                              \
+        use_filesystem{ } filesystem{ {{.debian_lvm_boot_fstype}} }      \
+        mountpoint{ {{.debian_lvm_boot_mountpoint}} }                    \
     .                                                                    \
-    1000 10000 -1 lvm                                                    \
+    {{.debian_lvm_pv_min_size_mib}} {{.debian_lvm_pv_priority}} {{.debian_lvm_pv_max_size_mib}} lvm \
         $primary{ } $iflabel{ gpt }                                      \
         method{ lvm }                                                    \
         device{ {{.storage_disk}} } \
         vg_name{ {{.vg_name}} } \
     .                                                                    \
-    8192 8192 8192 linux-swap                                            \
+{{if eq .debian_lvm_swap_enabled "true" -}}
+    {{.debian_lvm_swap_min_size_mib}} {{.debian_lvm_swap_priority}} {{.debian_lvm_swap_max_size_mib}} linux-swap \
         $lvmok{ }                                                        \
         in_vg{ {{.vg_name}} }   \
         lv_name{ swap }                                                  \
         method{ swap } format{ }                                         \
     .                                                                    \
-    20000 100000000 -1 ext4                                              \
+{{end -}}
+    {{.debian_lvm_root_min_size_mib}} {{.debian_lvm_root_priority}} {{.debian_lvm_root_max_size_mib}} {{.debian_lvm_root_fstype}} \
         $lvmok{ }                                                        \
         in_vg{ {{.vg_name}} }   \
         lv_name{ root }                                                  \
         method{ format } format{ }                                       \
-        use_filesystem{ } filesystem{ ext4 }                             \
-        mountpoint{ / }                                                  \
+        use_filesystem{ } filesystem{ {{.debian_lvm_root_fstype}} }      \
+        mountpoint{ {{.debian_lvm_root_mountpoint}} }                    \
     .
 
 d-i partman-auto/choose_recipe select uefi-lvm

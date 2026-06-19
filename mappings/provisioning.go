@@ -195,6 +195,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
 	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
 	projectDebianRegularFilesystemParams(params, provisioning.Storage)
+	projectDebianLVMFilesystemParams(params, provisioning.Storage)
 	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_ubuntu_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_centos_mirror", provisioning.Repos.OSMirror)
@@ -321,6 +322,29 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "debian_regular_root_max_size_mib", "-1")
 	setDefaultParamValue(params, "debian_regular_root_fstype", "ext4")
 	setDefaultParamValue(params, "debian_regular_root_mountpoint", "/")
+	setDefaultParamValue(params, "debian_lvm_partman_modules", "lvm2-udeb partman-lvm partman-ext4")
+	setDefaultParamValue(params, "debian_lvm_esp_min_size_mib", "512")
+	setDefaultParamValue(params, "debian_lvm_esp_priority", "512")
+	setDefaultParamValue(params, "debian_lvm_esp_max_size_mib", "512")
+	setDefaultParamValue(params, "debian_lvm_esp_fstype", "fat32")
+	setDefaultParamValue(params, "debian_lvm_esp_mountpoint", "/boot/efi")
+	setDefaultParamValue(params, "debian_lvm_boot_min_size_mib", "1024")
+	setDefaultParamValue(params, "debian_lvm_boot_priority", "1024")
+	setDefaultParamValue(params, "debian_lvm_boot_max_size_mib", "1024")
+	setDefaultParamValue(params, "debian_lvm_boot_fstype", "ext4")
+	setDefaultParamValue(params, "debian_lvm_boot_mountpoint", "/boot")
+	setDefaultParamValue(params, "debian_lvm_pv_min_size_mib", "1000")
+	setDefaultParamValue(params, "debian_lvm_pv_priority", "10000")
+	setDefaultParamValue(params, "debian_lvm_pv_max_size_mib", "-1")
+	setDefaultParamValue(params, "debian_lvm_swap_enabled", "true")
+	setDefaultParamValue(params, "debian_lvm_swap_min_size_mib", "8192")
+	setDefaultParamValue(params, "debian_lvm_swap_priority", "8192")
+	setDefaultParamValue(params, "debian_lvm_swap_max_size_mib", "8192")
+	setDefaultParamValue(params, "debian_lvm_root_min_size_mib", "20000")
+	setDefaultParamValue(params, "debian_lvm_root_priority", "100000000")
+	setDefaultParamValue(params, "debian_lvm_root_max_size_mib", "-1")
+	setDefaultParamValue(params, "debian_lvm_root_fstype", "ext4")
+	setDefaultParamValue(params, "debian_lvm_root_mountpoint", "/")
 	setDefaultParamValue(params, "repo_firmware", "true")
 	setDefaultParamValue(params, "repo_contrib", "true")
 	setDefaultParamValue(params, "repo_non_free", "true")
@@ -381,6 +405,28 @@ func projectDebianRegularFilesystemParams(params map[string]interface{}, storage
 	}
 }
 
+func projectDebianLVMFilesystemParams(params map[string]interface{}, storage StorageConfig) {
+	filesystems := storage.Filesystems
+	if len(filesystems) == 0 {
+		if storage.absentFilesystems["swap"] {
+			setDefaultParamValue(params, "debian_lvm_swap_enabled", "false")
+		}
+		return
+	}
+
+	projectDebianRegularPartitionParams(params, "esp", "debian_lvm_esp", filesystems["esp"])
+	projectDebianRegularPartitionParams(params, "boot", "debian_lvm_boot", filesystems["boot"])
+	projectDebianRegularPartitionParams(params, "swap", "debian_lvm_swap", filesystems["swap"])
+	projectDebianRegularPartitionParams(params, "root", "debian_lvm_root", filesystems["root"])
+
+	if modules := debianLVMPartmanModules(filesystems); modules != "" {
+		setDefaultParamValue(params, "debian_lvm_partman_modules", modules)
+	}
+	if storage.absentFilesystems["swap"] {
+		setDefaultParamValue(params, "debian_lvm_swap_enabled", "false")
+	}
+}
+
 func projectDebianRegularPartitionParams(params map[string]interface{}, name, prefix string, filesystem FilesystemConfig) {
 	if boolValue(filesystem.Absent) {
 		if name == "swap" {
@@ -412,6 +458,31 @@ func projectDebianRegularPartitionParams(params map[string]interface{}, name, pr
 func debianRegularPartmanModules(filesystems map[string]FilesystemConfig) string {
 	modules := make([]string, 0, 3)
 	seen := map[string]bool{}
+	for _, name := range []string{"boot", "root"} {
+		filesystem := filesystems[name]
+		if boolValue(filesystem.Absent) {
+			continue
+		}
+		fstype := filesystem.FSType
+		if fstype == "" {
+			fstype = "ext4"
+		}
+		module := debianPartmanModule(fstype)
+		if module == "" || seen[module] {
+			continue
+		}
+		modules = append(modules, module)
+		seen[module] = true
+	}
+	return strings.Join(modules, " ")
+}
+
+func debianLVMPartmanModules(filesystems map[string]FilesystemConfig) string {
+	modules := []string{"lvm2-udeb", "partman-lvm"}
+	seen := map[string]bool{
+		"lvm2-udeb":   true,
+		"partman-lvm": true,
+	}
 	for _, name := range []string{"boot", "root"} {
 		filesystem := filesystems[name]
 		if boolValue(filesystem.Absent) {
