@@ -1,9 +1,26 @@
+## [1.8.0] - 2026-06-19
+
+### 🚀 Features
+
+- *(preseed)* Support Debian storage modes (#65)
+
+### 🐛 Bug Fixes
+
+- *(preseed)* Set Debian LVM volume group (#63)
+
+### 📚 Documentation
+
+- *(storage)* Update storage guides and mappings (#66)
 ## [1.7.1] - 2026-06-19
 
 ### 🐛 Bug Fixes
 
 - *(preseed)* Default Debian storage mode to regular (#60)
 - *(preseed)* Harden Debian storage wipe behavior (#62)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.7.1 (#61)
 ## [1.7.0] - 2026-06-19
 
 ### 🚀 Features
