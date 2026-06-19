@@ -368,6 +368,11 @@ storage:
     bootDegraded: true
 ```
 
+Debian RAID mode duplicates normal EFI System Partitions across the member
+disks rather than putting the ESP on mdraid. The installer mounts one ESP at
+`/boot/efi`, installs/copies bootloader files to both ESPs, and uses mdadm for
+Linux-managed filesystems such as `/boot`, `/`, and swap.
+
 For NVMe-only hosts:
 
 ```yaml
