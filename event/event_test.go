@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/persistence"
 	"github.com/inngest/shoelaces/persistence/memory"
 	"github.com/inngest/shoelaces/server"
@@ -236,6 +237,30 @@ func TestHostBootEventRedactsSensitiveParams(t *testing.T) {
 	assert.NotContains(t, event.Message, "token-value")
 	assert.NotContains(t, event.Message, "private-key")
 	assert.Contains(t, event.Message, "[REDACTED]")
+}
+
+func TestHostBootEventRedactsLUKSPassphrases(t *testing.T) {
+	enabled := true
+	for _, passphrase := range []string{"raw-luks-passphrase", "env-resolved-luks-passphrase"} {
+		t.Run(passphrase, func(t *testing.T) {
+			event := New(HostBoot, server.Server{Hostname: "test_host"}, ManualBoot, "debian.ipxe", map[string]any{
+				"hostname": "test_host",
+				"provisioning": mappings.ProvisioningConfig{
+					Storage: mappings.StorageConfig{
+						Encryption: mappings.StorageEncryptionConfig{
+							Enabled:    &enabled,
+							Passphrase: passphrase,
+						},
+					},
+				},
+			})
+
+			assert.Equal(t, "test_host", event.Params["hostname"])
+			assert.Equal(t, "[REDACTED]", event.Params["provisioning"])
+			assert.NotContains(t, event.Message, passphrase)
+			assert.Contains(t, event.Message, "[REDACTED]")
+		})
+	}
 }
 
 func TestEventMarshalJSON(t *testing.T) {

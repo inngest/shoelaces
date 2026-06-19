@@ -81,11 +81,12 @@ type eventInfo struct {
 }
 
 type bootSessionReferenceInfo struct {
-	Ref    string         `json:"ref"`
-	Server serverInfo     `json:"server"`
-	Target string         `json:"target"`
-	Params map[string]any `json:"params"`
-	Users  map[string]any `json:"users"`
+	Ref          string         `json:"ref"`
+	Server       serverInfo     `json:"server"`
+	Target       string         `json:"target"`
+	Params       map[string]any `json:"params"`
+	Users        map[string]any `json:"users"`
+	Provisioning map[string]any `json:"provisioning"`
 }
 
 func TestShoelacesIntegration(t *testing.T) {
@@ -301,6 +302,73 @@ networkMaps:
 			}
 		})
 	}
+}
+
+func TestShoelacesKeepsLUKSPassphraseBehindBootReference(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "provisioning"), 0o755); err != nil {
+		t.Fatalf("create provisioning dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "provisioning", "extra.slc"), []byte(`{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo luks {{.provisioning.Storage.Encryption.Passphrase}}
+{{end}}
+`), 0o644); err != nil {
+		t.Fatalf("write extra template: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+defaults:
+  storage:
+    disk: /dev/vda
+    encryption:
+      enabled: true
+      passphrase: integ-luks-passphrase
+  installer:
+    configTemplate: preseed/debian
+    extraTemplate: provisioning/extra
+    configParams:
+      encrypt_home: false
+targets:
+  debian13:
+    script: debian.ipxe
+    repos:
+      release: trixie
+networkMaps:
+  - network: 127.0.0.1/32
+    defaultTarget: debian13
+    targets:
+      - debian13
+`), 0o644); err != nil {
+		t.Fatalf("write mappings: %v", err)
+	}
+
+	proc := startShoelacesWithDataDir(t, dataDir)
+	defer proc.stop(t)
+
+	bootScript := proc.getString(t, "/poll/1/06-66-de-ad-be-ef", nil)
+	assertContainsAll(t, bootScript, []string{
+		"Debian trixie netboot",
+		"preseed/url=http://localhost:18888/configs/preseed/debian?",
+		"ref=",
+	})
+	assertNotContains(t, bootScript, "integ-luks-passphrase")
+	assertNotContains(t, bootScript, "provisioning=")
+
+	preseedURL := renderedPreseedURL(t, bootScript)
+	ref := preseedURL.Query().Get("ref")
+	if ref == "" {
+		t.Fatalf("expected boot script config URL to include ref, got %s", preseedURL.String())
+	}
+	proc.assertGETContains(t, preseedURL.RequestURI(), nil, []string{
+		"d-i preseed/late_command string echo luks integ-luks-passphrase",
+	})
+
+	var reference bootSessionReferenceInfo
+	proc.getJSON(t, "/ajax/boot-sessions/"+url.PathEscape(ref), &reference)
+	referenceJSON, err := json.Marshal(reference)
+	if err != nil {
+		t.Fatalf("marshal boot reference: %v", err)
+	}
+	assertNotContains(t, string(referenceJSON), "integ-luks-passphrase")
 }
 
 func TestShoelacesPersistsBootReferencesAcrossRestarts(t *testing.T) {
