@@ -1,3 +1,29 @@
+## [1.7.0] - 2026-06-19
+
+### 🚀 Features
+
+- Add runtime persistence and nested config schema (#48)
+- Persist runtime event history (#49)
+- Persist waiting server state (#50)
+- Persist boot config references (#51)
+- Expose persistent runtime reference APIs (#52)
+- *(cli)* Add explicit run command (#55)
+- *(cli)* Add runtime inspection foundation (#56)
+- *(cli)* Add event inspection commands (#57)
+- *(cli)* Add server state inspection commands (#58)
+- *(cli)* Add boot session inspection command (#59)
+
+### 🐛 Bug Fixes
+
+- *(handlers)* Render boot refs with stored environment (#54)
+
+### 🚜 Refactor
+
+- Make debug CLI-only (#46)
+
+### 📚 Documentation
+
+- Finalize runtime persistence operations (#53)
 ## [1.6.1] - 2026-06-18
 
 ### 🐛 Bug Fixes
@@ -8,6 +34,10 @@
 
 - Add slog-backed component logging (#42)
 - Switch HTTP router to chi (#44)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.6.1 (#43)
 ## [1.6.0] - 2026-06-18
 
 ### 🚀 Features
