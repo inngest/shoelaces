@@ -99,20 +99,20 @@ site-specific native installer behavior.
 
 *** Phase 2: Secret Transport And Redaction
 
-- [ ] Reuse persisted boot-session refs so installer config rendering receives
+- [X] Reuse persisted boot-session refs so installer config rendering receives
   secret-bearing provisioning values without placing raw LUKS passphrases in the
   rendered iPXE boot script or long query strings.
-- [ ] Keep only the opaque =ref= in boot/config URLs and resolve secret values
+- [X] Keep only the opaque =ref= in boot/config URLs and resolve secret values
   server-side during =/configs/*= rendering.
-- [ ] Document the existing boot-session ref lifetime, expiration behavior, and
+- [X] Document the existing boot-session ref lifetime, expiration behavior, and
   failure behavior for encrypted installs.
-- [ ] Redact encryption passphrases anywhere provisioning structures are logged,
+- [X] Redact encryption passphrases anywhere provisioning structures are logged,
   stored in events, or exposed through debug/template render logs.
-- [ ] Add unit tests proving boot scripts carry only opaque references and do
+- [X] Add unit tests proving boot scripts carry only opaque references and do
   not contain raw LUKS passphrases.
-- [ ] Add log/event redaction tests for raw and environment-resolved
+- [X] Add log/event redaction tests for raw and environment-resolved
   passphrases.
-- [ ] Add integration tests covering =/poll/*= and =/configs/preseed/*= so the
+- [X] Add integration tests covering =/poll/*= and =/configs/preseed/*= so the
   boot script can select an encrypted install without exposing the secret in
   the boot script body.
 
