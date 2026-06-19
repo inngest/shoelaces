@@ -159,14 +159,14 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 5: Server State Inspection
 
-- [ ] Add =shoelaces servers list=.
-- [ ] Add =shoelaces servers get <mac>=.
-- [ ] Show waiting/manual state fields that are useful during boot debugging:
+- [X] Add =shoelaces servers list=.
+- [X] Add =shoelaces servers get <mac>=.
+- [X] Show waiting/manual state fields that are useful during boot debugging:
   host identity, target, environment, retry count, last access, allowed targets,
   and redacted params.
-- [ ] Add optional filters such as =--waiting= and =--mac= if they simplify
+- [X] Add optional filters such as =--waiting= and =--mac= if they simplify
   operator workflows.
-- [ ] Add tests for empty state, waiting hosts, selected hosts, missing MACs,
+- [X] Add tests for empty state, waiting hosts, selected hosts, missing MACs,
   table output, and JSON output.
 
 *** Phase 6: Boot Session Inspection
