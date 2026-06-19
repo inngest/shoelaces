@@ -235,6 +235,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "packages_update_policy", provisioning.Packages.UpdatePolicy)
 	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
 	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
+	projectStorageEncryptionParams(params, provisioning.Storage.Encryption)
 	projectRAIDParams(params, provisioning.Storage.RAID)
 	projectDebianRegularFilesystemParams(params, provisioning.Storage)
 	projectDebianLVMFilesystemParams(params, provisioning.Storage)
@@ -345,6 +346,10 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "kickstart_storage_drive", "sda")
 	setDefaultParamValue(params, "storage_wipe", "true")
 	setDefaultParamValue(params, "storage_mode", "regular")
+	setDefaultParamValue(params, "storage_encryption_enabled", "false")
+	setDefaultParamValue(params, "storage_encryption_cipher", "aes-xts-plain64")
+	setDefaultParamValue(params, "storage_encryption_key_size", "512")
+	setDefaultParamValue(params, "storage_encryption_hash", "sha512")
 	setDefaultParamValue(params, "ubuntu_minimal_storage_mode", "regular")
 	setDefaultParamValue(params, "debian_regular_partman_modules", "partman-ext4")
 	setDefaultParamValue(params, "debian_regular_esp_min_size_mib", "512")
@@ -447,6 +452,20 @@ func setDefaultParamValue(params map[string]interface{}, key string, value any) 
 	if _, ok := params[key]; !ok {
 		params[key] = fmt.Sprint(value)
 	}
+}
+
+func projectStorageEncryptionParams(params map[string]interface{}, encryption StorageEncryptionConfig) {
+	if encryption.Enabled != nil {
+		setDefaultParamValue(params, "storage_encryption_enabled", *encryption.Enabled)
+	}
+	if encryption.Passphrase != nil {
+		setDefaultParamValue(params, "storage_encryption_passphrase", encryption.Passphrase)
+	}
+	setDefaultParam(params, "storage_encryption_cipher", encryption.Cipher)
+	if encryption.KeySize != nil {
+		setDefaultParamValue(params, "storage_encryption_key_size", *encryption.KeySize)
+	}
+	setDefaultParam(params, "storage_encryption_hash", encryption.Hash)
 }
 
 func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {

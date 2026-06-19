@@ -156,6 +156,36 @@ storage:
   volumeGroup: vg0
 ```
 
+Set `storage.encryption.enabled: true` on Debian `regular`, `lvm`, or `raid`
+targets to render LUKS preseeding from structured storage fields. The
+passphrase is required when encryption is enabled. `cipher`, `keySize`, and
+`hash` default to `aes-xts-plain64`, `512`, and `sha512` unless overridden:
+
+```yaml
+storage:
+  mode: lvm
+  disk: /dev/nvme0n1
+  volumeGroup: vg0
+  encryption:
+    enabled: true
+    passphrase:
+      env: SHOELACES_LUKS_PASSPHRASE
+```
+
+The encrypted Debian layouts keep boot-critical files outside LUKS. In
+`regular` mode, the ESP and `/boot` are unencrypted partitions while swap and
+root are separate LUKS volumes. In `lvm` mode, the ESP and `/boot` are
+unencrypted partitions, and LUKS wraps the physical volume that backs
+`storage.volumeGroup`; root and swap remain logical volumes inside that volume
+group. In `raid` mode, each disk gets a normal duplicated ESP, `/boot` is
+unencrypted RAID1, and LUKS is placed on the RAID1 devices used for swap and
+root.
+
+Preseeded encryption is unattended, so the installer config necessarily
+contains the LUKS passphrase when rendered. Use environment-backed passphrases,
+boot-session references, and trusted provisioning networks for encrypted
+targets.
+
 The legacy `plain` value remains parseable in mappings for compatibility with
 older generic config, but Debian preseed rejects it clearly. Use `regular` for
 new Debian plain-disk installs.

@@ -165,6 +165,12 @@ func TestAjaxBootSessionReferenceReturnsRedactedMetadata(t *testing.T) {
 				},
 			},
 			Provisioning: mappings.ProvisioningConfig{
+				Storage: mappings.StorageConfig{
+					Encryption: mappings.StorageEncryptionConfig{
+						Enabled:    boolPtr(true),
+						Passphrase: "luks-passphrase",
+					},
+				},
 				Installer: mappings.InstallerConfig{
 					ConfigParams: map[string]any{"bootstrap_token": "secret-token"},
 				},
@@ -185,8 +191,13 @@ func TestAjaxBootSessionReferenceReturnsRedactedMetadata(t *testing.T) {
 	params := got["params"].(map[string]any)
 	assert.Equal(t, "boot-host", params["hostname"])
 	assert.Equal(t, "[REDACTED]", params["bootstrap_token"])
+	provisioning := got["provisioning"].(map[string]any)
+	storage := provisioning["Storage"].(map[string]any)
+	encryption := storage["Encryption"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", encryption["Passphrase"])
 	assert.NotContains(t, rr.Body.String(), "secret-token")
 	assert.NotContains(t, rr.Body.String(), "$6$secret")
+	assert.NotContains(t, rr.Body.String(), "luks-passphrase")
 }
 
 func TestAjaxBootSessionReferenceReturnsNotFound(t *testing.T) {
@@ -399,6 +410,68 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string echo extra boot-host /dev/vda")
 }
 
+func TestConfigTemplateRouteKeepsLUKSPassphraseBehindBootReference(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "provisioning"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "provisioning", "extra.slc"), []byte(`{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo luks {{.provisioning.Storage.Encryption.Passphrase}}
+{{end}}
+`), 0o644))
+
+	var bootScript string
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates = templates.New(env.Logger)
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		provisioning := mappings.ProvisioningConfig{
+			Storage: mappings.StorageConfig{
+				Disk: "/dev/vda",
+				Encryption: mappings.StorageEncryptionConfig{
+					Enabled:    boolPtr(true),
+					Passphrase: "luks-passphrase",
+				},
+			},
+			Repos: mappings.ReposConfig{
+				Release: "trixie",
+			},
+			Installer: mappings.InstallerConfig{
+				ConfigTemplate: "preseed/debian",
+				ExtraTemplate:  "provisioning/extra",
+				ConfigParams: map[string]any{
+					"encrypt_home": false,
+				},
+			},
+		}
+		params := mappings.ParamsWithProvisioning(map[string]any{
+			"baseURL":  env.BaseURL,
+			"hostname": "boot-host",
+		}, nil, provisioning)
+
+		var err error
+		ref, err := env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server:       server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target:       "debian.ipxe",
+			Params:       params,
+			Provisioning: provisioning,
+		})
+		require.NoError(t, err)
+		bootsession.ApplyReferenceParams(params, ref)
+		bootScript, err = env.Templates.RenderTemplate("debian.ipxe", params, "")
+		require.NoError(t, err)
+	})
+	assert.Contains(t, bootScript, "ref=")
+	assert.NotContains(t, bootScript, "luks-passphrase")
+	assert.NotContains(t, bootScript, "provisioning=")
+
+	preseedURL := renderedPreseedURL(t, bootScript)
+	req := httptest.NewRequest(http.MethodGet, preseedURL.RequestURI(), nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string echo luks luks-passphrase")
+}
+
 func TestConfigTemplateRouteResolvesBootReferenceAndPreservesQueryOverrides(t *testing.T) {
 	dataDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.cfg.slc"), []byte(`{{define "install.cfg" -}}
@@ -569,4 +642,8 @@ func renderedPreseedURL(t *testing.T, bootScript string) *url.URL {
 	}
 	t.Fatalf("rendered boot script did not contain preseed/url: %s", bootScript)
 	return nil
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

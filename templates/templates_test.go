@@ -268,13 +268,13 @@ func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname":              "secure-host",
 		"baseURL":               "127.0.0.1:8081",
-		"root_password_crypted": "hash",
+		"root_password_crypted": "root-password-value",
 		"bootstrap_token":       "token-value",
 	}, "")
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
-	assert.NotContains(t, logOutput.String(), "hash")
+	assert.NotContains(t, logOutput.String(), "root-password-value")
 	assert.NotContains(t, logOutput.String(), "token-value")
 	logParams := loggedTemplateParams(t, logOutput.String())
 	assert.Equal(t, "[REDACTED]", logParams["root_password_crypted"])
@@ -312,10 +312,17 @@ func TestRenderTemplateRedactsStructuredUsersInLogs(t *testing.T) {
 func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 	var logOutput bytes.Buffer
 	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
+	enabled := true
 	params := mappings.ParamsWithProvisioning(map[string]any{
 		"hostname": "secure-host",
 		"baseURL":  "127.0.0.1:8081",
 	}, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    &enabled,
+				Passphrase: "raw-luks-passphrase",
+			},
+		},
 		Installer: mappings.InstallerConfig{
 			ConfigParams: map[string]any{
 				"bootstrap_token": "secret-token",
@@ -328,12 +335,44 @@ func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
 	assert.NotContains(t, logOutput.String(), "secret-token")
+	assert.NotContains(t, logOutput.String(), "raw-luks-passphrase")
 	logParams := loggedTemplateParams(t, logOutput.String())
 	assert.Equal(t, "[REDACTED]", logParams["bootstrap_token"])
 	provisioning := logParams["provisioning"].(map[string]any)
+	storage := provisioning["Storage"].(map[string]any)
+	encryption := storage["Encryption"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", encryption["Passphrase"])
 	installer := provisioning["Installer"].(map[string]any)
 	configParams := installer["ConfigParams"].(map[string]any)
 	assert.Equal(t, "[REDACTED]", configParams["bootstrap_token"])
+}
+
+func TestRenderTemplateRedactsEnvironmentResolvedLUKSPassphraseInLogs(t *testing.T) {
+	var logOutput bytes.Buffer
+	renderer := newTestRendererWithLogger(t, log.MakeLogger(&logOutput))
+	enabled := true
+	params := mappings.ParamsWithProvisioning(map[string]any{
+		"hostname": "secure-host",
+		"baseURL":  "127.0.0.1:8081",
+	}, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    &enabled,
+				Passphrase: "env-resolved-luks-passphrase",
+			},
+		},
+	})
+
+	rendered, err := renderer.RenderTemplate("boot.ipxe", params, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "secure-host")
+	assert.NotContains(t, logOutput.String(), "env-resolved-luks-passphrase")
+	logParams := loggedTemplateParams(t, logOutput.String())
+	provisioning := logParams["provisioning"].(map[string]any)
+	storage := provisioning["Storage"].(map[string]any)
+	encryption := storage["Encryption"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", encryption["Passphrase"])
 }
 
 func TestListVariablesReturnsEmptyForUnknownTemplate(t *testing.T) {
@@ -456,6 +495,28 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "d-i preseed/late_command string echo extra extra-host /dev/nvme0n1")
+	assert.NotContains(t, rendered, "<no value>")
+}
+
+func TestRenderTemplateAppliesBooleanInstallerEncryptionParam(t *testing.T) {
+	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "127.0.0.1:8081",
+		"hostname": "encrypted-host",
+	}, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			ConfigParams: map[string]any{
+				"storage_encryption_enabled":    true,
+				"storage_encryption_passphrase": "luks-passphrase",
+			},
+		},
+	})
+
+	rendered, err := renderer.RenderTemplate("preseed/debian", params, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "d-i partman-auto/method string crypto")
+	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
 	assert.NotContains(t, rendered, "<no value>")
 }
 

@@ -363,6 +363,34 @@ storage:
   volumeGroup: vg0
 ```
 
+Debian `regular`, `lvm`, and `raid` modes can be encrypted by setting
+`storage.encryption.enabled: true`. The passphrase is required when encryption
+is enabled and can be loaded from the Shoelaces process environment. `cipher`,
+`keySize`, and `hash` default to `aes-xts-plain64`, `512`, and `sha512`:
+
+```yaml
+storage:
+  mode: lvm
+  disk: /dev/nvme0n1
+  volumeGroup: vg0
+  encryption:
+    enabled: true
+    passphrase:
+      env: SHOELACES_LUKS_PASSPHRASE
+```
+
+Encrypted Debian layouts keep the firmware and bootloader path unencrypted. In
+`regular` mode, the ESP and `/boot` stay outside LUKS, while swap and root are
+separate LUKS volumes. In `lvm` mode, LUKS wraps the physical volume used by
+`storage.volumeGroup`, and root and swap are logical volumes inside that volume
+group. In `raid` mode, both disks get normal duplicated ESPs, `/boot` is
+unencrypted RAID1, and LUKS is placed on the RAID1 devices used for swap and
+root.
+
+The rendered Debian preseed must contain the passphrase so the install can run
+unattended. Keep encrypted targets behind boot-session references and use a
+trusted provisioning network.
+
 The legacy `plain` value remains parseable in mappings for compatibility with
 older generic config, but Debian preseed rejects it clearly. Use `regular` for
 new Debian plain-disk installs.

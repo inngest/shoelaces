@@ -113,6 +113,12 @@ func TestStoreInspectReturnsRedactedReference(t *testing.T) {
 			},
 		},
 		Provisioning: mappings.ProvisioningConfig{
+			Storage: mappings.StorageConfig{
+				Encryption: mappings.StorageEncryptionConfig{
+					Enabled:    boolPtr(true),
+					Passphrase: "luks-passphrase",
+				},
+			},
 			Installer: mappings.InstallerConfig{
 				ConfigParams: map[string]any{
 					"bootstrap_token": "secret-token",
@@ -137,6 +143,9 @@ func TestStoreInspectReturnsRedactedReference(t *testing.T) {
 	assert.Equal(t, "[REDACTED]", infra["PasswordCrypted"])
 	assert.Equal(t, "[REDACTED]", infra["SSHAuthorizedKeys"])
 	provisioning := reference.Provisioning.(map[string]any)
+	storage := provisioning["Storage"].(map[string]any)
+	encryption := storage["Encryption"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", encryption["Passphrase"])
 	installer := provisioning["Installer"].(map[string]any)
 	configParams := installer["ConfigParams"].(map[string]any)
 	assert.Equal(t, "[REDACTED]", configParams["bootstrap_token"])
@@ -155,4 +164,8 @@ func TestApplyReferenceParamsSetsBootReferenceQueryParams(t *testing.T) {
 	assert.Equal(t, "ref=01JREFTESTREFTESTREFTEST00", params["boot_ref_query"])
 	assert.Equal(t, "&ref=01JREFTESTREFTESTREFTEST00", params["boot_ref_query_suffix"])
 	assert.Equal(t, "?ref=01JREFTESTREFTESTREFTEST00", params["boot_ref_query_question"])
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

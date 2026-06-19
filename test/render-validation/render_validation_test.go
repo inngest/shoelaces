@@ -298,6 +298,32 @@ func TestRenderedPreseedsPassDebconfSetSelectionsWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestRenderedEncryptedDebianPreseedsPassDebconfSetSelectionsWhenAvailable(t *testing.T) {
+	debconfSetSelections := validatorPath(t, "debconf-set-selections")
+	renderer := newRenderer(t)
+	for _, tt := range []struct {
+		name   string
+		params map[string]interface{}
+	}{
+		{name: "regular", params: encryptedDebianParams(mappings.StorageConfig{})},
+		{name: "lvm", params: encryptedDebianParams(mappings.StorageConfig{Mode: "lvm", VolumeGroup: "vgluks"})},
+		{name: "raid", params: encryptedDebianParams(mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+		})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			preseedPath := writeRenderedFile(t, "preseed.cfg", renderTemplate(t, renderer, "preseed/debian", tt.params))
+
+			output, err := exec.Command(debconfSetSelections, "--checkonly", preseedPath).CombinedOutput()
+			require.NoError(t, err, string(output))
+		})
+	}
+}
+
 func TestRenderedPreseedsApplyInstallUserParams(t *testing.T) {
 	renderer := newRenderer(t)
 	params := paramsWith(defaultRenderParams, "install_username", "alice")
@@ -747,6 +773,134 @@ func TestRenderedDebianPreseedRAIDRecipeAcceptsExplicitDeviceList(t *testing.T) 
 	assert.Contains(t, rendered, "d-i mdadm/boot_degraded boolean true")
 }
 
+func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{}))
+
+	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string crypto-dm-modules partman-crypto partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto/method string crypto")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular-luks")
+	assert.Contains(t, rendered, "method{ efi } format{ }")
+	assert.Contains(t, rendered, "mountpoint{ /boot/efi }")
+	assert.Contains(t, rendered, "mountpoint{ /boot }")
+	assert.Contains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.Contains(t, rendered, "20000 100000000 -1 ext4")
+	assert.Contains(t, rendered, "method{ crypto }")
+	assert.Contains(t, rendered, "method{ swap } format{ }")
+	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ ext4 }")
+	assert.Contains(t, rendered, "mountpoint{ / }")
+	assert.Contains(t, rendered, "options/crypto_type{ luks }")
+	assert.Contains(t, rendered, "options/cipher{ aes-xts-plain64 }")
+	assert.Contains(t, rendered, "options/keysize{ 512 }")
+	assert.Contains(t, rendered, "options/hash{ sha512 }")
+	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
+	assert.NotContains(t, rendered, "$lvmok{ }")
+	assert.NotContains(t, rendered, "partman-auto-raid/recipe")
+}
+
+func TestRenderedDebianPreseedEncryptedLVMRecipe(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
+		Mode:        "lvm",
+		VolumeGroup: "vgluks",
+	}))
+
+	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string crypto-dm-modules partman-crypto lvm2-udeb partman-lvm partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto/method string crypto")
+	assert.Contains(t, rendered, "d-i partman-auto-lvm/new_vg_name string vgluks")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-lvm-luks")
+	assert.Contains(t, rendered, "1000 10000 -1 crypto")
+	assert.Contains(t, rendered, "method{ crypto }")
+	assert.Contains(t, rendered, "method{ lvm }")
+	assert.Contains(t, rendered, "vg_name{ vgluks }")
+	assert.Contains(t, rendered, "in_vg{ vgluks }")
+	assert.Contains(t, rendered, "lv_name{ root }")
+	assert.Contains(t, rendered, "lv_name{ swap }")
+	assert.Contains(t, rendered, "options/cipher{ aes-xts-plain64 }")
+	assert.NotContains(t, rendered, "partman-auto/choose_recipe select uefi-lvm\n")
+}
+
+func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
+		Mode: "raid",
+		RAID: mappings.RAIDConfig{
+			Level:   1,
+			Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+		},
+	}))
+
+	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string crypto-dm-modules partman-crypto mdadm-udeb partman-md partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/nvme0n1 /dev/nvme1n1")
+	assert.Contains(t, rendered, "d-i partman-auto/method string raid")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
+	assert.Contains(t, rendered, "device{ /dev/nvme0n1 }")
+	assert.Contains(t, rendered, "device{ /dev/nvme1n1 }")
+	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
+	assert.Contains(t, rendered, "1 2 0 crypto -")
+	assert.Contains(t, rendered, "method=crypto")
+	assert.Contains(t, rendered, "options/cipher=aes-xts-plain64")
+	assert.Contains(t, rendered, "options/keysize=512")
+	assert.Contains(t, rendered, "options/hash=sha512")
+	assert.Contains(t, rendered, "raidid=2")
+	assert.Contains(t, rendered, "raidid=3")
+	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
+	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
+	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
+	assert.NotContains(t, rendered, "1 2 0 ext4 / \\\n        raidid=3")
+}
+
+func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]interface{}
+		want   string
+	}{
+		{
+			name:   "missing passphrase",
+			params: paramsWith(defaultRenderParams, "storage_encryption_enabled", "true"),
+			want:   "preseed/debian storage_encryption_passphrase is required when storage_encryption_enabled is true",
+		},
+		{
+			name:   "invalid enabled value",
+			params: paramsWith(defaultRenderParams, "storage_encryption_enabled", "yes"),
+			want:   `preseed/debian storage_encryption_enabled must be "true" or "false", got "yes"`,
+		},
+		{
+			name: "empty cipher",
+			params: paramsWith(
+				paramsWith(
+					paramsWith(defaultRenderParams, "storage_encryption_enabled", "true"),
+					"storage_encryption_passphrase", "luks-passphrase",
+				),
+				"storage_encryption_cipher", "",
+			),
+			want: "preseed/debian storage_encryption_cipher must not be empty when storage_encryption_enabled is true",
+		},
+		{
+			name: "invalid key size",
+			params: paramsWith(
+				paramsWith(
+					paramsWith(defaultRenderParams, "storage_encryption_enabled", "true"),
+					"storage_encryption_passphrase", "luks-passphrase",
+				),
+				"storage_encryption_key_size", "0",
+			),
+			want: "preseed/debian storage_encryption_key_size must be a positive integer when storage_encryption_enabled is true",
+		},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := renderTemplateError(t, renderer, "preseed/debian", tt.params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
 func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1107,4 +1261,18 @@ func paramsWith(params map[string]interface{}, key string, value interface{}) ma
 
 func paramsWithStructuredUsers(params map[string]interface{}) map[string]interface{} {
 	return mappings.ParamsWithUsers(params, structuredRenderUsers)
+}
+
+func encryptedDebianParams(storage mappings.StorageConfig) map[string]interface{} {
+	enabled := true
+	if storage.Encryption.Enabled == nil {
+		storage.Encryption.Enabled = &enabled
+	}
+	if storage.Encryption.Passphrase == nil {
+		storage.Encryption.Passphrase = "luks-passphrase"
+	}
+	return mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: storage,
+		Boot:    mappings.BootConfig{Firmware: "uefi"},
+	})
 }

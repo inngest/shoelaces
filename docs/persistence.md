@@ -74,6 +74,9 @@ When polling resolves a target, Shoelaces stores the resolved target,
 environment, host identity, template params, users, and provisioning config in
 the persistence store. The rendered boot script receives an opaque `ref`
 parameter instead of a long query string with the full structured config.
+This is the required transport for secret-bearing installer settings such as
+`storage.encryption.passphrase`: boot scripts should carry only the opaque
+`ref`, and `/configs/*?ref=...` resolves the full template context server-side.
 
 ```mermaid
 sequenceDiagram
@@ -104,6 +107,20 @@ stored rendering context. Operator-facing lookup APIs return redacted views:
 
 Explicit query params on `/configs/*` still act as an override/escape hatch for
 routes that already accepted them.
+
+Boot refs expire according to `persistence.retention.bootSessions`. Expired or
+missing refs fail the installer config request with `404 boot reference not
+found`; the host must poll again to receive a fresh boot script and ref. The
+sweeper removes expired boot sessions according to
+`persistence.retention.bootSessionsSweepInterval`, and startup cleanup removes
+already-expired records.
+
+Resolved provisioning data is persisted in the boot-session record until the
+record expires or is swept. If a target uses `storage.encryption.passphrase`,
+that passphrase must be treated as sensitive operational state in the runtime
+store. Operator-facing APIs and CLI inspection return redacted metadata only,
+but filesystem/database access to the runtime store should be protected with
+the same care as unattended installer secrets.
 
 ## CQRS Boundaries
 

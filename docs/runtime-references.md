@@ -22,7 +22,12 @@ template context. UI/AJAX APIs must use redacted views:
 - structured users keep useful non-secret fields but redact password hashes and
   SSH authorized keys;
 - structured provisioning keeps useful installer context but redacts nested
-  sensitive values.
+  sensitive values such as `storage.encryption.passphrase`.
+
+Secret-bearing installer values are still present in the persisted boot-session
+record until the ref expires or is swept. A missing or expired ref returns
+`404 boot reference not found`; the host should poll again to receive a fresh
+boot script and `/configs/*?ref=...` URL.
 
 The current HTTP API assumes the same operator trust boundary as the existing
 Shoelaces UI. It does not add per-reference authorization.

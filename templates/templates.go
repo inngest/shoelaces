@@ -355,12 +355,44 @@ func validateDebianPreseedParams(paramMap map[string]interface{}) error {
 	mode := strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"]))
 	switch mode {
 	case "regular", "lvm":
-		return nil
+		return validateDebianEncryptionPreseedParams(paramMap)
 	case "raid":
-		return validateDebianRAIDPreseedParams(paramMap)
+		if err := validateDebianRAIDPreseedParams(paramMap); err != nil {
+			return err
+		}
+		return validateDebianEncryptionPreseedParams(paramMap)
 	default:
 		return errors.New(`preseed/debian storage_mode must be "regular", "lvm", or "raid", got ` + strconv.Quote(mode))
 	}
+}
+
+func validateDebianEncryptionPreseedParams(paramMap map[string]interface{}) error {
+	enabled := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_enabled"]))
+	if enabled != "true" && enabled != "false" {
+		return errors.New(`preseed/debian storage_encryption_enabled must be "true" or "false", got ` + strconv.Quote(enabled))
+	}
+	paramMap["storage_encryption_enabled"] = enabled
+	if enabled == "false" {
+		return nil
+	}
+	passphrase := ""
+	if value, ok := paramMap["storage_encryption_passphrase"]; ok {
+		passphrase = strings.TrimSpace(fmt.Sprint(value))
+	}
+	if passphrase == "" {
+		return errors.New("preseed/debian storage_encryption_passphrase is required when storage_encryption_enabled is true")
+	}
+	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_cipher"])) == "" {
+		return errors.New("preseed/debian storage_encryption_cipher must not be empty when storage_encryption_enabled is true")
+	}
+	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_hash"])) == "" {
+		return errors.New("preseed/debian storage_encryption_hash must not be empty when storage_encryption_enabled is true")
+	}
+	keySize, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_key_size"])))
+	if err != nil || keySize <= 0 {
+		return errors.New("preseed/debian storage_encryption_key_size must be a positive integer when storage_encryption_enabled is true")
+	}
+	return nil
 }
 
 func validateDebianRAIDPreseedParams(paramMap map[string]interface{}) error {

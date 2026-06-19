@@ -22,15 +22,40 @@ d-i partman-auto/disk string {{.storage_disk}}
 {{end}}
 
 {{template "preseed/debian/storage/wipe" .}}
+{{template "preseed/debian/storage/encryption" .}}
 {{if eq .storage_mode "lvm" -}}
+{{if eq .storage_encryption_enabled "true" -}}
+{{template "preseed/debian/storage/lvm/encrypted" .}}
+{{else -}}
 {{template "preseed/debian/storage/lvm" .}}
+{{end -}}
 {{else if eq .storage_mode "raid" -}}
+{{if eq .storage_encryption_enabled "true" -}}
+{{template "preseed/debian/storage/raid/encrypted" .}}
+{{else -}}
 {{template "preseed/debian/storage/raid" .}}
+{{end -}}
+{{else -}}
+{{if eq .storage_encryption_enabled "true" -}}
+{{template "preseed/debian/storage/regular/encrypted" .}}
 {{else -}}
 {{template "preseed/debian/storage/regular" .}}
 {{end -}}
+{{end -}}
 {{template "preseed/debian/storage/commit" .}}
 {{template "preseed/debian/storage/grub" .}}
+{{end}}
+
+{{define "preseed/debian/storage/encryption" -}}
+{{if eq .storage_encryption_enabled "true" -}}
+# ---- LUKS encryption answers ----
+d-i partman-crypto/passphrase password {{.storage_encryption_passphrase}}
+d-i partman-crypto/passphrase-again password {{.storage_encryption_passphrase}}
+d-i partman-crypto/weak_passphrase boolean true
+d-i partman-crypto/confirm boolean true
+d-i partman-crypto/confirm_nooverwrite boolean true
+d-i partman-crypto/erase_disks boolean false
+{{end -}}
 {{end}}
 
 {{define "preseed/debian/storage/wipe" -}}
@@ -102,6 +127,55 @@ d-i partman-auto/expert_recipe string \
 d-i partman-auto/choose_recipe select uefi-regular
 {{end}}
 
+{{define "preseed/debian/storage/regular/encrypted" -}}
+d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_regular_partman_modules}}
+
+# Encrypt root and swap as separate LUKS volumes; ESP and /boot stay unencrypted
+# so UEFI firmware and GRUB can start without unlocking the root volume first.
+d-i partman-auto/method string crypto
+
+# Make sure any crypto/md leftovers can be replaced without prompts
+d-i partman-crypto/device_remove_crypto boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
+
+d-i partman-auto/expert_recipe string \
+  uefi-regular-luks ::                                                   \
+    {{.debian_regular_esp_min_size_mib}} {{.debian_regular_esp_priority}} {{.debian_regular_esp_max_size_mib}} {{.debian_regular_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        mountpoint{ {{.debian_regular_esp_mountpoint}} }                 \
+    .                                                                    \
+    {{.debian_regular_boot_min_size_mib}} {{.debian_regular_boot_priority}} {{.debian_regular_boot_max_size_mib}} {{.debian_regular_boot_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ {{.debian_regular_boot_fstype}} }  \
+        mountpoint{ {{.debian_regular_boot_mountpoint}} }                \
+    .                                                                    \
+{{if eq .debian_regular_swap_enabled "true" -}}
+    {{.debian_regular_swap_min_size_mib}} {{.debian_regular_swap_priority}} {{.debian_regular_swap_max_size_mib}} linux-swap \
+        method{ crypto } format{ }                                       \
+        options/crypto_type{ luks }                                      \
+        options/cipher{ {{.storage_encryption_cipher}} }                 \
+        options/keysize{ {{.storage_encryption_key_size}} }              \
+        options/hash{ {{.storage_encryption_hash}} }                     \
+        method{ swap } format{ }                                         \
+    .                                                                    \
+{{end -}}
+    {{.debian_regular_root_min_size_mib}} {{.debian_regular_root_priority}} {{.debian_regular_root_max_size_mib}} {{.debian_regular_root_fstype}} \
+        method{ crypto } format{ }                                       \
+        options/crypto_type{ luks }                                      \
+        options/cipher{ {{.storage_encryption_cipher}} }                 \
+        options/keysize{ {{.storage_encryption_key_size}} }              \
+        options/hash{ {{.storage_encryption_hash}} }                     \
+        use_filesystem{ } filesystem{ {{.debian_regular_root_fstype}} }  \
+        mountpoint{ {{.debian_regular_root_mountpoint}} }                \
+    .
+
+d-i partman-auto/choose_recipe select uefi-regular-luks
+{{end}}
+
 {{define "preseed/debian/storage/lvm" -}}
 d-i anna/choose_modules string {{.debian_lvm_partman_modules}}
 
@@ -157,6 +231,68 @@ d-i partman-auto/expert_recipe string \
     .
 
 d-i partman-auto/choose_recipe select uefi-lvm
+{{end}}
+
+{{define "preseed/debian/storage/lvm/encrypted" -}}
+d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_lvm_partman_modules}}
+
+# Use LUKS for the PV that backs the configured volume group. ESP and /boot stay
+# outside encryption so firmware and GRUB can load before the LUKS prompt.
+d-i partman-auto/method string crypto
+d-i partman-auto-lvm/guided_size string max
+d-i partman-auto-lvm/new_vg_name string {{.vg_name}}
+
+# Make sure any leftovers can be replaced without prompts
+d-i partman-crypto/device_remove_crypto boolean true
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
+
+d-i partman-auto/expert_recipe string \
+  uefi-lvm-luks ::                                                        \
+    {{.debian_lvm_esp_min_size_mib}} {{.debian_lvm_esp_priority}} {{.debian_lvm_esp_max_size_mib}} {{.debian_lvm_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        mountpoint{ {{.debian_lvm_esp_mountpoint}} }                     \
+    .                                                                    \
+    {{.debian_lvm_boot_min_size_mib}} {{.debian_lvm_boot_priority}} {{.debian_lvm_boot_max_size_mib}} {{.debian_lvm_boot_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ {{.debian_lvm_boot_fstype}} }      \
+        mountpoint{ {{.debian_lvm_boot_mountpoint}} }                    \
+    .                                                                    \
+    {{.debian_lvm_pv_min_size_mib}} {{.debian_lvm_pv_priority}} {{.debian_lvm_pv_max_size_mib}} crypto \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ crypto } format{ }                                       \
+        options/crypto_type{ luks }                                      \
+        options/cipher{ {{.storage_encryption_cipher}} }                 \
+        options/keysize{ {{.storage_encryption_key_size}} }              \
+        options/hash{ {{.storage_encryption_hash}} }                     \
+        method{ lvm }                                                    \
+        device{ {{.storage_disk}} }                                      \
+        vg_name{ {{.vg_name}} }                                          \
+    .                                                                    \
+{{if eq .debian_lvm_swap_enabled "true" -}}
+    {{.debian_lvm_swap_min_size_mib}} {{.debian_lvm_swap_priority}} {{.debian_lvm_swap_max_size_mib}} linux-swap \
+        $lvmok{ }                                                        \
+        in_vg{ {{.vg_name}} }                                            \
+        lv_name{ swap }                                                  \
+        method{ swap } format{ }                                         \
+    .                                                                    \
+{{end -}}
+    {{.debian_lvm_root_min_size_mib}} {{.debian_lvm_root_priority}} {{.debian_lvm_root_max_size_mib}} {{.debian_lvm_root_fstype}} \
+        $lvmok{ }                                                        \
+        in_vg{ {{.vg_name}} }                                            \
+        lv_name{ root }                                                  \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ {{.debian_lvm_root_fstype}} }      \
+        mountpoint{ {{.debian_lvm_root_mountpoint}} }                    \
+    .
+
+d-i partman-auto/choose_recipe select uefi-lvm-luks
 {{end}}
 
 {{define "preseed/debian/storage/raid" -}}
@@ -219,6 +355,93 @@ d-i partman-auto-raid/recipe string                                      \
     .
 
 # Persist mdadm assembly and duplicate EFI boot files to both ESPs.
+d-i preseed/late_command string \
+  in-target mkdir -p /etc/mdadm; \
+  mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \
+  in-target update-initramfs -u; \
+  /bin/ash -c 'set -eux; \
+    mkdir -p /target/boot/efi /target/boot/efi-secondary; \
+    first=1; \
+    for d in {{.storage_raid_devices}}; do \
+      p="${d}1"; \
+      case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
+      [ -b "$p" ] || continue; \
+      if [ "$first" = 1 ]; then efi=/target/boot/efi; first=0; else efi=/target/boot/efi-secondary; mount "$p" "$efi" || continue; fi; \
+      chroot /target grub-install --target=x86_64-efi --efi-directory="${efi#/target}" --bootloader-id=debian --recheck --no-nvram || true; \
+      mkdir -p "$efi/EFI/BOOT"; \
+      cp -f "$efi/EFI/debian/grubx64.efi" "$efi/EFI/BOOT/BOOTX64.EFI" || true; \
+      [ "$efi" = /target/boot/efi ] || umount "$efi" || true; \
+    done'
+{{end}}
+
+{{define "preseed/debian/storage/raid/encrypted" -}}
+d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_raid_partman_modules}}
+
+# Use mdadm for redundancy, then put LUKS on the md devices for swap and root.
+# ESPs remain normal partitions, and /boot remains RAID1 but unencrypted.
+d-i partman-auto/method string raid
+
+# Make sure any crypto/md leftovers can be replaced without prompts.
+d-i partman-crypto/device_remove_crypto boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
+d-i mdadm/boot_degraded boolean {{.storage_raid_boot_degraded}}
+
+d-i partman-auto/expert_recipe string \
+  uefi-raid1-luks ::                                                      \
+    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        device{ {{.storage_raid_device_0}} }                             \
+        mountpoint{ {{.debian_raid_esp_mountpoint}} }                    \
+    .                                                                    \
+    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        device{ {{.storage_raid_device_1}} }                             \
+    .                                                                    \
+    {{.debian_raid_boot_min_size_mib}} {{.debian_raid_boot_priority}} {{.debian_raid_boot_max_size_mib}} raid \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ raid }                                                   \
+        raidid{ 1 }                                                       \
+    .                                                                    \
+{{if eq .debian_raid_swap_enabled "true" -}}
+    {{.debian_raid_swap_min_size_mib}} {{.debian_raid_swap_priority}} {{.debian_raid_swap_max_size_mib}} raid \
+        method{ raid }                                                   \
+        raidid{ 2 }                                                       \
+    .                                                                    \
+{{end -}}
+    {{.debian_raid_root_min_size_mib}} {{.debian_raid_root_priority}} {{.debian_raid_root_max_size_mib}} raid \
+        method{ raid }                                                   \
+        raidid{ 3 }                                                       \
+    .
+
+d-i partman-auto/choose_recipe select uefi-raid1-luks
+
+d-i partman-auto-raid/recipe string                                      \
+    1 2 0 {{.debian_raid_boot_fstype}} {{.debian_raid_boot_mountpoint}} \
+        raidid=1                                                        \
+    .                                                                   \
+{{if eq .debian_raid_swap_enabled "true" -}}
+    1 2 0 crypto -                                                      \
+        method=crypto                                                   \
+        options/crypto_type=luks                                        \
+        options/cipher={{.storage_encryption_cipher}}                   \
+        options/keysize={{.storage_encryption_key_size}}                \
+        options/hash={{.storage_encryption_hash}}                       \
+        raidid=2                                                        \
+    .                                                                   \
+{{end -}}
+    1 2 0 crypto -                                                      \
+        method=crypto                                                   \
+        options/crypto_type=luks                                        \
+        options/cipher={{.storage_encryption_cipher}}                   \
+        options/keysize={{.storage_encryption_key_size}}                \
+        options/hash={{.storage_encryption_hash}}                       \
+        raidid=3                                                        \
+    .
+
 d-i preseed/late_command string \
   in-target mkdir -p /etc/mdadm; \
   mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \

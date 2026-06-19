@@ -156,6 +156,26 @@ func TestParamsWithProvisioningProjectsStructuredStorageMode(t *testing.T) {
 	assert.Equal(t, "lvm", params["storage_mode"])
 }
 
+func TestParamsWithProvisioningProjectsStructuredStorageEncryption(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Encryption: StorageEncryptionConfig{
+				Enabled:    boolPtr(true),
+				Passphrase: "luks-passphrase",
+				Cipher:     "xchacha12,aes-adiantum-plain64",
+				KeySize:    intPtr(256),
+				Hash:       "sha256",
+			},
+		},
+	})
+
+	assert.Equal(t, "true", params["storage_encryption_enabled"])
+	assert.Equal(t, "luks-passphrase", params["storage_encryption_passphrase"])
+	assert.Equal(t, "xchacha12,aes-adiantum-plain64", params["storage_encryption_cipher"])
+	assert.Equal(t, "256", params["storage_encryption_key_size"])
+	assert.Equal(t, "sha256", params["storage_encryption_hash"])
+}
+
 func TestParamsWithProvisioningProjectsStructuredRAID(t *testing.T) {
 	bootDegraded := true
 	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
