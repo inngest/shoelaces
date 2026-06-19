@@ -187,18 +187,18 @@ persistence:
 
 *** Phase 5: Data Reuse And Reference APIs
 
-- [ ] Define which persisted records are operator-facing references:
+- [X] Define which persisted records are operator-facing references:
   boot sessions, host observations, manual selections, and event history.
-- [ ] Add internal APIs for resolving persisted host/boot data by MAC,
+- [X] Add internal APIs for resolving persisted host/boot data by MAC,
   reference ID, or event ID where needed by rendering and UI code.
-- [ ] Decide whether any user-facing HTTP API should expose references directly
+- [X] Decide whether any user-facing HTTP API should expose references directly
   beyond existing UI endpoints.
-- [ ] Ensure reference lookups never return unredacted secrets through UI/API
+- [X] Ensure reference lookups never return unredacted secrets through UI/API
   responses.
-- [ ] Add unit tests for reference lookup authorization assumptions, redacted
+- [X] Add unit tests for reference lookup authorization assumptions, redacted
   serialization, and not-found behavior.
-- [ ] Add API/router tests for any new endpoints or changed response fields.
-- [ ] Add integration tests demonstrating that a later request can reuse data
+- [X] Add API/router tests for any new endpoints or changed response fields.
+- [X] Add integration tests demonstrating that a later request can reuse data
   persisted by an earlier boot request.
 
 *** Phase 6: Operational Tooling And Documentation
