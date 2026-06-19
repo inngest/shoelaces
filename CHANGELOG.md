@@ -1,8 +1,27 @@
+## [1.9.0] - 2026-06-19
+
+### 🚀 Features
+
+- *(mappings)* Add LUKS storage encryption schema (#72)
+- *(debian)* Support LUKS install rendering (#73)
+
+### 📚 Documentation
+
+- *(plans)* Complete LUKS install profiles (#74)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(depot)* Move CI to depot (#69)
+- *(depot)* Review CI to depot  (#71)
 ## [1.8.1] - 2026-06-19
 
 ### 🐛 Bug Fixes
 
 - *(tftp)* Quiet expected option aborts (#67)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.8.1 (#68)
 ## [1.8.0] - 2026-06-19
 
 ### 🚀 Features
