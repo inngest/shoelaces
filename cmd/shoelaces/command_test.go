@@ -57,7 +57,7 @@ func TestInspectionCommandHelpShowsOutputOption(t *testing.T) {
 	})
 	cmd.Writer = &output
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "events", "--help"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "events", "list", "--help"}))
 	assert.Contains(t, output.String(), "--output")
 	assert.Contains(t, output.String(), "table")
 	assert.Contains(t, output.String(), "json")
@@ -71,7 +71,7 @@ func TestInspectionCommandRejectsInvalidOutputOption(t *testing.T) {
 	cmd.Writer = io.Discard
 	cmd.ErrWriter = io.Discard
 
-	err := cmd.Run(context.Background(), []string{"shoelaces", "events", "--output", "yaml"})
+	err := cmd.Run(context.Background(), []string{"shoelaces", "events", "list", "--output", "yaml"})
 	assert.ErrorContains(t, err, `unsupported output format "yaml"; use table or json`)
 }
 

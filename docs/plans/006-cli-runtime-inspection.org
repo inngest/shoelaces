@@ -148,13 +148,13 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 4: Event Inspection
 
-- [ ] Add =shoelaces events list=.
-- [ ] Flatten persisted events into chronological records for CLI output.
-- [ ] Add filters for high-value operator cases, such as =--mac=, =--type=,
+- [X] Add =shoelaces events list=.
+- [X] Flatten persisted events into chronological records for CLI output.
+- [X] Add filters for high-value operator cases, such as =--mac=, =--type=,
   =--since=, and =--limit=.
-- [ ] Add =shoelaces events get <event-id>=.
-- [ ] Reuse existing event redaction guarantees and avoid exposing raw params.
-- [ ] Add tests for event list ordering, filters, limit behavior, missing event
+- [X] Add =shoelaces events get <event-id>=.
+- [X] Reuse existing event redaction guarantees and avoid exposing raw params.
+- [X] Add tests for event list ordering, filters, limit behavior, missing event
   IDs, invalid ULIDs, table output, and JSON output.
 
 *** Phase 5: Server State Inspection

@@ -62,7 +62,7 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 		},
 		Commands: []*cli.Command{
 			runCommand(configValues, run),
-			inspectionCommand("events", "Inspect persisted event history"),
+			eventsCommand(configValues),
 			inspectionCommand("servers", "Inspect persisted server state"),
 			inspectionCommand("boot-sessions", "Inspect persisted boot-session references"),
 		},
