@@ -42,11 +42,11 @@ environment, which makes them useful for server-local debugging when Shoelaces
 is stopped or when the web UI is unavailable.
 
 ```sh
-shoelaces --config /etc/shoelaces.toml events list --limit 20
-shoelaces --config /etc/shoelaces.toml events list --mac 00:11:22:33:44:55 --output json
-shoelaces --config /etc/shoelaces.toml servers list --waiting
-shoelaces --config /etc/shoelaces.toml servers get 00:11:22:33:44:55
-shoelaces --config /etc/shoelaces.toml boot-sessions get 01J...
+shoelaces events list --limit 20
+shoelaces events list --mac 00:11:22:33:44:55 --output json
+shoelaces servers list --waiting
+shoelaces servers get 00:11:22:33:44:55
+shoelaces boot-sessions get 01J...
 ```
 
 The inspection commands require `persistence.backend: sqlite`. The `memory`

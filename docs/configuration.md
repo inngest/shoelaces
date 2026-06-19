@@ -8,6 +8,9 @@ Environment variable names are uppercase flag names with hyphens converted to un
 Configuration files can be TOML, YAML, or JSON.
 The parser is selected from the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`.
 Config files use nested keys for hyphenated CLI flags. For example, `network.bindAddr` maps to `--bind-addr`, `network.baseURL` maps to `--base-url`, `data.dir` maps to `--data-dir`, `log.level` maps to `--log-level`, and `tftp.enabled` maps to `--tftp-enabled`.
+If neither `--config` nor `CONFIG` is provided, Shoelaces uses the first
+existing default config file from `/etc/shoelaces/shoelaces.yaml`,
+`/etc/shoelaces/shoelaces.json`, and `/etc/shoelaces/shoelaces.toml`.
 
 ## Commands
 
@@ -19,11 +22,11 @@ directly, so they can be run on the Shoelaces host even when the HTTP server is
 stopped:
 
 ```sh
-shoelaces --config /etc/shoelaces.toml events list
-shoelaces --config /etc/shoelaces.toml events get 01J...
-shoelaces --config /etc/shoelaces.toml servers list --waiting
-shoelaces --config /etc/shoelaces.toml servers get 00:11:22:33:44:55
-shoelaces --config /etc/shoelaces.toml boot-sessions get 01J...
+shoelaces events list
+shoelaces events get 01J...
+shoelaces servers list --waiting
+shoelaces servers get 00:11:22:33:44:55
+shoelaces boot-sessions get 01J...
 ```
 
 Inspection commands support `--output table` and `--output json`; table output
@@ -33,13 +36,14 @@ separate CLI process cannot inspect another process' in-memory state.
 ## Flags
 
 `--config` and `--version` are root options. Server startup options belong to
-the `run` command, for example `shoelaces --config /etc/shoelaces.toml run
---data-dir /var/lib/shoelaces`. Config-file and environment-variable forms are
-shared by `run` and the runtime inspection commands where applicable.
+the `run` command, for example `shoelaces --config /srv/shoelaces.toml run
+--data-dir /var/lib/shoelaces` when using a nonstandard config path.
+Config-file and environment-variable forms are shared by `run` and the runtime
+inspection commands where applicable.
 
 | CLI flag                                | Config key                           | Environment                           | Default                | Notes                                                                                                       |
 |-----------------------------------------|--------------------------------------|---------------------------------------|------------------------|-------------------------------------------------------------------------------------------------------------|
-| `--config`                              | N/A                                  | N/A                                   | N/A                    | Path to a TOML, YAML, or JSON config file.                                                                  |
+| `--config`                              | N/A                                  | `CONFIG`                             | First existing `/etc/shoelaces/shoelaces.yaml`, `.json`, then `.toml` | Path to a TOML, YAML, or JSON config file. |
 | `--bind-addr`                           | `network.bindAddr`                   | `BIND_ADDR`                           | `localhost:8081`       | HTTP listen address.                                                                                        |
 | `--base-url`                            | `network.baseURL`                    | `BASE_URL`                            | `network.bindAddr`     | Used when rendered templates need to refer back to Shoelaces.                                               |
 | `--data-dir`                            | `data.dir`                           | `DATA_DIR`                            | Required               | Root directory for mappings, disk template overrides, provisioning static files, and environment overrides. |

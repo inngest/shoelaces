@@ -25,8 +25,11 @@ shoelaces - automated server bootstrapping
 ## Global Options
 
 *--config* <config>
-	Specifies a config file. Most options can be specified in the config;
-	*--debug* is CLI-only.
+	Specifies a config file. Defaults to the first existing file from
+	*/etc/shoelaces/shoelaces.yaml*, */etc/shoelaces/shoelaces.json*, and
+	*/etc/shoelaces/shoelaces.toml* when neither *--config* nor *CONFIG* is
+	provided. Most options can be specified in the config; *--debug* is
+	CLI-only.
 
 *--version*
 	Prints version information and exits.
@@ -38,7 +41,7 @@ Running *shoelaces* with no command prints command help and exits successfully.
 Server startup options belong to the *run* command. For example:
 
 ```
-shoelaces --config /etc/shoelaces.toml run --data-dir /var/lib/shoelaces
+shoelaces --config /srv/shoelaces.toml run --data-dir /var/lib/shoelaces
 ```
 
 *--base-url* <string>
@@ -118,8 +121,10 @@ hooking it with Shoelaces.
 
 # CONFIGURATION
 
-Shoelaces searches for a config file whenever the *--config* flag is
-specified.
+Shoelaces searches for a config file whenever the *--config* flag or *CONFIG*
+environment variable is specified. If neither is provided, Shoelaces uses the
+first existing default config file from */etc/shoelaces/shoelaces.yaml*,
+*/etc/shoelaces/shoelaces.json*, and */etc/shoelaces/shoelaces.toml*.
 
 Options can be specified as command-line flags, environment variables, or
 config file entries. Command-line flags have the highest precedence, then
@@ -189,11 +194,11 @@ and cannot be inspected by a separate CLI process.
 Common server-local debugging examples:
 
 ```
-shoelaces --config /etc/shoelaces.toml events list --limit 20
-shoelaces --config /etc/shoelaces.toml events list --mac 00:11:22:33:44:55 --output json
-shoelaces --config /etc/shoelaces.toml servers list --waiting
-shoelaces --config /etc/shoelaces.toml servers get 00:11:22:33:44:55
-shoelaces --config /etc/shoelaces.toml boot-sessions get 01J...
+shoelaces events list --limit 20
+shoelaces events list --mac 00:11:22:33:44:55 --output json
+shoelaces servers list --waiting
+shoelaces servers get 00:11:22:33:44:55
+shoelaces boot-sessions get 01J...
 ```
 
 Here is an example TOML config file:

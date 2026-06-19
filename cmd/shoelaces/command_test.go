@@ -27,6 +27,7 @@ func TestCommandWithoutSubcommandPrintsHelp(t *testing.T) {
 	assert.Contains(t, output.String(), "servers")
 	assert.Contains(t, output.String(), "boot-sessions")
 	assert.Contains(t, output.String(), "--config")
+	assert.Contains(t, output.String(), "/etc/shoelaces/shoelaces.yaml")
 	assert.Contains(t, output.String(), "--version")
 	assert.NotContains(t, output.String(), "--bind-addr")
 	assert.NotContains(t, output.String(), "--tftp-enabled")

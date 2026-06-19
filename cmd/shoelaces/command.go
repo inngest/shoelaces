@@ -26,7 +26,7 @@ import (
 func newCommand(args []string, run serverRunner) (*cli.Command, error) {
 	// The config file path must be known before the urfave command is built
 	// because config values are wired in as flag value sources.
-	configPath := configPathFromArgs(args, os.LookupEnv)
+	configPath := configPathFromArgs(args, os.LookupEnv, defaultConfigPath)
 	configValues, err := readConfig(configPath)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 			&cli.StringFlag{
 				Name:    "config",
 				Value:   configPath,
-				Usage:   "Path to a config file",
+				Usage:   "Path to a config file. Defaults to the first existing /etc/shoelaces/shoelaces.yaml, .json, or .toml",
 				Sources: cli.EnvVars("CONFIG"),
 			},
 			&cli.BoolFlag{
