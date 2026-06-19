@@ -26,9 +26,9 @@ Shoelaces creates the parent directory with restrictive permissions.
 
 The supported backends are:
 
-| Backend | Use |
-|---------|-----|
-| `sqlite` | Default local durable runtime store. |
+| Backend  | Use                                                            |
+|----------|----------------------------------------------------------------|
+| `sqlite` | Default local durable runtime store.                           |
 | `memory` | Throwaway in-process store for tests and temporary local runs. |
 
 The local development profile in `dev/shoelaces.yaml` uses SQLite at
@@ -36,11 +36,11 @@ The local development profile in `dev/shoelaces.yaml` uses SQLite at
 
 ## Stored Records
 
-| Record | Retention | Purpose |
-|--------|-----------|---------|
-| Events | `persistence.retention.events` | UI/API event history. Event params are redacted before persistence. |
-| Server state | Existing waiting-host expiry | Waiting/manual boot state keyed by MAC address. |
-| Boot sessions | `persistence.retention.bootSessions` | Opaque references used by boot scripts and `/configs/*?ref=...`. |
+| Record        | Retention                            | Purpose                                                             |
+|---------------|--------------------------------------|---------------------------------------------------------------------|
+| Events        | `persistence.retention.events`       | UI/API event history. Event params are redacted before persistence. |
+| Server state  | Existing waiting-host expiry         | Waiting/manual boot state keyed by MAC address.                     |
+| Boot sessions | `persistence.retention.bootSessions` | Opaque references used by boot scripts and `/configs/*?ref=...`.    |
 
 Retention cleanup runs at startup and then periodically according to the sweep
 intervals. `eventsSweepInterval` bounds event growth while Shoelaces is
