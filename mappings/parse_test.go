@@ -222,6 +222,32 @@ func TestParseMappingsLoadsRepositoryExample(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, parsed.Targets)
 	assert.NotEmpty(t, parsed.NetworkMaps)
+	assert.Equal(t, "trixie", parsed.Defaults.Repos.Release)
+	assert.Equal(t, "bookworm", parsed.Targets["debian12"].Repos.Release)
+	assert.Equal(t, "trixie", parsed.Targets["debian13"].Repos.Release)
+	assert.Equal(t, "debian.ipxe", parsed.Targets["debian13-luks"].Script)
+	assert.Equal(t, "regular", parsed.Targets["debian13-luks"].Storage.Mode)
+	require.NotNil(t, parsed.Targets["debian13-luks"].Storage.Encryption.Enabled)
+	assert.True(t, *parsed.Targets["debian13-luks"].Storage.Encryption.Enabled)
+	assert.Equal(t, map[string]any{"env": "SHOELACES_LUKS_PASSPHRASE"}, parsed.Targets["debian13-luks"].Storage.Encryption.Passphrase)
+	assert.Equal(t, "debian13", parsed.NetworkMaps[0].DefaultTarget)
+	assert.Contains(t, parsed.NetworkMaps[0].Targets, "debian13-luks")
+	assert.Equal(t, "debian13", parsed.IPMaps[0].DefaultTarget)
+}
+
+func TestParseMappingsLoadsDevelopmentExample(t *testing.T) {
+	parsed, err := ParseMappings(log.MakeLogger(io.Discard), filepath.Join("..", "dev", "data-dir", "mappings.yaml"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "trixie", parsed.Defaults.Repos.Release)
+	assert.Equal(t, "bookworm", parsed.Targets["debian12"].Repos.Release)
+	assert.Equal(t, "trixie", parsed.Targets["debian13"].Repos.Release)
+	assert.Equal(t, "debian.ipxe", parsed.Targets["debian13-luks"].Script)
+	require.NotNil(t, parsed.Targets["debian13-luks"].Storage.Encryption.Enabled)
+	assert.True(t, *parsed.Targets["debian13-luks"].Storage.Encryption.Enabled)
+	assert.Equal(t, map[string]any{"env": "SHOELACES_DEV_LUKS_PASSPHRASE"}, parsed.Targets["debian13-luks"].Storage.Encryption.Passphrase)
+	assert.Equal(t, "debian13", parsed.NetworkMaps[0].DefaultTarget)
+	assert.Contains(t, parsed.NetworkMaps[0].Targets, "debian13-luks")
 }
 
 func TestParseMappingsAcceptsRegularStorageMode(t *testing.T) {

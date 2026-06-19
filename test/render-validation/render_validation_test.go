@@ -324,6 +324,52 @@ func TestRenderedEncryptedDebianPreseedsPassDebconfSetSelectionsWhenAvailable(t 
 	}
 }
 
+func TestExampleMappingsRenderDebian13Targets(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		path       string
+		luksEnv    string
+		passphrase string
+	}{
+		{
+			name:       "repository",
+			path:       filepath.Join("..", "..", "configs", "data-dir", "mappings.yaml"),
+			luksEnv:    "SHOELACES_LUKS_PASSPHRASE",
+			passphrase: "repo-luks-passphrase",
+		},
+		{
+			name:       "development",
+			path:       filepath.Join("..", "..", "dev", "data-dir", "mappings.yaml"),
+			luksEnv:    "SHOELACES_DEV_LUKS_PASSPHRASE",
+			passphrase: "dev-luks-passphrase",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			parsed, err := mappings.ParseMappings(log.MakeLogger(io.Discard), tt.path)
+			require.NoError(t, err)
+			resolver, err := mappings.NewResolver(parsed)
+			require.NoError(t, err)
+			renderer := newRenderer(t)
+
+			plain := resolveExampleTarget(t, resolver, "debian13", tt.luksEnv, tt.passphrase)
+			plainIPXE := renderTemplate(t, renderer, plain.Target.Script, paramsForResolvedTarget(plain))
+			plainPreseed := renderTemplate(t, renderer, "preseed/debian", paramsForResolvedTarget(plain))
+			assert.Contains(t, plainIPXE, "Debian trixie netboot")
+			assert.Contains(t, plainPreseed, "d-i partman-auto/choose_recipe select uefi-regular")
+			assert.NotContains(t, plainPreseed, "d-i partman-crypto/passphrase")
+
+			luks := resolveExampleTarget(t, resolver, "debian13-luks", tt.luksEnv, tt.passphrase)
+			luksIPXE := renderTemplate(t, renderer, luks.Target.Script, paramsForResolvedTarget(luks))
+			luksPreseed := renderTemplate(t, renderer, "preseed/debian", paramsForResolvedTarget(luks))
+			assert.Contains(t, luksIPXE, "Debian trixie netboot")
+			assert.NotContains(t, luksIPXE, tt.passphrase)
+			assert.Contains(t, luksPreseed, "d-i partman-auto/method string crypto")
+			assert.Contains(t, luksPreseed, "d-i partman-auto/choose_recipe select uefi-regular-luks")
+			assert.Contains(t, luksPreseed, "d-i partman-crypto/passphrase password "+tt.passphrase)
+		})
+	}
+}
+
 func TestRenderedPreseedsApplyInstallUserParams(t *testing.T) {
 	renderer := newRenderer(t)
 	params := paramsWith(defaultRenderParams, "install_username", "alice")
@@ -939,6 +985,91 @@ func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 	}
 }
 
+func TestRenderedTemplatesRejectUnsupportedStructuredEncryption(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		params   map[string]interface{}
+	}{
+		{name: "ubuntu preseed", template: "preseed/ubuntu-minimal", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "legacy storage preseed", template: "preseed/storage", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "centos kickstart", template: "centos.ks", params: encryptedUnsupportedParams(kickstartRenderParams)},
+		{name: "coreos cloud config", template: "cloudconfig-coreos", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "ubuntu ipxe", template: "ubuntu-minimal.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "legacy storage ipxe", template: "storage.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "centos ipxe", template: "centos.ipxe", params: encryptedUnsupportedParams(kickstartRenderParams)},
+		{name: "coreos ipxe", template: "coreos.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := renderTemplateError(t, renderer, tt.template, tt.params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.template+" does not support structured storage encryption")
+			assert.Contains(t, err.Error(), "storage.encryption is supported only by preseed/debian")
+		})
+	}
+}
+
+func TestDiskBackedNonDebianInstallerTemplatesAllowStructuredEncryption(t *testing.T) {
+	dataDir := t.TempDir()
+	writeRenderTemplate(t, dataDir, "preseed/custom.slc", `{{define "preseed/custom" -}}custom preseed{{end}}`)
+	writeRenderTemplate(t, dataDir, "kickstart/custom.ks.slc", `{{define "kickstart/custom.ks" -}}custom kickstart{{end}}`)
+	writeRenderTemplate(t, dataDir, "cloud-config/custom.slc", `{{define "cloud-config/custom" -}}#cloud-config{{end}}`)
+	renderer := newRendererWithDataDir(t, dataDir)
+
+	for _, templateName := range []string{"preseed/custom", "kickstart/custom.ks", "cloud-config/custom"} {
+		t.Run(templateName, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, templateName, encryptedUnsupportedParams(defaultRenderParams))
+
+			assert.NotEmpty(t, rendered)
+		})
+	}
+}
+
+func TestDiskOverridesAllowStructuredEncryptionForUnsupportedEmbeddedTemplates(t *testing.T) {
+	dataDir := t.TempDir()
+	writeRenderTemplate(t, dataDir, "preseed/ubuntu-minimal.preseed.slc", `{{define "preseed/ubuntu-minimal" -}}
+native encrypted ubuntu for {{.hostname}} {{.storage_encryption_enabled}}
+{{end}}
+`)
+	renderer := newRendererWithDataDir(t, dataDir)
+
+	rendered := renderTemplate(t, renderer, "preseed/ubuntu-minimal", encryptedUnsupportedParams(defaultRenderParams))
+
+	assert.Contains(t, rendered, "native encrypted ubuntu for render-validation-host true")
+}
+
+func TestInstallerExtraAllowsStructuredEncryptionForUnsupportedEmbeddedTemplates(t *testing.T) {
+	dataDir := t.TempDir()
+	writeRenderTemplate(t, dataDir, "provisioning/extra.slc", `{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo native encryption {{.storage_encryption_enabled}}
+{{end}}
+`)
+	renderer := newRendererWithDataDir(t, dataDir)
+	enabled := true
+	params := mappings.ParamsWithProvisioning(map[string]interface{}{
+		"baseURL":  "shoelaces.example.test:8081",
+		"hostname": "extra-encrypted-host",
+	}, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			ExtraTemplate: "provisioning/extra",
+		},
+		Storage: mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    &enabled,
+				Passphrase: "luks-passphrase",
+			},
+		},
+	})
+
+	rendered := renderTemplate(t, renderer, "preseed/ubuntu-minimal", params)
+
+	assert.Contains(t, rendered, "d-i preseed/late_command string echo native encryption true")
+}
+
 func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	utc := false
 	ntp := false
@@ -1121,9 +1252,23 @@ func validatorPath(t *testing.T, name string) string {
 func newRenderer(t *testing.T) *templates.ShoelacesTemplates {
 	t.Helper()
 
+	return newRendererWithDataDir(t, t.TempDir())
+}
+
+func newRendererWithDataDir(t *testing.T, dataDir string) *templates.ShoelacesTemplates {
+	t.Helper()
+
 	renderer := templates.New(log.MakeLogger(io.Discard))
-	renderer.ParseTemplates(t.TempDir(), "env_overrides", nil, ".slc")
+	renderer.ParseTemplates(dataDir, "env_overrides", nil, ".slc")
 	return renderer
+}
+
+func writeRenderTemplate(t *testing.T, dataDir, relativePath, content string) {
+	t.Helper()
+
+	path := filepath.Join(dataDir, relativePath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name string, params map[string]interface{}) string {
@@ -1275,4 +1420,40 @@ func encryptedDebianParams(storage mappings.StorageConfig) map[string]interface{
 		Storage: storage,
 		Boot:    mappings.BootConfig{Firmware: "uefi"},
 	})
+}
+
+func encryptedUnsupportedParams(base map[string]interface{}) map[string]interface{} {
+	enabled := true
+	return mappings.ParamsWithProvisioning(base, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    &enabled,
+				Passphrase: "luks-passphrase",
+			},
+		},
+	})
+}
+
+func resolveExampleTarget(t *testing.T, resolver *mappings.Resolver, targetName, envName, envValue string) mappings.ResolveResult {
+	t.Helper()
+
+	result, err := resolver.Resolve(mappings.ResolveRequest{
+		ManualTarget: targetName,
+		GeneratedParams: map[string]any{
+			"baseURL":  "shoelaces.example.test:8081",
+			"hostname": targetName + "-example",
+		},
+		EnvLookup: func(name string) (string, bool) {
+			if name == envName {
+				return envValue, true
+			}
+			return "", false
+		},
+	})
+	require.NoError(t, err)
+	return result
+}
+
+func paramsForResolvedTarget(result mappings.ResolveResult) map[string]interface{} {
+	return mappings.ParamsWithProvisioning(result.Params, result.Users, result.Provisioning)
 }

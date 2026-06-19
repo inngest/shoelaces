@@ -138,7 +138,7 @@ no-op.
 
 ```yaml
 targets:
-  debian12:
+  debian13:
     script: debian.ipxe
     installer:
       configTemplate: preseed/debian
@@ -190,10 +190,10 @@ flat names. For example:
 
 ```yaml
 targets:
-  debian12:
+  debian13:
     script: debian.ipxe
     repos:
-      release: bookworm
+      release: trixie
     installer:
       configParams:
         encrypt_home: false
@@ -215,10 +215,10 @@ defaults:
       locked: true
 
 targets:
-  debian12:
+  debian13:
     script: debian.ipxe
     repos:
-      release: bookworm
+      release: trixie
     installer:
       configParams:
         encrypt_home: false
@@ -277,8 +277,7 @@ defaults:
     wipe: true
     wipeDiskPatterns:
       - /dev/nvme*n*
-    mode: lvm
-    volumeGroup: vg0
+    mode: regular
     filesystems:
       root:
         mountpoint: /
@@ -300,7 +299,7 @@ defaults:
         - consoleblank=0
   repos:
     osMirror: https://deb.debian.org/debian
-    release: bookworm
+    release: trixie
     firmware: true
     contrib: true
     nonFree: true
@@ -370,13 +369,47 @@ is enabled and can be loaded from the Shoelaces process environment. `cipher`,
 
 ```yaml
 storage:
-  mode: lvm
+  mode: regular
   disk: /dev/nvme0n1
-  volumeGroup: vg0
   encryption:
     enabled: true
     passphrase:
       env: SHOELACES_LUKS_PASSPHRASE
+```
+
+`storage.encryption` is structured data, so it follows the normal provisioning
+merge order: `defaults` first, then the selected target, then the matched
+mapping rule. A target can define the common encryption policy, and a more
+specific `macMaps`, `ipMaps`, or `hostnameMaps` rule can override the
+passphrase or disable encryption for one host. Request query parameters can
+still override the projected flat renderer values for direct template testing,
+but production encrypted installs should use structured mapping data and
+boot-session references.
+
+The encryption fields are:
+
+- `enabled`: `true` enables Debian LUKS rendering. Omit it or set `false` for
+  unencrypted storage.
+- `passphrase`: required when encryption is enabled. Prefer `{ env: VAR }` so
+  the secret comes from the Shoelaces process environment. Raw strings parse,
+  but are suitable only for disposable lab fixtures.
+- `cipher`: optional LUKS cipher, default `aes-xts-plain64`.
+- `keySize`: optional LUKS key size in bits, default `512`.
+- `hash`: optional LUKS hash, default `sha512`.
+
+Prefer per-host passphrases by putting the `{ env: VAR }` reference on the most
+specific mapping that selects the host:
+
+```yaml
+hostnameMaps:
+  - hostname: '^db-17\.example\.com$'
+    defaultTarget: debian13-luks
+    targets:
+      - debian13-luks
+    storage:
+      encryption:
+        passphrase:
+          env: SHOELACES_LUKS_DB_17_PASSPHRASE
 ```
 
 Encrypted Debian layouts keep the firmware and bootloader path unencrypted. In
@@ -388,8 +421,22 @@ unencrypted RAID1, and LUKS is placed on the RAID1 devices used for swap and
 root.
 
 The rendered Debian preseed must contain the passphrase so the install can run
-unattended. Keep encrypted targets behind boot-session references and use a
-trusted provisioning network.
+unattended. Boot-session references keep the passphrase out of iPXE URLs and
+query strings, but the `/configs/preseed/debian?...ref=...` response still
+contains the secret for the installer. Treat the provisioning network as
+sensitive: use trusted or isolated networks, restrict access to Shoelaces and
+its runtime database, and put TLS or equivalent network protection in front of
+Shoelaces where the deployment environment supports it.
+
+Structured `storage.encryption` is Debian-only in the embedded templates.
+Ubuntu minimal, CentOS kickstart, CoreOS/cloud-init, and other non-Debian
+installer templates fail clearly when it is enabled so they do not silently
+render an unencrypted install. For non-Debian encrypted installs, keep using
+native installer syntax through `installer.extraTemplate` or a full template
+override. `installer.extraTemplate` is still the escape hatch for native
+installer behavior that Shoelaces does not model; it is appended after the
+structured sections and does not change the structured LUKS merge or guardrail
+rules.
 
 The legacy `plain` value remains parseable in mappings for compatibility with
 older generic config, but Debian preseed rejects it clearly. Use `regular` for
@@ -458,17 +505,17 @@ settings on a network map use `networkConfig:`. Other mapping types use
 ```yaml
 networkMaps:
   - network: 192.0.2.0/24
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
-      - debian12
+      - debian13
     networkConfig:
       hostname: rack-default
 
 macMaps:
   - mac: "0c:42:a1:c3:52:96"
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
-      - debian12
+      - debian13
     network:
       hostname: iad-1
     storage:

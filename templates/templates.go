@@ -49,9 +49,11 @@ type ShoelacesTemplates struct {
 }
 
 type shoelacesTemplateEnvironment struct {
-	templateObj  *template.Template
-	templateVars map[string][]string
-	templateRefs map[string][]string
+	templateObj      *template.Template
+	templateVars     map[string][]string
+	templateRefs     map[string][]string
+	templateEmbedded map[string]bool
+	templateBodies   map[string]string
 }
 
 // New creates and initializes a new ShoelacesTemplates instance a returns a pointer to
@@ -63,9 +65,11 @@ func New(logger log.Logger) *ShoelacesTemplates {
 	logger = logger.With("component", "template")
 	e := make(map[string]shoelacesTemplateEnvironment)
 	e[defaultEnvironment] = shoelacesTemplateEnvironment{
-		templateObj:  template.New(""),
-		templateVars: make(map[string][]string),
-		templateRefs: make(map[string][]string),
+		templateObj:      template.New(""),
+		templateVars:     make(map[string][]string),
+		templateRefs:     make(map[string][]string),
+		templateEmbedded: make(map[string]bool),
+		templateBodies:   make(map[string]string),
 	}
 	return &ShoelacesTemplates{logger: logger, envTemplates: e}
 }
@@ -81,8 +85,10 @@ func (s *ShoelacesTemplates) checkAddEnvironment(environment string) {
 			templateObj: c,
 			// Environment overrides inherit the default index, then replace entries
 			// for any templates they override.
-			templateVars: cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateVars),
-			templateRefs: cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateRefs),
+			templateVars:     cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateVars),
+			templateRefs:     cloneTemplateIndex(s.envTemplates[defaultEnvironment].templateRefs),
+			templateEmbedded: cloneTemplateEmbeddedIndex(s.envTemplates[defaultEnvironment].templateEmbedded),
+			templateBodies:   cloneTemplateBodyIndex(s.envTemplates[defaultEnvironment].templateBodies),
 		}
 	}
 }
@@ -92,10 +98,10 @@ func (s *ShoelacesTemplates) addTemplate(path string, environment string) error 
 	if err != nil {
 		return err
 	}
-	return s.addTemplateContent(path, content, environment)
+	return s.addTemplateContent(path, content, environment, false)
 }
 
-func (s *ShoelacesTemplates) addTemplateContent(source string, content []byte, environment string) error {
+func (s *ShoelacesTemplates) addTemplateContent(source string, content []byte, environment string, embedded bool) error {
 	s.checkAddEnvironment(environment)
 	sourceName := filepath.Base(source)
 	parsed, err := template.New(sourceName).Parse(string(content))
@@ -115,6 +121,9 @@ func (s *ShoelacesTemplates) addTemplateContent(source string, content []byte, e
 			return err
 		}
 		templateEnv.templateVars[parsedTemplate.Name()], templateEnv.templateRefs[parsedTemplate.Name()] = extractTemplateInfo(parsedTemplate.Root)
+		body := parsedTemplate.Root.String()
+		templateEnv.templateEmbedded[parsedTemplate.Name()] = embedded || (templateEnv.templateEmbedded[parsedTemplate.Name()] && templateEnv.templateBodies[parsedTemplate.Name()] == body)
+		templateEnv.templateBodies[parsedTemplate.Name()] = body
 	}
 	return nil
 }
@@ -123,6 +132,22 @@ func cloneTemplateIndex(index map[string][]string) map[string][]string {
 	cloned := make(map[string][]string, len(index))
 	for name, values := range index {
 		cloned[name] = append([]string(nil), values...)
+	}
+	return cloned
+}
+
+func cloneTemplateEmbeddedIndex(index map[string]bool) map[string]bool {
+	cloned := make(map[string]bool, len(index))
+	for name, embedded := range index {
+		cloned[name] = embedded
+	}
+	return cloned
+}
+
+func cloneTemplateBodyIndex(index map[string]string) map[string]string {
+	cloned := make(map[string]string, len(index))
+	for name, body := range index {
+		cloned[name] = body
 	}
 	return cloned
 }
@@ -277,7 +302,7 @@ func (s *ShoelacesTemplates) parseEmbeddedProvisioningTemplates() {
 			if err != nil {
 				return err
 			}
-			return s.addTemplateContent(p, content, defaultEnvironment)
+			return s.addTemplateContent(p, content, defaultEnvironment, true)
 		}
 		return nil
 	})
@@ -304,7 +329,7 @@ func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[stri
 		s.logger.Info("Failed to render installer extra", "action", "render-installer-extra", "err", err)
 		return "", err
 	}
-	if err := validateRenderParams(configName, paramMap); err != nil {
+	if err := validateRenderParams(configName, paramMap, s.isEmbeddedTemplate(configName, envName)); err != nil {
 		s.logger.Info("Invalid template parameters", "action", "validate-template-params", "template", configName, "err", err)
 		return "", err
 	}
@@ -342,13 +367,42 @@ func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[stri
 	return r, nil
 }
 
-func validateRenderParams(configName string, paramMap map[string]interface{}) error {
+func validateRenderParams(configName string, paramMap map[string]interface{}, embeddedTemplate bool) error {
 	switch configName {
 	case "preseed/debian":
 		return validateDebianPreseedParams(paramMap)
 	default:
+		if isStorageEncryptionEnabled(paramMap) && isUnsupportedEncryptedInstallerTemplate(configName) && embeddedTemplate && !hasInstallerExtraTemplate(paramMap, configName) {
+			return fmt.Errorf("%s does not support structured storage encryption; storage.encryption is supported only by preseed/debian in the embedded templates. Use installer.extraTemplate or a full template override for non-Debian encrypted installs", configName)
+		}
 		return nil
 	}
+}
+
+func isUnsupportedEncryptedInstallerTemplate(configName string) bool {
+	switch configName {
+	case "centos.ipxe", "centos.ks", "coreos.ipxe", "cloudconfig-coreos", "preseed/storage", "preseed/ubuntu-minimal", "storage.ipxe", "ubuntu-minimal.ipxe":
+		return true
+	}
+	if strings.HasPrefix(configName, "preseed/") && configName != "preseed/debian" {
+		return true
+	}
+	if strings.HasSuffix(configName, ".ks") {
+		return true
+	}
+	if strings.HasPrefix(configName, "cloudconfig") || strings.HasPrefix(configName, "cloud-config/") {
+		return true
+	}
+	return false
+}
+
+func hasInstallerExtraTemplate(paramMap map[string]interface{}, configName string) bool {
+	provisioning, ok := paramMap["provisioning"].(mappings.ProvisioningConfig)
+	return ok && provisioning.Installer.ExtraTemplate != "" && provisioning.Installer.ExtraTemplate != configName
+}
+
+func isStorageEncryptionEnabled(paramMap map[string]interface{}) bool {
+	return strings.EqualFold(strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_enabled"])), "true")
 }
 
 func validateDebianPreseedParams(paramMap map[string]interface{}) error {
@@ -451,6 +505,16 @@ func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{},
 	}
 	copied["installerExtra"] = b.String()
 	return copied, nil
+}
+
+func (s *ShoelacesTemplates) isEmbeddedTemplate(templateName, envName string) bool {
+	if envName == "" {
+		envName = defaultEnvironment
+	}
+	if e, ok := s.envTemplates[envName]; ok {
+		return e.templateEmbedded[templateName]
+	}
+	return false
 }
 
 // ListVariables receives a template name and return the list of variables

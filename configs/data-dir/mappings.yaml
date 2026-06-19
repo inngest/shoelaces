@@ -6,7 +6,7 @@ defaults:
       kernelArgs: []
   repos:
     osMirror: http://ftp.debian.org/debian
-    release: bookworm
+    release: trixie
   storage:
     mode: regular
     disk: /dev/nvme0n1
@@ -17,7 +17,7 @@ defaults:
 targets:
   debian12:
     script: debian.ipxe
-    label: Debian 12 Bookworm
+    label: Debian 12 Bookworm (oldstable)
     repos:
       release: bookworm
 
@@ -26,6 +26,18 @@ targets:
     label: Debian 13 Trixie
     repos:
       release: trixie
+
+  debian13-luks:
+    script: debian.ipxe
+    label: Debian 13 Trixie LUKS
+    repos:
+      release: trixie
+    storage:
+      mode: regular
+      encryption:
+        enabled: true
+        passphrase:
+          env: SHOELACES_LUKS_PASSPHRASE
 
   ubuntu2404:
     script: ubuntu-minimal.ipxe
@@ -43,10 +55,11 @@ targets:
 
 networkMaps:
   - network: 104.225.9.96/27
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
       - debian12
       - debian13
+      - debian13-luks
       - ubuntu2404
       - ubuntu2604
     params:
@@ -56,6 +69,7 @@ networkMaps:
     targets:
       - debian12
       - debian13
+      - debian13-luks
       - ubuntu2404
       - ubuntu2604
 
@@ -64,6 +78,11 @@ hostnameMaps:
     defaultTarget: debian13
     targets:
       - debian13
+
+  - hostname: '^debian13-luks-[0-9]+\.example\.com$'
+    defaultTarget: debian13-luks
+    targets:
+      - debian13-luks
 
   - hostname: '^ubuntu24-[0-9]+\.example\.com$'
     defaultTarget: ubuntu2404
@@ -80,7 +99,8 @@ macMaps:
 
 ipMaps:
   - ip: 2001:db8::10
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
       - debian12
       - debian13
+      - debian13-luks

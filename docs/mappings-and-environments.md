@@ -30,12 +30,12 @@ defaults:
       kernelArgs: []
   repos:
     osMirror: http://ftp.debian.org/debian
-    release: bookworm
+    release: trixie
 
 targets:
   debian12:
     script: debian.ipxe
-    label: Debian 12 Bookworm
+    label: Debian 12 Bookworm (oldstable)
     repos:
       release: bookworm
 
@@ -45,12 +45,25 @@ targets:
     repos:
       release: trixie
 
+  debian13-luks:
+    script: debian.ipxe
+    label: Debian 13 Trixie LUKS
+    repos:
+      release: trixie
+    storage:
+      mode: regular
+      encryption:
+        enabled: true
+        passphrase:
+          env: SHOELACES_LUKS_PASSPHRASE
+
 networkMaps:
   - network: 104.225.9.96/27
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
       - debian12
       - debian13
+      - debian13-luks
     params:
       hostnamePrefix: iad-
 
@@ -163,9 +176,8 @@ passphrase is required when encryption is enabled. `cipher`, `keySize`, and
 
 ```yaml
 storage:
-  mode: lvm
+  mode: regular
   disk: /dev/nvme0n1
-  volumeGroup: vg0
   encryption:
     enabled: true
     passphrase:
@@ -185,6 +197,19 @@ Preseeded encryption is unattended, so the installer config necessarily
 contains the LUKS passphrase when rendered. Use environment-backed passphrases,
 boot-session references, and trusted provisioning networks for encrypted
 targets.
+
+`storage.encryption` follows the normal structured provisioning merge order:
+defaults, selected target, then the matched mapping rule. Prefer per-host
+environment references on specific MAC, IP, or hostname mappings for production
+passphrases. Raw passphrase values are accepted only for disposable lab
+fixtures.
+
+Structured `storage.encryption` is supported only by the embedded
+`preseed/debian` installer template. Embedded Ubuntu minimal, CentOS kickstart,
+CoreOS/cloud-init, and other non-Debian installer templates reject it instead
+of rendering an unencrypted install by accident. For non-Debian encrypted
+installs, use `installer.extraTemplate` or a full template override with native
+installer syntax.
 
 The legacy `plain` value remains parseable in mappings for compatibility with
 older generic config, but Debian preseed rejects it clearly. Use `regular` for

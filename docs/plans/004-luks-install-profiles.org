@@ -1,6 +1,6 @@
 #+title: LUKS Install Profiles
 #+author: Darwin D. Wu
-#+status: Draft
+#+status: Done
 #+date: <2026-06-16 Tue>
 
 * LUKS Install Profiles
@@ -73,9 +73,8 @@ site-specific native installer behavior.
 
   #+begin_src yaml
   storage:
-    mode: lvm
+    mode: regular
     disk: /dev/sda
-    volumeGroup: vg0
     encryption:
       enabled: true
       passphrase:
@@ -140,64 +139,64 @@ site-specific native installer behavior.
 
 *** Phase 4: Non-Debian Installer Guardrails
 
-- [ ] Explicitly reject structured LUKS for Ubuntu minimal, CentOS kickstart,
+- [X] Explicitly reject structured LUKS for Ubuntu minimal, CentOS kickstart,
   CoreOS, and other non-Debian installer templates in this plan.
-- [ ] Document the Debian-only LUKS scope and recommend =installer.extraTemplate=
+- [X] Document the Debian-only LUKS scope and recommend =installer.extraTemplate=
   or full template override as the escape hatch for non-Debian encrypted
   installs.
-- [ ] Make unsupported encrypted installer combinations fail before rendering
+- [X] Make unsupported encrypted installer combinations fail before rendering
   where Shoelaces can identify the selected installer template, instead of
   silently producing unencrypted install config.
-- [ ] Add validation/rendering tests proving non-Debian encrypted targets fail
+- [X] Add validation/rendering tests proving non-Debian encrypted targets fail
   clearly instead of rendering unencrypted install config.
 
 *** Phase 5: Target Examples And Development Config
 
-- [ ] Make Debian 13 =trixie= the default Debian example/recommended target.
-- [ ] Add sample targets for Debian 13 unencrypted and Debian 13 LUKS.
-- [ ] Keep Debian 12 =bookworm= available as an explicit oldstable target, but
+- [X] Make Debian 13 =trixie= the default Debian example/recommended target.
+- [X] Add sample targets for Debian 13 unencrypted and Debian 13 LUKS.
+- [X] Keep Debian 12 =bookworm= available as an explicit oldstable target, but
   do not make it the default.
-- [ ] Leave existing Ubuntu 24.04 and Ubuntu 26.04 examples unencrypted and make
+- [X] Leave existing Ubuntu 24.04 and Ubuntu 26.04 examples unencrypted and make
   the docs clear that structured LUKS is Debian-only in this plan.
-- [ ] Add an example showing a per-host or per-target LUKS passphrase loaded via
+- [X] Add an example showing a per-host or per-target LUKS passphrase loaded via
   ={ env: ENV_VAR }= from the systemd service environment.
-- [ ] Add a raw-value example only if it is clearly marked as lab-only and not
+- [X] Do not add a raw-value example; raw values remain lab-only and not
   suitable for production.
-- [ ] Update =dev/= config so local development can exercise both encrypted and
+- [X] Update =dev/= config so local development can exercise both encrypted and
   unencrypted targets without real secrets.
-- [ ] Add tests or render-validation fixtures that load the example mappings.
+- [X] Add tests or render-validation fixtures that load the example mappings.
 
 *** Phase 6: Documentation And Verification
 
-- [ ] Document the structured =storage.encryption= schema and merge behavior.
-- [ ] Document LUKS security tradeoffs, especially serving installer config over
+- [X] Document the structured =storage.encryption= schema and merge behavior.
+- [X] Document LUKS security tradeoffs, especially serving installer config over
   HTTP and exposing unattended install secrets to machines on the provisioning
   network.
-- [ ] Document recommended use of per-host secrets, trusted networks, and TLS or
+- [X] Document recommended use of per-host secrets, trusted networks, and TLS or
   network isolation where available.
-- [ ] Document how =installer.extraTemplate= remains the escape hatch for
+- [X] Document how =installer.extraTemplate= remains the escape hatch for
   native installer behavior that is not covered by structured storage fields.
-- [ ] Run =make test=.
-- [ ] Run =make integration=.
-- [ ] Run the render validation target.
-- [ ] Run =make lint=.
-- [ ] Run =./scripts/check-plan-status.sh=.
+- [X] Run =make test=.
+- [X] Run =make integration=.
+- [X] Run the render validation target.
+- [X] Run =make lint=.
+- [X] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 
-- [ ] LUKS and non-LUKS install targets can coexist.
-- [ ] LUKS configuration is represented under structured =storage= fields.
-- [ ] Debian LUKS rendering supports =regular=, =lvm=, and =raid= storage modes.
-- [ ] Non-Debian encrypted targets fail clearly instead of rendering
+- [X] LUKS and non-LUKS install targets can coexist.
+- [X] LUKS configuration is represented under structured =storage= fields.
+- [X] Debian LUKS rendering supports =regular=, =lvm=, and =raid= storage modes.
+- [X] Non-Debian encrypted targets fail clearly instead of rendering
   unencrypted installer config.
-- [ ] LUKS secrets can come from explicit environment-backed values.
-- [ ] Raw LUKS secret values are supported only as documented lab-only inputs.
-- [ ] Existing non-LUKS =regular=, =lvm=, and =raid= Debian installs continue
+- [X] LUKS secrets can come from explicit environment-backed values.
+- [X] Raw LUKS secret values are supported only as documented lab-only inputs.
+- [X] Existing non-LUKS =regular=, =lvm=, and =raid= Debian installs continue
   to render.
-- [ ] Sensitive LUKS values are redacted from logs/events and do not appear in
+- [X] Sensitive LUKS values are redacted from logs/events and do not appear in
   rendered boot-script URLs.
-- [ ] Debian encrypted and unencrypted render-validation fixtures pass.
-- [ ] =make test=, =make integration=, render validation, =make lint=, and the
+- [X] Debian encrypted and unencrypted render-validation fixtures pass.
+- [X] =make test=, =make integration=, render validation, =make lint=, and the
   plan status checker pass.
 
 ** Notes And Risks
