@@ -400,6 +400,44 @@ func TestRenderedDebianPreseedPreservesStorageFlow(t *testing.T) {
 	)
 }
 
+func TestRenderedDebianPreseedWipeTrueIncludesDiskWipeEarlyCommand(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_wipe", "true"))
+
+	assert.Contains(t, rendered, "d-i partman/early_command string")
+	assert.Contains(t, rendered, "for d in /dev/nvme0n1 /dev/nvme1n1; do")
+	assert.Contains(t, rendered, `[ -b "$d" ] || continue`)
+	assert.Contains(t, rendered, `d="$(readlink -f "$d" 2>/dev/null || echo "$d")"`)
+	assert.Contains(t, rendered, `b="${d##*/}"`)
+	assert.Contains(t, rendered, `[ ! -e "/sys/class/block/$b/partition" ] || continue`)
+	assert.Contains(t, rendered, `sfdisk --delete "$d" 2>/dev/null || true`)
+	assert.Contains(t, rendered, `dd if=/dev/zero of="$d" bs=1M count=10 conv=fsync || true`)
+	assert.Contains(t, rendered, `sectors="$(blockdev --getsz "$d" 2>/dev/null || echo 0)"`)
+	assert.Contains(t, rendered, `seek="$((sectors - 20480))"`)
+	assert.Contains(t, rendered, `dd if=/dev/zero of="$d" bs=512 seek="$seek" count=20480 conv=fsync || true`)
+	assert.Contains(t, rendered, `blockdev --rereadpt "$d" 2>/dev/null || partprobe "$d" 2>/dev/null || true`)
+}
+
+func TestRenderedDebianPreseedWipeFalseOmitsDestructiveWipeCommands(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_wipe", "false"))
+
+	assert.NotContains(t, rendered, "d-i partman/early_command string")
+	assert.NotContains(t, rendered, "dd if=/dev/zero")
+	assert.NotContains(t, rendered, "sfdisk --delete")
+	assert.NotContains(t, rendered, "vgremove")
+	assert.NotContains(t, rendered, "pvremove")
+}
+
+func TestRenderedDebianPreseedWipeUsesDiskSelectors(t *testing.T) {
+	params := paramsWith(defaultRenderParams, "storage_wipe", "true")
+	params = paramsWith(params, "storage_wipe_disks", "/dev/nvme*n* /dev/sd*")
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "for d in /dev/nvme*n* /dev/sd*; do")
+	assert.Contains(t, rendered, `[ -b "$d" ] || continue`)
+	assert.Contains(t, rendered, `[ ! -e "/sys/class/block/$b/partition" ] || continue`)
+}
+
 func TestRenderedDebianPreseedDefaultRegularRecipeIsNonLVM(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
 
