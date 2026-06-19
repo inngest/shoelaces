@@ -27,15 +27,21 @@ const (
 	// BackendMemory stores runtime data in process memory only.
 	BackendMemory = "memory"
 
-	defaultSQLitePath = "runtime/shoelaces.db"
+	defaultSQLitePath               = "runtime/shoelaces.db"
+	defaultEventSweepInterval       = 24 * time.Hour
+	defaultBootSessionSweepInterval = time.Hour
 )
 
 // RetentionConfig controls how long runtime records remain queryable.
 type RetentionConfig struct {
 	// Events is the retention window for operator-facing event history.
 	Events time.Duration
+	// EventsSweepInterval controls how often old events are deleted while Shoelaces is running.
+	EventsSweepInterval time.Duration
 	// BootSessions is the retention window for boot/config references.
 	BootSessions time.Duration
+	// BootSessionsSweepInterval controls how often expired boot/config references are deleted while Shoelaces is running.
+	BootSessionsSweepInterval time.Duration
 }
 
 // Config controls the runtime persistence backend.
@@ -54,8 +60,10 @@ func DefaultConfig() Config {
 		Backend: BackendSQLite,
 		Path:    defaultSQLitePath,
 		Retention: RetentionConfig{
-			Events:       720 * time.Hour,
-			BootSessions: 24 * time.Hour,
+			Events:                    720 * time.Hour,
+			EventsSweepInterval:       defaultEventSweepInterval,
+			BootSessions:              24 * time.Hour,
+			BootSessionsSweepInterval: defaultBootSessionSweepInterval,
 		},
 	}
 }
@@ -73,8 +81,14 @@ func ApplyDefaults(config Config) Config {
 	if config.Retention.Events == 0 {
 		config.Retention.Events = defaults.Retention.Events
 	}
+	if config.Retention.EventsSweepInterval == 0 {
+		config.Retention.EventsSweepInterval = defaults.Retention.EventsSweepInterval
+	}
 	if config.Retention.BootSessions == 0 {
 		config.Retention.BootSessions = defaults.Retention.BootSessions
+	}
+	if config.Retention.BootSessionsSweepInterval == 0 {
+		config.Retention.BootSessionsSweepInterval = defaults.Retention.BootSessionsSweepInterval
 	}
 	return config
 }

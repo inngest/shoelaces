@@ -142,13 +142,16 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 
 func TestCommandAppliesPrecedenceToPersistenceConfig(t *testing.T) {
 	t.Setenv("PERSISTENCE_RETENTION_EVENTS", "48h")
+	t.Setenv("PERSISTENCE_RETENTION_EVENTS_SWEEP_INTERVAL", "12h")
 
 	configValues := map[any]any{
-		"data-dir":                            "../../configs/data-dir",
-		"persistence-backend":                 "memory",
-		"persistence-path":                    "runtime/config.db",
-		"persistence-retention-events":        "24h",
-		"persistence-retention-boot-sessions": "2h",
+		"data-dir":                                           "../../configs/data-dir",
+		"persistence-backend":                                "memory",
+		"persistence-path":                                   "runtime/config.db",
+		"persistence-retention-events":                       "24h",
+		"persistence-retention-events-sweep-interval":        "6h",
+		"persistence-retention-boot-sessions":                "2h",
+		"persistence-retention-boot-sessions-sweep-interval": "30m",
 	}
 
 	var got *environment.Environment
@@ -161,13 +164,16 @@ func TestCommandAppliesPrecedenceToPersistenceConfig(t *testing.T) {
 		"shoelaces",
 		"--persistence-path", "runtime/cli.db",
 		"--persistence-retention-boot-sessions", "6h",
+		"--persistence-retention-boot-sessions-sweep-interval", "15m",
 	}))
 	require.NotNil(t, got)
 
 	assert.Equal(t, "memory", got.PersistenceConfig.Backend)
 	assert.Equal(t, "runtime/cli.db", got.PersistenceConfig.Path)
 	assert.Equal(t, 48*time.Hour, got.PersistenceConfig.Retention.Events)
+	assert.Equal(t, 12*time.Hour, got.PersistenceConfig.Retention.EventsSweepInterval)
 	assert.Equal(t, 6*time.Hour, got.PersistenceConfig.Retention.BootSessions)
+	assert.Equal(t, 15*time.Minute, got.PersistenceConfig.Retention.BootSessionsSweepInterval)
 }
 
 func TestCommandRejectsInvalidPersistenceBackend(t *testing.T) {

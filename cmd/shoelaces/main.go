@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -220,10 +221,22 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 				Sources: flagSources("persistence-retention-events", "PERSISTENCE_RETENTION_EVENTS"),
 			},
 			&cli.DurationFlag{
+				Name:    "persistence-retention-events-sweep-interval",
+				Value:   persistenceDefaults.Retention.EventsSweepInterval,
+				Usage:   "How often persisted event retention cleanup runs while Shoelaces is running",
+				Sources: flagSources("persistence-retention-events-sweep-interval", "PERSISTENCE_RETENTION_EVENTS_SWEEP_INTERVAL"),
+			},
+			&cli.DurationFlag{
 				Name:    "persistence-retention-boot-sessions",
 				Value:   persistenceDefaults.Retention.BootSessions,
 				Usage:   "Retention window for persisted boot/config references",
 				Sources: flagSources("persistence-retention-boot-sessions", "PERSISTENCE_RETENTION_BOOT_SESSIONS"),
+			},
+			&cli.DurationFlag{
+				Name:    "persistence-retention-boot-sessions-sweep-interval",
+				Value:   persistenceDefaults.Retention.BootSessionsSweepInterval,
+				Usage:   "How often expired boot/config reference cleanup runs while Shoelaces is running",
+				Sources: flagSources("persistence-retention-boot-sessions-sweep-interval", "PERSISTENCE_RETENTION_BOOT_SESSIONS_SWEEP_INTERVAL"),
 			},
 			&cli.BoolFlag{
 				Name:  "version",
@@ -257,8 +270,10 @@ func optionsFromCommand(cmd *cli.Command) environment.Options {
 		Backend: cmd.String("persistence-backend"),
 		Path:    cmd.String("persistence-path"),
 		Retention: persistence.RetentionConfig{
-			Events:       cmd.Duration("persistence-retention-events"),
-			BootSessions: cmd.Duration("persistence-retention-boot-sessions"),
+			Events:                    cmd.Duration("persistence-retention-events"),
+			EventsSweepInterval:       cmd.Duration("persistence-retention-events-sweep-interval"),
+			BootSessions:              cmd.Duration("persistence-retention-boot-sessions"),
+			BootSessionsSweepInterval: cmd.Duration("persistence-retention-boot-sessions-sweep-interval"),
 		},
 	}
 	uiDir := cmd.String("ui-dir")

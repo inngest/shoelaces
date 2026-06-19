@@ -77,8 +77,12 @@ func normalizeConfigValue(name string, value any) (string, any, error) {
 		return "persistence-path", value, nil
 	case "persistence.retention.events":
 		return "persistence-retention-events", value, nil
+	case "persistence.retention.eventsSweepInterval", "persistence.retention.eventssweepinterval":
+		return "persistence-retention-events-sweep-interval", value, nil
 	case "persistence.retention.bootSessions", "persistence.retention.bootsessions":
 		return "persistence-retention-boot-sessions", value, nil
+	case "persistence.retention.bootSessionsSweepInterval", "persistence.retention.bootsessionssweepinterval":
+		return "persistence-retention-boot-sessions-sweep-interval", value, nil
 	default:
 		return "", nil, fmt.Errorf("configuration variable provided but not defined: %s", name)
 	}

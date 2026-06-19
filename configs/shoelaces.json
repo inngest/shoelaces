@@ -20,7 +20,9 @@
     "path": "runtime/shoelaces.db",
     "retention": {
       "events": "720h",
-      "bootSessions": "24h"
+      "eventsSweepInterval": "24h",
+      "bootSessions": "24h",
+      "bootSessionsSweepInterval": "1h"
     }
   },
   "tftp": {

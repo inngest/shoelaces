@@ -151,7 +151,9 @@ path = "runtime/shoelaces.db"
 
 [persistence.retention]
 events = "720h"
+eventsSweepInterval = "24h"
 bootSessions = "24h"
+bootSessionsSweepInterval = "1h"
 
 [tftp]
 enabled = true

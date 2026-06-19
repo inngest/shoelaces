@@ -33,7 +33,9 @@ Config files use nested keys for hyphenated CLI flags. For example, `network.bin
 | `--persistence-backend`                 | `persistence.backend`                | `PERSISTENCE_BACKEND`                 | `sqlite`               | Runtime persistence backend: `sqlite` or `memory`.                                                          |
 | `--persistence-path`                    | `persistence.path`                   | `PERSISTENCE_PATH`                    | `runtime/shoelaces.db` | SQLite database path, relative to `data.dir` unless absolute.                                               |
 | `--persistence-retention-events`        | `persistence.retention.events`       | `PERSISTENCE_RETENTION_EVENTS`        | `720h`                 | Retention window for persisted event history.                                                               |
+| `--persistence-retention-events-sweep-interval` | `persistence.retention.eventsSweepInterval` | `PERSISTENCE_RETENTION_EVENTS_SWEEP_INTERVAL` | `24h` | How often persisted event retention cleanup runs while Shoelaces is running.                                |
 | `--persistence-retention-boot-sessions` | `persistence.retention.bootSessions` | `PERSISTENCE_RETENTION_BOOT_SESSIONS` | `24h`                  | Retention window for persisted boot/config references.                                                      |
+| `--persistence-retention-boot-sessions-sweep-interval` | `persistence.retention.bootSessionsSweepInterval` | `PERSISTENCE_RETENTION_BOOT_SESSIONS_SWEEP_INTERVAL` | `1h` | How often expired boot/config reference cleanup runs while Shoelaces is running.                            |
 
 ## Data Directory
 
@@ -81,7 +83,9 @@ path = "runtime/shoelaces.db"
 
 [persistence.retention]
 events = "720h"
+eventsSweepInterval = "24h"
 bootSessions = "24h"
+bootSessionsSweepInterval = "1h"
 
 [tftp]
 enabled = true

@@ -18,7 +18,9 @@ persistence:
   path: runtime/shoelaces.db
   retention:
     events: 720h
+    eventsSweepInterval: 24h
     bootSessions: 24h
+    bootSessionsSweepInterval: 1h
 
 tftp:
   enabled: false

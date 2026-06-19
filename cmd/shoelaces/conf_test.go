@@ -32,7 +32,9 @@ path = "runtime/test.db"
 
 [persistence.retention]
 events = "24h"
+eventsSweepInterval = "12h"
 bootSessions = "2h"
+bootSessionsSweepInterval = "30m"
 
 [tftp]
 enabled = true
@@ -57,7 +59,9 @@ persistence:
   path: runtime/test.db
   retention:
     events: 24h
+    eventsSweepInterval: 12h
     bootSessions: 2h
+    bootSessionsSweepInterval: 30m
 tftp:
   enabled: true
   address: ":69"
@@ -85,7 +89,9 @@ tftp:
     "path": "runtime/test.db",
     "retention": {
       "events": "24h",
-      "bootSessions": "2h"
+      "eventsSweepInterval": "12h",
+      "bootSessions": "2h",
+      "bootSessionsSweepInterval": "30m"
     }
   },
   "tftp": {
@@ -115,7 +121,9 @@ tftp:
 			assert.Equal(t, "sqlite", values["persistence-backend"])
 			assert.Equal(t, "runtime/test.db", values["persistence-path"])
 			assert.Equal(t, "24h", values["persistence-retention-events"])
+			assert.Equal(t, "12h", values["persistence-retention-events-sweep-interval"])
 			assert.Equal(t, "2h", values["persistence-retention-boot-sessions"])
+			assert.Equal(t, "30m", values["persistence-retention-boot-sessions-sweep-interval"])
 			assert.Equal(t, true, values["tftp-enabled"])
 			assert.Equal(t, ":69", values["tftp-addr"])
 			assert.Equal(t, "/var/lib/shoelaces/tftp", values["tftp-root"])
@@ -170,7 +178,9 @@ data-dir = "configs/data-dir/"
 persistence-backend = "memory"
 persistence-path = "/tmp/ignored.db"
 persistence-retention-events = "1h"
+persistence-retention-events-sweep-interval = "10m"
 persistence-retention-boot-sessions = "30m"
+persistence-retention-boot-sessions-sweep-interval = "5m"
 `), 0o644))
 
 	_, err := readConfig(configPath)
@@ -205,7 +215,9 @@ func TestReadConfigSamplesIncludePersistence(t *testing.T) {
 			assert.Equal(t, "sqlite", values["persistence-backend"])
 			assert.Equal(t, "runtime/shoelaces.db", values["persistence-path"])
 			assert.Equal(t, "720h", values["persistence-retention-events"])
+			assert.Equal(t, "24h", values["persistence-retention-events-sweep-interval"])
 			assert.Equal(t, "24h", values["persistence-retention-boot-sessions"])
+			assert.Equal(t, "1h", values["persistence-retention-boot-sessions-sweep-interval"])
 		})
 	}
 }
