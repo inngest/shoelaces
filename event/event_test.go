@@ -17,6 +17,7 @@ package event
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -152,6 +153,38 @@ func TestLogPersistsRedactedParams(t *testing.T) {
 	assert.Equal(t, "[REDACTED]", events[0].Params["bootstrap_token"])
 	assert.NotContains(t, events[0].Message, "hash")
 	assert.NotContains(t, events[0].Message, "token-value")
+}
+
+func TestLogGetEvent(t *testing.T) {
+	store := memory.New()
+	log := NewLog(store, store)
+	log.newID = fixedIDs(ulid.MustParse("01K7XJ7CD80000000000000000"))
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "test_host")
+
+	require.NoError(t, log.AppendEvent(context.Background(), HostBoot, srv, ManualBoot, "debian.ipxe", map[string]any{
+		"hostname":        "test_host",
+		"bootstrap_token": "token-value",
+	}))
+
+	event, err := log.GetEvent(context.Background(), "01K7XJ7CD80000000000000000")
+
+	require.NoError(t, err)
+	assert.Equal(t, HostBoot, event.Type)
+	assert.Equal(t, srv.Mac, event.Server.Mac)
+	assert.Equal(t, "debian.ipxe", event.Script)
+	assert.Equal(t, "[REDACTED]", event.Params["bootstrap_token"])
+	assert.NotContains(t, event.Message, "token-value")
+}
+
+func TestLogGetEventReturnsLookupErrors(t *testing.T) {
+	store := memory.New()
+	log := NewLog(store, store)
+
+	_, err := log.GetEvent(context.Background(), "not-a-ulid")
+	assert.Error(t, err)
+
+	_, err = log.GetEvent(context.Background(), ulid.Make().String())
+	assert.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func TestLogDeleteEventsBefore(t *testing.T) {

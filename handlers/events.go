@@ -16,8 +16,13 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/oklog/ulid/v2"
 )
 
 // ListEvents returns a JSON list of the logged events.
@@ -38,4 +43,35 @@ func ListEvents(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(eventList)
+}
+
+// GetEvent returns one logged event by public event ID.
+func GetEvent(w http.ResponseWriter, r *http.Request) {
+	env := envFromRequest(r)
+	id := chi.URLParam(r, "id")
+	if _, err := ulid.Parse(id); err != nil {
+		http.Error(w, "invalid event id", http.StatusBadRequest)
+		return
+	}
+
+	event, err := env.EventLog.GetEvent(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "event not found", http.StatusNotFound)
+			return
+		}
+		env.Logger.Error("Failed to get event", "component", "handler", "event_id", id, "err", err)
+		http.Error(w, "failed to get event", http.StatusInternalServerError)
+		return
+	}
+
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		env.Logger.Error("Failed to marshal event", "component", "handler", "event_id", id, "err", err)
+		http.Error(w, "failed to marshal event", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(encoded)
 }

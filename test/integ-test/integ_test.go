@@ -80,6 +80,14 @@ type eventInfo struct {
 	Params     map[string]any `json:"params"`
 }
 
+type bootSessionReferenceInfo struct {
+	Ref    string         `json:"ref"`
+	Server serverInfo     `json:"server"`
+	Target string         `json:"target"`
+	Params map[string]any `json:"params"`
+	Users  map[string]any `json:"users"`
+}
+
 func TestShoelacesIntegration(t *testing.T) {
 	proc := startShoelaces(t)
 	defer proc.stop(t)
@@ -350,7 +358,8 @@ networkMaps:
 	proc := startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
 	bootScript := proc.getString(t, "/poll/1/06-66-de-ad-be-ef", nil)
 	preseedURL := renderedPreseedURL(t, bootScript)
-	if ref := preseedURL.Query().Get("ref"); ref == "" {
+	ref := preseedURL.Query().Get("ref")
+	if ref == "" {
 		proc.stop(t)
 		t.Fatalf("expected boot script config URL to include ref, got %s", preseedURL.String())
 	}
@@ -367,6 +376,26 @@ networkMaps:
 		"d-i preseed/late_command string echo persisted 06-66-de-ad-be-ef /dev/vda persisted",
 		"d-i user-setup/encrypt-home boolean false",
 	})
+
+	var reference bootSessionReferenceInfo
+	proc.getJSON(t, "/ajax/boot-sessions/"+url.PathEscape(ref), &reference)
+	if reference.Ref != ref {
+		t.Fatalf("boot reference changed across restart: got %q want %q", reference.Ref, ref)
+	}
+	if reference.Server.Mac != "06:66:de:ad:be:ef" {
+		t.Fatalf("boot reference server mismatch: %#v", reference.Server)
+	}
+	if reference.Target != "debian.ipxe" {
+		t.Fatalf("boot reference target mismatch: %#v", reference)
+	}
+	if reference.Params["hostname"] != "06-66-de-ad-be-ef" {
+		t.Fatalf("boot reference params missing hostname: %#v", reference.Params)
+	}
+	referenceJSON, err := json.Marshal(reference)
+	if err != nil {
+		t.Fatalf("marshal boot reference: %v", err)
+	}
+	assertNotContains(t, string(referenceJSON), "$6$integration")
 }
 
 func TestShoelacesPersistsEventsAcrossRestarts(t *testing.T) {

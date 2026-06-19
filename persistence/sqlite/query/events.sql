@@ -28,6 +28,21 @@ SELECT
 FROM events
 ORDER BY occurred_at_unix_nano ASC, id ASC;
 
+-- name: GetEvent :one
+SELECT
+  id,
+  event_type,
+  occurred_at_unix_nano,
+  mac,
+  ip,
+  hostname,
+  boot_type,
+  script,
+  message,
+  params_json
+FROM events
+WHERE id = ?;
+
 -- name: DeleteEventsBefore :execrows
 DELETE FROM events
 WHERE occurred_at_unix_nano < ?;

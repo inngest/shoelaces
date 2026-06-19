@@ -41,6 +41,7 @@ import (
 	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,6 +92,112 @@ func TestAjaxEventsReturnsGroupedEventShape(t *testing.T) {
 	assert.Equal(t, event.HostBoot, events[srv.Mac][0].Type)
 	assert.Equal(t, "debian.ipxe", events[srv.Mac][0].Script)
 	assert.Equal(t, "web", events[srv.Mac][0].Params["role"])
+}
+
+func TestAjaxEventReturnsSingleRedactedEvent(t *testing.T) {
+	var eventLog *event.Log
+	handler := newTestRouterWithEnvironment(t, t.TempDir(), func(env *environment.Environment) {
+		eventLog = env.EventLog
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "test-host")
+	require.NoError(t, eventLog.AppendEvent(context.Background(), event.HostBoot, srv, event.SubnetMatchBoot, "debian.ipxe", map[string]any{
+		"hostname":        "test-host",
+		"bootstrap_token": "secret-token",
+	}))
+	events, err := eventLog.ListEvents(context.Background())
+	require.NoError(t, err)
+	id := events[srv.Mac][0].ID.String()
+	req := httptest.NewRequest(http.MethodGet, "/ajax/events/"+id, nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var got event.Event
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	assert.Equal(t, id, got.ID.String())
+	assert.Equal(t, "debian.ipxe", got.Script)
+	assert.Equal(t, "test-host", got.Params["hostname"])
+	assert.Equal(t, "[REDACTED]", got.Params["bootstrap_token"])
+	assert.NotContains(t, rr.Body.String(), "secret-token")
+}
+
+func TestAjaxEventReturnsLookupErrors(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+
+	for _, tt := range []struct {
+		name   string
+		id     string
+		status int
+		body   string
+	}{
+		{name: "invalid", id: "not-a-ulid", status: http.StatusBadRequest, body: "invalid event id"},
+		{name: "missing", id: ulid.Make().String(), status: http.StatusNotFound, body: "event not found"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/ajax/events/"+tt.id, nil)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, tt.status, rr.Code)
+			assert.Contains(t, rr.Body.String(), tt.body)
+		})
+	}
+}
+
+func TestAjaxBootSessionReferenceReturnsRedactedMetadata(t *testing.T) {
+	var ref string
+	handler := newTestRouterWithEnvironment(t, t.TempDir(), func(env *environment.Environment) {
+		var err error
+		ref, err = env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server: server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target: "debian.ipxe",
+			Params: map[string]any{
+				"hostname":        "boot-host",
+				"bootstrap_token": "secret-token",
+			},
+			Users: map[string]mappings.ResolvedUser{
+				"infra": {
+					Name:            "infra",
+					Primary:         true,
+					PasswordCrypted: "$6$secret",
+				},
+			},
+			Provisioning: mappings.ProvisioningConfig{
+				Installer: mappings.InstallerConfig{
+					ConfigParams: map[string]any{"bootstrap_token": "secret-token"},
+				},
+			},
+		})
+		require.NoError(t, err)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/ajax/boot-sessions/"+url.PathEscape(ref), nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	assert.Equal(t, ref, got["ref"])
+	assert.Equal(t, "debian.ipxe", got["target"])
+	params := got["params"].(map[string]any)
+	assert.Equal(t, "boot-host", params["hostname"])
+	assert.Equal(t, "[REDACTED]", params["bootstrap_token"])
+	assert.NotContains(t, rr.Body.String(), "secret-token")
+	assert.NotContains(t, rr.Body.String(), "$6$secret")
+}
+
+func TestAjaxBootSessionReferenceReturnsNotFound(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/ajax/boot-sessions/missing-ref", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "boot reference not found")
 }
 
 func TestStaticRouteServesUIDirOverrideAsset(t *testing.T) {

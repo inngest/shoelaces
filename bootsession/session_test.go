@@ -89,6 +89,59 @@ func TestStoreHonorsBootSessionExpiry(t *testing.T) {
 	assert.Equal(t, int64(1), deleted)
 }
 
+func TestStoreInspectReturnsRedactedReference(t *testing.T) {
+	backend := memory.New()
+	t.Cleanup(func() { require.NoError(t, backend.Close()) })
+
+	store := NewStore(backend, backend, time.Hour)
+	store.now = func() time.Time { return time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC) }
+	store.newRef = func() string { return "01JREFTESTREFTESTREFTEST00" }
+	ref, err := store.Create(context.Background(), Snapshot{
+		Server: server.New("06:66:de:ad:be:ef", "192.0.2.10", "install-host"),
+		Target: "debian.ipxe",
+		Params: map[string]any{
+			"hostname":        "install-host",
+			"bootstrap_token": "secret-token",
+			"boot_ref":        "secret-ref",
+		},
+		Users: map[string]mappings.ResolvedUser{
+			"infra": {
+				Name:              "infra",
+				Primary:           true,
+				PasswordCrypted:   "$6$secret",
+				SSHAuthorizedKeys: []string{"ssh-ed25519 secret"},
+			},
+		},
+		Provisioning: mappings.ProvisioningConfig{
+			Installer: mappings.InstallerConfig{
+				ConfigParams: map[string]any{
+					"bootstrap_token": "secret-token",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	reference, err := store.Inspect(context.Background(), ref)
+
+	require.NoError(t, err)
+	assert.Equal(t, ref, reference.Ref)
+	assert.Equal(t, "install-host", reference.Server.Hostname)
+	assert.Equal(t, "debian.ipxe", reference.Target)
+	assert.Equal(t, "install-host", reference.Params["hostname"])
+	assert.Equal(t, "[REDACTED]", reference.Params["bootstrap_token"])
+	assert.Equal(t, "[REDACTED]", reference.Params["boot_ref"])
+	users := reference.Users.(map[string]any)
+	infra := users["infra"].(map[string]any)
+	assert.Equal(t, "infra", infra["Name"])
+	assert.Equal(t, "[REDACTED]", infra["PasswordCrypted"])
+	assert.Equal(t, "[REDACTED]", infra["SSHAuthorizedKeys"])
+	provisioning := reference.Provisioning.(map[string]any)
+	installer := provisioning["Installer"].(map[string]any)
+	configParams := installer["ConfigParams"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", configParams["bootstrap_token"])
+}
+
 func TestApplyReferenceParamsSetsBootReferenceQueryParams(t *testing.T) {
 	params := map[string]any{
 		"boot_ref_query":          "",

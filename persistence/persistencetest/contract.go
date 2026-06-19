@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/inngest/shoelaces/persistence"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,6 +80,15 @@ func RunStoreContract(t *testing.T, factory StoreFactory) {
 		assert.Equal(t, secondID, events[1].ID)
 		assert.Equal(t, "old-host", events[0].Hostname)
 		assert.Equal(t, []byte(`{"role":"db"}`), events[1].ParamsJSON)
+
+		got, err := store.GetEvent(ctx, secondID)
+		require.NoError(t, err)
+		assert.Equal(t, secondID, got.ID)
+		assert.Equal(t, "new-host", got.Hostname)
+		assert.Equal(t, []byte(`{"role":"db"}`), got.ParamsJSON)
+
+		_, err = store.GetEvent(ctx, ulid.Make())
+		assert.ErrorIs(t, err, sql.ErrNoRows)
 
 		deleted, err := store.DeleteEventsBefore(ctx, now.Add(-time.Minute))
 		require.NoError(t, err)

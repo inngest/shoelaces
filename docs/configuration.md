@@ -56,6 +56,8 @@ Provisioning static files are served from `data-dir/static` first, then embedded
 
 Generic provisioning defaults are embedded in the binary, but `mappings.yaml` is still external site policy and must be provided through `data-dir`.
 See [Provisioning Defaults And Overrides](provisioning-overrides.md) for the disk overlay model, full-template overrides, structured provisioning fields, and `installer.extraTemplate` snippets for native installer behavior such as Debian `late_command`, kickstart `%post`, or cloud-init `runcmd`.
+See [Runtime References](runtime-references.md) for the persisted boot refs,
+event IDs, and redacted lookup APIs backed by the persistence store.
 
 ## Example
 
