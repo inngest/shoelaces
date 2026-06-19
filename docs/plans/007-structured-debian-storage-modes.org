@@ -8,13 +8,16 @@
 ** Goal
 
 Implement structured =storage.mode= support in Shoelaces Debian preseed
-rendering so Debian installs can render either a plain GPT/UEFI partition
-layout or the existing LVM layout from the same structured provisioning model.
+rendering so Debian installs can render a plain GPT/UEFI partition layout, the
+existing LVM layout, or a two-disk mdadm RAID1 layout from the same structured
+provisioning model.
 
 At minimum, Debian preseed rendering must support:
 
 - =regular=
 - =lvm=
+- =raid=, initially focused on two-disk RAID1 for servers with mirrored M.2
+  install disks
 
 Unknown storage modes must fail rendering or validation with a clear error
 instead of silently falling back to another layout.
@@ -30,6 +33,21 @@ Shoelaces mappings now expose structured storage config, including:
 - =provisioning.Storage.WipeDiskPatterns=
 - =provisioning.Storage.Filesystems=, currently root and swap entries
 
+RAID needs additional structured data because =storage.disk= names one primary
+install disk and =wipeDiskPatterns= is intentionally destructive selector data,
+not layout data. A RAID1 install needs explicit member disks, for example:
+
+#+begin_src yaml
+storage:
+  mode: raid
+  raid:
+    level: 1
+    devices:
+      - /dev/nvme0n1
+      - /dev/nvme1n1
+    bootDegraded: true
+#+end_src
+
 Today the embedded Debian preseed template accepts =storage_mode= but still
 renders an LVM-oriented recipe regardless of mode. A render-validation test also
 sets =Mode: "regular"= while asserting an LVM =vg_name= stanza, so the tests do
@@ -37,25 +55,40 @@ not currently describe the desired behavior.
 
 ** Boundaries
 
+- This plan implements Debian preseed storage rendering only.
 - Preserve the public template name =preseed/debian= and existing config URLs.
 - Preserve =boot_ref= and =ref= query behavior for server-side boot session
   rendering.
-- Do not redesign the full structured storage schema in this plan. Use the
-  existing fields where possible.
-- Keep =preseed/storage= RAID behavior separate unless an implementation change
-  is required to avoid regressions.
+- Do not redesign the full structured storage schema beyond the narrow RAID
+  fields needed for Debian RAID1. Use existing fields where possible.
+- Keep the existing =preseed/storage= template URL available. The new Debian
+  RAID support may reuse its partman-md approach, but should not break callers
+  that still render =preseed/storage= directly.
+- Do not change CentOS kickstart, CoreOS/cloud-init, or Ubuntu minimal storage
+  rendering in this plan unless a regression test proves an existing path was
+  accidentally affected.
 - Keep existing Debian 12 and Debian 13 target rendering working.
-- Keep existing =mappings.yaml= examples valid. If =regular= becomes the
-  recommended default, update examples and docs explicitly.
+- Support Debian RAID mode for UEFI boot only in this plan. BIOS RAID boot
+  should fail validation/rendering clearly until intentionally designed.
+- Intentionally change the built-in Debian/default storage mode from =lvm= to
+  =regular= going forward.
+- Keep existing =mappings.yaml= examples valid, and update examples/docs so any
+  LVM installs opt in explicitly with =storage.mode: lvm=.
 
 ** Current State
 
 - =mappings.ParamsWithProvisioning= projects =Storage.Mode= to
   =storage_mode= and =Storage.VolumeGroup= to =vg_name=.
+- Structured storage does not currently have RAID member-disk fields.
 - Built-in provisioning defaults still set =storage_mode= to =lvm=.
 - Mapping validation currently accepts =plain=, =lvm=, =raid=, and =manual=.
 - The embedded Debian preseed template always renders LVM module loading,
   LVM cleanup prompts, a PV, and root/swap LVs.
+- A separate =preseed/storage= template already demonstrates
+  =partman-auto/method string raid=, =partman-auto-raid/recipe=, and
+  mdadm preseeding, but it is not selected by =preseed/debian= based on
+  structured =storage.mode= and currently includes LVM-oriented behavior that
+  should not be carried into plain RAID mode.
 - The existing wipe early command always renders, even when =storage.wipe= is
   false, and only wipes the beginning of matched devices.
 
@@ -66,6 +99,10 @@ not currently describe the desired behavior.
 - Dispatch the storage recipe by =storage_mode=.
 - Add a small template failure helper or equivalent render validation so query
   overrides such as =/configs/preseed/debian?storage_mode=zfs= fail clearly.
+- Keep global structured storage flexible for other installers. Debian should
+  reject unsupported modes when rendering =preseed/debian=, but global mapping
+  validation should not preclude future OS-specific values that another
+  template may support.
 - Treat =plain= as a compatibility question during implementation:
   either alias it to =regular= with documentation, or reject it for Debian with
   a clear migration note.
@@ -73,12 +110,87 @@ not currently describe the desired behavior.
   This keeps bootloader behavior consistent across the two recipes and avoids
   coupling the first =regular= implementation to assumptions about firmware,
   filesystem, or future encryption support.
+- Add Debian =raid= mode as RAID1-over-two-disks first. For UEFI systems, do
+  not put the EFI System Partition itself on mdraid; firmware reads normal FAT
+  partitions, so the RAID recipe should create an ESP on each member disk,
+  mount one at =/boot/efi=, and ensure bootloader files are present on both
+  disks. Use mdadm RAID1 for =/boot= and for the device that backs the root and
+  swap layout.
+- Keep =raid= distinct from =lvm=. Plain RAID mode should not render an LVM PV,
+  VG, LV, =partman-auto-lvm/new_vg_name=, =lvm2-udeb=, or =partman-lvm=.
+- Make =regular= the built-in default storage mode. This is an intentional
+  behavior change: users who want the current LVM behavior should set
+  =storage.mode: lvm= explicitly in mappings or pass =storage_mode=lvm=.
+
+** RAID Boot Rationale
+
+The RAID mode is for servers with two OS disks, such as two M.2 devices, where
+the desired behavior is that the installed OS keeps running when one disk
+fails.
+
+Use plain Linux =mdadm= RAID1 for this plan because it is the lowest-risk
+Debian preseed implementation for mirrored OS disks. Alternatives are valid in
+other environments, but are not the target of this plan:
+
+- Hardware RAID1 is acceptable when real hardware RAID exists, but it adds
+  controller dependency and is not portable across the bare disks.
+- ZFS mirrors provide stronger filesystem integrity, but Debian preseed
+  root-on-ZFS boot setup is a larger project and still requires duplicated EFI
+  System Partitions.
+- Btrfs RAID1 and cloned independent installs introduce more boot and recovery
+  policy than this plan needs.
+- Stateless/PXE rebuilds help recover failed hosts, but do not keep the current
+  OS running through an OS disk failure.
+
+The important boot constraint is that UEFI firmware does not boot from mdraid
+or ZFS directly. It loads EFI programs from a normal FAT EFI System Partition.
+Therefore RAID mode must create a normal ESP on each disk, keep bootloader files
+available on both ESPs, and use mdadm only for Linux-managed filesystems such
+as =/boot=, =/=, and swap.
+
+This remains compatible with iPXE network boot. The machine should network boot
+a UEFI iPXE binary for installer startup; the UEFI-only constraint in this plan
+applies to the installed OS disk boot path and ESP layout.
+
+With one failed disk, the expected impact should be:
+
+- The running system continues from the surviving RAID1 members.
+- A reboot succeeds if the surviving disk has a valid ESP and bootloader copy.
+- Recovery means replacing the failed disk, recreating its partition layout,
+  copying/restoring its ESP contents, adding new members back to the md arrays,
+  and allowing resync to complete.
+
+** RAID Implementation Recommendations
+
+- Require =boot.firmware: uefi= for Debian =storage.mode: raid=.
+- Prefer stable device paths under =/dev/disk/by-id/...= for
+  =storage.raid.devices=. Allow =/dev/nvme0n1= style paths for lab use and
+  tests, but do not recommend them for production examples.
+- Start with fixed, conservative RAID sizing:
+  - 512 MiB ESP on each disk
+  - 1 GiB RAID1 ext4 =/boot=
+  - RAID1 swap when swap is configured
+  - RAID1 ext4 root mounted at =/= with grow behavior
+- Install GRUB EFI files to both ESPs and place a fallback bootloader at
+  =EFI/BOOT/BOOTX64.EFI= on both disks.
+- Ensure the installed system can assemble arrays during early boot by writing
+  mdadm config into =/target/etc/mdadm/mdadm.conf= and running
+  =in-target update-initramfs -u=.
+- Add a short operator recovery runbook for failed-disk replacement after the
+  first implementation lands.
+- Treat render tests as necessary but insufficient. RAID mode needs at least
+  manual VM install validation, including degraded reboot checks from each
+  surviving disk.
 
 ** Phased Implementation Plan
 
-*** Phase 1: Validation And Render Errors
+*** Phase 1: Regular Defaults And Render Guardrails
 
 - [ ] Update mapping validation for =storage.mode= to include =regular=.
+- [ ] Change the built-in provisioning default =storage_mode= from =lvm= to
+  =regular=.
+- [ ] Add or update tests proving default Debian preseed rendering uses the
+  regular recipe unless a mapping or query explicitly selects =lvm=.
 - [ ] Decide and document whether legacy =plain= is a compatibility alias for
   =regular= or an unsupported value for Debian preseed rendering.
 - [ ] Add renderer support for explicit template failures, or add an
@@ -88,21 +200,23 @@ not currently describe the desired behavior.
 - [ ] Add tests for valid =regular= and =lvm= values.
 - [ ] Add tests for unsupported values such as =zfs=.
 
-*** Phase 2: Debian Template Refactor
+*** Phase 2: Debian Template Refactor For Regular And Wipe
 
 - [ ] Split =configs/data-dir/preseed/debian.preseed.slc= storage rendering
-  into named templates such as:
+  enough to support regular mode and shared wipe behavior:
   - =preseed/debian/storage=
   - =preseed/debian/storage/wipe=
   - =preseed/debian/storage/regular=
-  - =preseed/debian/storage/lvm=
   - shared commit and GRUB sections, if useful
+- [ ] Preserve the current LVM recipe behind a separate branch or template so
+  existing explicit =storage.mode: lvm= installs are not broken while regular
+  mode is tested.
 - [ ] Preserve the top-level =preseed/debian= template name.
 - [ ] Preserve the order of common, repository, storage, package,
   =installerExtra=, and finish sections unless a test proves a change is
   required.
 - [ ] Keep =partman-auto/disk= populated from =storage_disk= in every Debian
-  storage mode.
+  single-disk storage mode.
 
 *** Phase 3: Regular Storage Recipe
 
@@ -116,17 +230,7 @@ not currently describe the desired behavior.
 - [ ] Do not render =partman-auto-lvm/new_vg_name=.
 - [ ] Do not require =lvm2-udeb= or =partman-lvm= in this mode.
 
-*** Phase 4: LVM Storage Recipe
-
-- [ ] Preserve the current LVM layout behavior: EFI, =/boot=, LVM PV, swap LV,
-  and root LV.
-- [ ] Render =partman-auto/method string lvm= for LVM mode.
-- [ ] Render =partman-auto-lvm/new_vg_name= using =storage.volumeGroup= via
-  =vg_name=.
-- [ ] Load =lvm2-udeb= and =partman-lvm= only for LVM mode.
-- [ ] Render root and swap as LVs in the configured VG.
-
-*** Phase 5: Disk Wipe Behavior
+*** Phase 4: Disk Wipe Behavior
 
 - [ ] Gate destructive wipe commands on =storage_wipe=.
 - [ ] If =storage_wipe= is false, omit the destructive early command.
@@ -140,7 +244,7 @@ not currently describe the desired behavior.
   =blockdev --rereadpt= or =partprobe=.
 - [ ] Keep unmatched glob behavior non-fatal.
 
-*** Phase 6: Render-Validation Coverage
+*** Phase 5: Regular/Wipe Validation Milestone
 
 - [ ] Add a regular-mode Debian preseed render test that asserts:
   - no LVM directives are present
@@ -148,10 +252,6 @@ not currently describe the desired behavior.
   - no =lvm2-udeb= or =partman-lvm= requirement is present
   - EFI, =/boot=, root, and swap partition stanzas are present
   - the selected disk appears in =partman-auto/disk=
-- [ ] Add an LVM-mode Debian preseed render test that asserts:
-  - LVM directives are present
-  - =partman-auto-lvm/new_vg_name= uses the configured VG name
-  - root and swap are rendered as LVs in the configured VG
 - [ ] Add wipe rendering tests proving:
   - =wipe=true= includes =partman/early_command=
   - =wipe=false= omits destructive wipe commands
@@ -160,30 +260,146 @@ not currently describe the desired behavior.
   =Mode: "regular"= no longer expects =vg_name= output.
 - [ ] Keep boot ref and query behavior covered by existing router and polling
   tests, adding assertions only if the ref path changes.
+- [ ] Run focused tests for the early milestone:
+  =go test ./test/render-validation ./templates ./mappings ./router ./polling=
+- [ ] Begin real install testing for the default regular path after this phase,
+  while LVM cleanup and RAID support continue in later phases.
 
-*** Phase 7: Documentation And Examples
+*** Phase 6: LVM Storage Recipe
+
+- [ ] Preserve the current LVM layout behavior: EFI, =/boot=, LVM PV, swap LV,
+  and root LV.
+- [ ] Render =partman-auto/method string lvm= for LVM mode.
+- [ ] Render =partman-auto-lvm/new_vg_name= using =storage.volumeGroup= via
+  =vg_name=.
+- [ ] Load =lvm2-udeb= and =partman-lvm= only for LVM mode.
+- [ ] Render root and swap as LVs in the configured VG.
+- [ ] Add an LVM-mode Debian preseed render test that asserts:
+  - LVM directives are present
+  - =partman-auto-lvm/new_vg_name= uses the configured VG name
+  - root and swap are rendered as LVs in the configured VG
+
+*** Phase 7: RAID Schema And Validation
+
+- [ ] Add a narrow structured RAID block to =StorageConfig= with fields such as
+  =raid.level=, =raid.devices=, and =raid.bootDegraded=.
+- [ ] Validate initial Debian RAID support as RAID level =1= with exactly two
+  member disks.
+- [ ] Validate Debian RAID mode requires =boot.firmware: uefi=.
+- [ ] Validate RAID member disks as explicit =/dev/...= paths and keep them
+  separate from =wipeDiskPatterns=.
+- [ ] Recommend =/dev/disk/by-id/...= RAID member paths in docs and examples,
+  while allowing simpler device names in tests.
+- [ ] Project RAID fields into template params such as =storage_raid_level=,
+  =storage_raid_devices=, and =storage_raid_boot_degraded=.
+- [ ] Add parser, resolver, merge, copy, and projection tests for the RAID
+  block.
+- [ ] Ensure =storage.mode: raid= fails clearly when required RAID fields are
+  missing or invalid.
+- [ ] Add tests for valid =raid= values.
+- [ ] Add validation tests proving Debian RAID mode rejects BIOS firmware.
+
+*** Phase 8: RAID1 Storage Recipe
+
+- [ ] Add =preseed/debian/storage/raid= to the Debian storage template split.
+- [ ] Populate =partman-auto/disk= from the RAID member-disk list in Debian
+  RAID mode.
+- [ ] Render =d-i partman-auto/method string raid= for RAID mode.
+- [ ] Load the Debian installer modules needed for mdadm RAID, such as
+  =mdadm-udeb= and =partman-md=.
+- [ ] Render =partman-auto/disk= with both configured RAID member disks.
+- [ ] Partition both member disks consistently using GPT/UEFI layout.
+- [ ] Create a normal EFI System Partition on each member disk, not an mdraid
+  ESP.
+- [ ] Mount one ESP at =/boot/efi= during install and ensure bootloader files
+  are installed or copied to the second ESP before reboot.
+- [ ] Create a RAID1 md device for =/boot= and format it as ext4.
+- [ ] Create a RAID1 md device for root and format it as ext4 mounted at =/=.
+- [ ] Create a RAID1 md device for swap when swap is configured.
+- [ ] Do not render LVM PV, VG, or LV recipe directives in RAID mode.
+- [ ] Do not render =partman-auto-lvm/new_vg_name= in RAID mode.
+- [ ] Render =mdadm/boot_degraded= from =storage.raid.bootDegraded=.
+- [ ] Confirm md cleanup prompts so reinstalling over stale arrays is
+  unattended when wiping is enabled.
+- [ ] Install GRUB EFI files to both ESPs.
+- [ ] Place a fallback bootloader at =EFI/BOOT/BOOTX64.EFI= on both ESPs.
+- [ ] Write installed-system mdadm config to =/target/etc/mdadm/mdadm.conf=.
+- [ ] Run =in-target update-initramfs -u= after writing mdadm config.
+- [ ] Add a compatibility note for UEFI boot redundancy: ESPs are duplicated
+  rather than mdraid-managed.
+- [ ] Keep initial RAID filesystem sizing conservative: 512 MiB ESPs, 1 GiB
+  RAID1 =/boot=, optional RAID1 swap, and RAID1 root with grow behavior.
+- [ ] Add a RAID-mode Debian preseed render test that asserts:
+  - =partman-auto/method string raid= is present
+  - both configured M.2 disks appear in =partman-auto/disk=
+  - mdadm/partman-md requirements are present
+  - =partman-auto-raid/recipe= is present
+  - EFI partitions are normal partitions, not mdraid arrays
+  - =/boot= is rendered as a RAID1 md filesystem
+  - root and swap are rendered as RAID1 md devices, not LVs
+  - =mdadm/boot_degraded= follows the configured value
+  - LVM directives and =partman-auto-lvm/new_vg_name= are absent
+  - late commands write mdadm config and refresh initramfs
+  - late commands install or copy EFI bootloader files to both ESPs
+
+*** Phase 9: Documentation And Examples
 
 - [ ] Update =docs/mappings-and-environments.md= to describe =regular= and
   =lvm= Debian storage behavior.
-- [ ] Update examples only if the recommended default changes.
+- [ ] Document Debian RAID1 storage behavior and provide a two-M.2-disk
+  example using =storage.mode: raid= and =storage.raid.devices=.
+- [ ] Use =/dev/disk/by-id/...= paths in production-oriented RAID examples.
+- [ ] Document that Debian RAID mode is UEFI-only in this plan.
+- [ ] Document that UEFI RAID mode still works with iPXE installer startup
+  when the host network boots a UEFI iPXE binary.
+- [ ] Document the fixed initial RAID sizing behavior and note future work to
+  map =storage.filesystems= sizes consistently across all modes.
+- [ ] Document that this plan covers Debian preseed only; kickstart,
+  Ubuntu-specific installers, CoreOS/Ignition, and cloud-init storage semantics
+  should be handled by future OS-specific work.
+- [ ] Update examples so new/default Debian installs show =regular= behavior
+  and LVM examples opt in explicitly with =storage.mode: lvm=.
 - [ ] Document whether =plain= is still accepted, deprecated, or rejected.
 - [ ] Note that =/boot= remains separate in =regular= mode for consistency with
   LVM and future encryption-sensitive layouts.
+- [ ] Add an operator recovery runbook for replacing a failed RAID1 OS disk:
+  identify the failed disk, replace it, recreate partitions, restore/copy the
+  ESP, add new members back to md arrays, monitor resync, and verify both ESPs
+  remain bootable.
 
-*** Phase 8: Verification
+*** Phase 10: Verification
 
-- [ ] Run focused tests:
+- [ ] Run focused tests after later-phase work:
   =go test ./test/render-validation ./templates ./mappings ./router ./polling=
 - [ ] Run the full Go test suite:
   =go test ./...=
+- [ ] Manually validate a Debian RAID install in a VM before considering RAID
+  mode done.
+- [ ] Validate degraded reboot with disk A missing and disk B present.
+- [ ] Validate degraded reboot with disk B missing and disk A present.
 - [ ] Run =./scripts/check-plan-status.sh= after updating this plan.
 
 ** Acceptance Criteria
 
 - Debian =storage.mode= =regular= renders a non-LVM GPT/UEFI layout.
 - Debian =storage.mode= =lvm= preserves the current LVM layout behavior.
+- Debian =storage.mode= =raid= renders a two-disk RAID1 GPT/UEFI layout for
+  mirrored M.2 install disks.
+- Debian RAID mode is UEFI-only and fails clearly for BIOS firmware.
+- RAID member disks are configured as layout data, not inferred from destructive
+  wipe patterns.
+- Debian RAID installs are compatible with UEFI iPXE installer startup.
+- Debian RAID installs configure both ESPs so the system can reboot from either
+  surviving disk after one disk fails.
+- Debian RAID installs write mdadm config and refresh initramfs so arrays
+  assemble during installed-system boot.
+- RAID mode has documented manual VM install and degraded reboot validation.
+- Built-in default Debian rendering uses =regular= storage unless explicitly
+  configured otherwise.
 - Unsupported Debian storage modes fail clearly.
 - Disk wiping is opt-in via =storage.wipe= and skips partition devices.
 - Existing template names and config URLs continue to work.
-- Render-validation tests cover regular mode, LVM mode, wipe true, wipe false,
-  and partition-skip wipe logic.
+- Non-Debian installer templates continue to render as they did before this
+  plan.
+- Render-validation tests cover regular mode, LVM mode, RAID mode, wipe true,
+  wipe false, and partition-skip wipe logic.
