@@ -1,20 +1,23 @@
-name: Conventional Commits
+# Depot CI Migration
+# Source: .github/workflows/commits.yml
+#
+# Changes made:
+# - Changed GitHub runs-on labels to their Depot equivalents
 
+name: Conventional Commits
 on:
   # Use pull_request_target so fork PRs can be labeled with the base repo token.
   # This workflow must not checkout or run untrusted PR code.
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
-
 permissions:
   contents: read
   issues: write
   pull-requests: write
-
 jobs:
   validate-pr-title:
     name: Validate title
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - name: PR Conventional Commit Validation
         uses: ytanikin/pr-conventional-commits@1.5.2

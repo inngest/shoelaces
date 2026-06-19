@@ -1,5 +1,10 @@
-name: Auto-create Release PR
+# Depot CI Migration
+# Source: .github/workflows/auto-release-pr.yml
+#
+# Changes made:
+# - Changed GitHub runs-on labels to their Depot equivalents
 
+name: Auto-create Release PR
 on:
   schedule:
     - cron: "17 0 * * *"
@@ -9,23 +14,18 @@ on:
     paths-ignore:
       - "CHANGELOG.md"
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: write
-
 env:
   # Use the release bot token so release/next pushes and PR updates trigger normal workflow fanout.
   GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
 concurrency:
   group: release-pr-master
   cancel-in-progress: true
-
 jobs:
   create-release-pr:
-    runs-on: ubuntu-latest
-
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - name: Validate release token
         run: |
@@ -33,13 +33,11 @@ jobs:
             echo "::error title=Missing RELEASE_TOKEN::Configure the release bot token as the RELEASE_TOKEN repository secret."
             exit 1
           fi
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ env.GH_TOKEN }}
-
       - name: Skip release commits
         id: skip
         run: |
@@ -49,7 +47,6 @@ jobs:
           fi
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
-
       - name: Check for unreleased commits
         if: steps.skip.outputs.skip == 'false'
         id: changes
@@ -83,13 +80,11 @@ jobs:
           else
             echo "Found ${ahead} unreleased commits since ${latest_tag:-repo start}"
           fi
-
       - name: Install git-cliff
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         uses: taiki-e/install-action@v2
         with:
           tool: git-cliff
-
       - name: Compute next release tag
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         id: next-version
@@ -108,7 +103,6 @@ jobs:
 
           echo "tag=${tag_name}" >> "$GITHUB_OUTPUT"
           echo "Next release tag: ${tag_name}"
-
       - name: Generate changelog
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         uses: orhun/git-cliff-action@v4
@@ -118,7 +112,6 @@ jobs:
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
-
       - name: Generate release notes preview
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         uses: orhun/git-cliff-action@v4
@@ -128,7 +121,6 @@ jobs:
         env:
           OUTPUT: RELEASE_NOTES.md
           GITHUB_REPO: ${{ github.repository }}
-
       - name: Create or update release branch
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         env:
@@ -148,7 +140,6 @@ jobs:
           fi
 
           git push --force-with-lease origin "${branch}"
-
       - name: Create PR body
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         env:
@@ -189,7 +180,6 @@ jobs:
           $(cat RELEASE_NOTES.md)
           EOF
           } > /tmp/release-pr-body.md
-
       - name: Find existing release PR
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0'
         id: existing-pr
@@ -202,7 +192,6 @@ jobs:
             --jq '.[0].number // empty')"
 
           echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
-
       - name: Create release PR
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0' && steps.existing-pr.outputs.pr_number == ''
         env:
@@ -213,7 +202,6 @@ jobs:
             --head "release/next" \
             --title "chore(release): ${RELEASE_TAG}" \
             --body-file /tmp/release-pr-body.md
-
       - name: Update existing release PR
         if: steps.skip.outputs.skip == 'false' && steps.changes.outputs.ahead != '0' && steps.existing-pr.outputs.pr_number != ''
         env:
