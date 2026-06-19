@@ -110,7 +110,7 @@ func New(options Options) *Environment {
 
 	env.initStaticTemplates()
 	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
-	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 	server.StartStateStoreCleaner(env.Logger, env.ServerStates)
 
 	return env
@@ -152,7 +152,7 @@ func defaultEnvironment() *Environment {
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
 	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
 	env.BootSessions = bootsession.NewStore(env.RuntimeStore, env.RuntimeStore, env.PersistenceConfig.Retention.BootSessions)
-	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 
 	return env
 }

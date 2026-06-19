@@ -146,9 +146,9 @@ func ApplyReferenceParams(params map[string]any, ref string) {
 	values.Set(QueryParam, ref)
 	encoded := values.Encode()
 	params[TemplateParam] = ref
-	params["installer_config_query"] = encoded
-	params["installer_config_query_suffix"] = "&" + encoded
-	params["installer_config_query_question"] = "?" + encoded
+	params["boot_ref_query"] = encoded
+	params["boot_ref_query_suffix"] = "&" + encoded
+	params["boot_ref_query_question"] = "?" + encoded
 }
 
 func snapshotFromRecord(record persistence.BootSessionRecord) (Snapshot, error) {

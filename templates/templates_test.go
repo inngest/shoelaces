@@ -330,7 +330,6 @@ func TestRenderTemplateRedactsProvisioningInLogs(t *testing.T) {
 	assert.NotContains(t, logOutput.String(), "secret-token")
 	logParams := loggedTemplateParams(t, logOutput.String())
 	assert.Equal(t, "[REDACTED]", logParams["bootstrap_token"])
-	assert.Equal(t, "[REDACTED]", logParams["installer_config_query"])
 	provisioning := logParams["provisioning"].(map[string]any)
 	installer := provisioning["Installer"].(map[string]any)
 	configParams := installer["ConfigParams"].(map[string]any)

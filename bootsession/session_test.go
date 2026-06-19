@@ -89,17 +89,17 @@ func TestStoreHonorsBootSessionExpiry(t *testing.T) {
 	assert.Equal(t, int64(1), deleted)
 }
 
-func TestApplyReferenceParamsOverridesInstallerQueryParams(t *testing.T) {
+func TestApplyReferenceParamsSetsBootReferenceQueryParams(t *testing.T) {
 	params := map[string]any{
-		"installer_config_query":          "provisioning=large-json",
-		"installer_config_query_suffix":   "&provisioning=large-json",
-		"installer_config_query_question": "?provisioning=large-json",
+		"boot_ref_query":          "",
+		"boot_ref_query_suffix":   "",
+		"boot_ref_query_question": "",
 	}
 
 	ApplyReferenceParams(params, "01JREFTESTREFTESTREFTEST00")
 
 	assert.Equal(t, "01JREFTESTREFTESTREFTEST00", params[TemplateParam])
-	assert.Equal(t, "ref=01JREFTESTREFTESTREFTEST00", params["installer_config_query"])
-	assert.Equal(t, "&ref=01JREFTESTREFTESTREFTEST00", params["installer_config_query_suffix"])
-	assert.Equal(t, "?ref=01JREFTESTREFTESTREFTEST00", params["installer_config_query_question"])
+	assert.Equal(t, "ref=01JREFTESTREFTESTREFTEST00", params["boot_ref_query"])
+	assert.Equal(t, "&ref=01JREFTESTREFTESTREFTEST00", params["boot_ref_query_suffix"])
+	assert.Equal(t, "?ref=01JREFTESTREFTESTREFTEST00", params["boot_ref_query_question"])
 }
