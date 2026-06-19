@@ -1,0 +1,208 @@
+#+title: CLI Runtime Inspection
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-19 Fri>
+
+* CLI Runtime Inspection
+
+** Goal
+
+Add explicit Shoelaces CLI subcommands for running the server and inspecting
+runtime state from the host where Shoelaces is installed. Operators should be
+able to query events, waiting/manual server state, and boot-session references
+without needing to open the web UI.
+
+** Boundaries
+
+- When no subcommand is provided, print CLI help and exit successfully.
+- Add =shoelaces run= as the explicit server command.
+- Keep inspection commands read-only in the first phase.
+- Read persisted runtime data directly from the configured SQLite store rather
+  than calling the HTTP API, so inspection still works when the web server is
+  down.
+- Return a clear error for runtime inspection when =persistence.backend= is
+  =memory= because a separate CLI process cannot inspect another process'
+  in-memory state.
+- Keep JSON as the stable scripting format.
+- Use simple table output for human-readable defaults. Prefer the standard
+  library =text/tabwriter= before adding a table-rendering dependency.
+- Do not add terminal UI behavior, colors, paging, or interactive prompts in
+  this plan.
+
+** Current State
+
+- =cmd/shoelaces/main.go= builds a single root =urfave/cli/v3= command whose
+  root action starts the HTTP and optional TFTP servers.
+- CLI/config parsing already knows how to load persistence options from flags,
+  environment variables, and config files.
+- Events and server states already have persistence query interfaces that can
+  list records.
+- Boot sessions can be inspected by opaque reference through the application
+  boundary, but the persistence interfaces do not currently expose a list
+  operation for boot sessions.
+- =environment.New= opens persistence, loads mappings/templates, performs
+  retention cleanup, and starts background cleaners. Read-only CLI inspection
+  should avoid constructing a full server environment.
+
+** Command Shape
+
+#+begin_src text
+shoelaces
+shoelaces run
+
+shoelaces events list
+shoelaces events get <event-id>
+
+shoelaces servers list
+shoelaces servers get <mac>
+
+shoelaces boot-sessions get <ref>
+shoelaces boot-sessions list
+#+end_src
+
+- Bare =shoelaces= should print help and exit with status 0.
+- =shoelaces run= should use the existing server startup path.
+- =events list= should default to chronological, flattened output rather than
+  the grouped-by-MAC shape used by the web UI.
+- =servers list= should show both waiting and selected manual state where
+  persisted state still exists.
+- =boot-sessions get <ref>= should show the existing redacted operator-facing
+  reference view.
+- =boot-sessions list= should be deferred until a list query is intentionally
+  added to the boot-session persistence boundary.
+
+** Output Formats
+
+#+begin_src text
+shoelaces events list --output table
+shoelaces events list --output json
+shoelaces servers list --output table
+shoelaces boot-sessions get 01J... --output json
+#+end_src
+
+- =--output table= is the human-readable default for list commands.
+- =--output json= is the stable automation format.
+- Table output should be implemented with =text/tabwriter= initially.
+- Table columns should stay compact and predictable:
+  - events: time, event ID, MAC, hostname, type, script, message
+  - servers: MAC, IP, hostname, target, environment, retry, last access
+  - boot sessions: ref, MAC, hostname, target, environment, created, expires
+- JSON output should use existing public/redacted domain shapes where possible
+  instead of exposing backend-specific row types.
+
+** Design Direction
+
+- Split command construction so root flags remain shared by server and
+  inspection commands without duplicating the existing config precedence logic.
+- Add a small read-only runtime store opener for CLI inspection. It should:
+  - derive =environment.Options= from the command;
+  - validate persistence configuration;
+  - reject non-SQLite inspection backends with an operator-facing error;
+  - resolve relative SQLite paths against =data-dir=;
+  - open the SQLite store;
+  - close the store after the command finishes.
+- Avoid using =environment.New= for inspection commands because it performs
+  server startup work that is unnecessary and surprising for read-only CLI
+  queries.
+- Keep output formatting in a small CLI-focused package or file, separate from
+  persistence and HTTP handlers.
+- Prefer table-driven tests for command routing, output selection, persistence
+  errors, and representative table/JSON rendering.
+
+** Phased Implementation Plan
+
+*** Phase 1: Command Structure
+
+- [ ] Add an explicit =run= subcommand that starts the server.
+- [ ] Make bare =shoelaces= print command help and exit successfully.
+- [ ] Do not add a =start= alias in this plan; keep one canonical server
+  command.
+- [ ] Keep existing root flags and config/env/default precedence unchanged.
+- [ ] Update CLI help text so the server command and inspection commands are
+  discoverable.
+- [ ] Add tests for no-command help output, explicit server startup, version
+  output, and invalid option handling.
+
+*** Phase 2: Read-Only Store Opening
+
+- [ ] Add a helper that opens the configured SQLite persistence store for
+  inspection without constructing a full =environment.Environment=.
+- [ ] Reject =memory= persistence for inspection commands with a clear error.
+- [ ] Ensure relative persistence paths still resolve under =data-dir=.
+- [ ] Ensure the store is closed on success and error paths.
+- [ ] Add tests for SQLite path resolution, memory backend rejection, invalid
+  backend rejection, and close behavior.
+
+*** Phase 3: Shared Output Formatting
+
+- [ ] Add an =--output= flag for inspection commands with =table= and =json=
+  values.
+- [ ] Implement JSON output with =encoding/json= and deterministic indentation
+  only if needed for readability.
+- [ ] Implement table output with the standard library =text/tabwriter=.
+- [ ] Keep table formatting dependency-free unless wrapping, terminal width,
+  borders, or colors become explicit requirements.
+- [ ] Add tests for invalid output formats, table headers, table row rendering,
+  and JSON shape.
+
+*** Phase 4: Event Inspection
+
+- [ ] Add =shoelaces events list=.
+- [ ] Flatten persisted events into chronological records for CLI output.
+- [ ] Add filters for high-value operator cases, such as =--mac=, =--type=,
+  =--since=, and =--limit=.
+- [ ] Add =shoelaces events get <event-id>=.
+- [ ] Reuse existing event redaction guarantees and avoid exposing raw params.
+- [ ] Add tests for event list ordering, filters, limit behavior, missing event
+  IDs, invalid ULIDs, table output, and JSON output.
+
+*** Phase 5: Server State Inspection
+
+- [ ] Add =shoelaces servers list=.
+- [ ] Add =shoelaces servers get <mac>=.
+- [ ] Show waiting/manual state fields that are useful during boot debugging:
+  host identity, target, environment, retry count, last access, allowed targets,
+  and redacted params.
+- [ ] Add optional filters such as =--waiting= and =--mac= if they simplify
+  operator workflows.
+- [ ] Add tests for empty state, waiting hosts, selected hosts, missing MACs,
+  table output, and JSON output.
+
+*** Phase 6: Boot Session Inspection
+
+- [ ] Add =shoelaces boot-sessions get <ref>= using the existing redacted
+  boot-session reference view.
+- [ ] Add tests for valid refs, expired refs, missing refs, table output, and
+  JSON output.
+- [ ] Add a =ListBootSessions= persistence query only if list inspection is
+  still needed after =get <ref>= lands.
+- [ ] If listing is added, implement =shoelaces boot-sessions list= with
+  unexpired-only behavior by default and an explicit option for expired records
+  if operators need retention debugging.
+- [ ] Add SQLite, memory, and persistence contract tests for boot-session list
+  only when the list query is introduced.
+
+*** Phase 7: Documentation And Verification
+
+- [ ] Document the new command structure in the manpage and configuration docs.
+- [ ] Document that runtime inspection requires SQLite persistence.
+- [ ] Include examples for common server-local debugging flows.
+- [ ] Run =go fmt=.
+- [ ] Run =go test ./...=.
+- [ ] Run =make test= if the change touches integration-sensitive CLI behavior.
+- [ ] Run =./scripts/check-plan-status.sh=.
+
+** Acceptance Criteria
+
+- [ ] Bare =shoelaces= prints help and exits successfully without starting the
+  server.
+- [ ] The explicit server command starts the server through the existing startup
+  path.
+- [ ] Operators can list and fetch persisted events from the CLI.
+- [ ] Operators can list and fetch persisted server states from the CLI.
+- [ ] Operators can fetch a persisted boot-session reference from the CLI.
+- [ ] CLI inspection fails clearly when configured with memory persistence.
+- [ ] Human-readable output is available without adding a new table dependency.
+- [ ] JSON output is stable enough for scripts.
+- [ ] Tests cover command routing, persistence opening, output formatting, and
+  representative inspection flows.
