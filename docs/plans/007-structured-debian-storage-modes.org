@@ -270,14 +270,14 @@ With one failed disk, the expected impact should be:
 
 *** Phase 6: LVM Storage Recipe
 
-- [ ] Preserve the current LVM layout behavior: EFI, =/boot=, LVM PV, swap LV,
+- [X] Preserve the current LVM layout behavior: EFI, =/boot=, LVM PV, swap LV,
   and root LV.
-- [ ] Render =partman-auto/method string lvm= for LVM mode.
-- [ ] Render =partman-auto-lvm/new_vg_name= using =storage.volumeGroup= via
+- [X] Render =partman-auto/method string lvm= for LVM mode.
+- [X] Render =partman-auto-lvm/new_vg_name= using =storage.volumeGroup= via
   =vg_name=.
-- [ ] Load =lvm2-udeb= and =partman-lvm= only for LVM mode.
-- [ ] Render root and swap as LVs in the configured VG.
-- [ ] Add an LVM-mode Debian preseed render test that asserts:
+- [X] Load =lvm2-udeb= and =partman-lvm= only for LVM mode.
+- [X] Render root and swap as LVs in the configured VG.
+- [X] Add an LVM-mode Debian preseed render test that asserts:
   - LVM directives are present
   - =partman-auto-lvm/new_vg_name= uses the configured VG name
   - root and swap are rendered as LVs in the configured VG

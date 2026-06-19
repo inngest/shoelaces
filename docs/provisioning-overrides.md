@@ -322,10 +322,12 @@ explicit disk paths or `/dev` glob patterns that installer templates may clear
 before partitioning. This lets a host install to one disk while also removing
 old partition, mdraid, or LVM metadata from a known disposable disk set.
 
-For Debian `storage.mode: regular`, `storage.filesystems` entries named `esp`,
-`boot`, `swap`, and `root` override the default partition sizes, filesystem
-types, and mountpoints. Root with `size: grow` uses `sizeMiB` as the minimum and
-continues to consume remaining disk space:
+For Debian `storage.mode: regular` and `storage.mode: lvm`,
+`storage.filesystems` entries named `esp`, `boot`, `swap`, and `root` override
+the default partition sizes, filesystem types, and mountpoints. Root with
+`size: grow` uses `sizeMiB` as the minimum and continues to consume remaining
+disk space. In LVM mode, `root` and `swap` are rendered as logical volumes in
+the configured `storage.volumeGroup`:
 
 ```yaml
 storage:

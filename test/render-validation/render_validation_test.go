@@ -507,14 +507,80 @@ func TestRenderedDebianPreseedRegularRecipeAppliesStructuredFilesystems(t *testi
 }
 
 func TestRenderedDebianPreseedPreservesExplicitLVMRecipe(t *testing.T) {
-	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_mode", "lvm"))
+	params := paramsWith(defaultRenderParams, "storage_mode", "lvm")
+	params = paramsWith(params, "vg_name", "vgtest")
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
 
 	assert.Contains(t, rendered, "d-i partman-auto/method string lvm")
 	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto-lvm/new_vg_name string vgtest")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-lvm")
-	assert.Contains(t, rendered, "vg_name{ vg0 }")
+	assert.Contains(t, rendered, "vg_name{ vgtest }")
+	assert.Contains(t, rendered, "in_vg{ vgtest }")
 	assert.Contains(t, rendered, "lv_name{ root }")
 	assert.Contains(t, rendered, "lv_name{ swap }")
+}
+
+func TestRenderedDebianPreseedLVMRecipeAppliesStructuredFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Mode:        "lvm",
+			VolumeGroup: "vgtest",
+			Filesystems: map[string]mappings.FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-xfs")
+	assert.Contains(t, rendered, "d-i partman-auto-lvm/new_vg_name string vgtest")
+	assert.Contains(t, rendered, "768 768 768 fat32")
+	assert.Contains(t, rendered, "mountpoint{ /efi }")
+	assert.Contains(t, rendered, "2048 2048 2048 xfs")
+	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ xfs }")
+	assert.Contains(t, rendered, "1000 10000 -1 lvm")
+	assert.Contains(t, rendered, "4096 4096 4096 linux-swap")
+	assert.Contains(t, rendered, "65536 100000000 -1 xfs")
+	assert.Contains(t, rendered, "in_vg{ vgtest }")
+	assert.Contains(t, rendered, "lv_name{ root }")
+	assert.Contains(t, rendered, "lv_name{ swap }")
+	assert.NotContains(t, rendered, "1024 1024 1024 ext4")
+	assert.NotContains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.NotContains(t, rendered, "20000 100000000 -1 ext4")
+}
+
+func TestRenderedDebianPreseedLVMModulesFollowFinalFilesystemOverrides(t *testing.T) {
+	params := paramsWith(defaultRenderParams, "storage_mode", "lvm")
+	params = paramsWith(params, "debian_lvm_root_fstype", "xfs")
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4 partman-xfs")
+	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ xfs }")
 }
 
 func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
