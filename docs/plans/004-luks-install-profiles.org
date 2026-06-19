@@ -69,7 +69,7 @@ site-specific native installer behavior.
 
 *** Phase 1: Storage Encryption Schema
 
-- [ ] Extend =StorageConfig= with a structured encryption block, for example:
+- [X] Extend =StorageConfig= with a structured encryption block, for example:
 
   #+begin_src yaml
   storage:
@@ -85,16 +85,16 @@ site-specific native installer behavior.
       hash: sha512
   #+end_src
 
-- [ ] Keep =storage.mode= focused on layout family and use
+- [X] Keep =storage.mode= focused on layout family and use
   =storage.encryption.enabled= to select encrypted variants. Avoid adding a
   separate =luks= mode unless templates prove the combined state is ambiguous.
-- [ ] Support raw and environment-backed passphrases through the same resolver
+- [X] Support raw and environment-backed passphrases through the same resolver
   style as structured users, while treating raw values as lab-only.
-- [ ] Validate encryption fields: passphrase is required when enabled, cipher
+- [X] Validate encryption fields: passphrase is required when enabled, cipher
   and hash must be non-empty when provided, and key size must be positive.
-- [ ] Add parser tests for valid/invalid encryption YAML.
-- [ ] Add resolver tests for raw and ={ env: ENV_VAR }= passphrases.
-- [ ] Add merge-order tests proving defaults, targets, and matched mappings can
+- [X] Add parser tests for valid/invalid encryption YAML.
+- [X] Add resolver tests for raw and ={ env: ENV_VAR }= passphrases.
+- [X] Add merge-order tests proving defaults, targets, and matched mappings can
   override encryption settings.
 
 *** Phase 2: Secret Transport And Redaction
