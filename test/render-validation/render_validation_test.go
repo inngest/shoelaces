@@ -348,6 +348,171 @@ func TestRenderedDebianPreseedDoesNotIncludeSitePostInstallLogicByDefault(t *tes
 	assert.NotContains(t, rendered, "ansible")
 }
 
+func TestRenderedDebianPreseedStorageModeSelection(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]interface{}
+		want   string
+	}{
+		{
+			name:   "default regular",
+			params: defaultRenderParams,
+			want:   "d-i partman-auto/method string regular",
+		},
+		{
+			name: "structured lvm",
+			params: paramsWith(defaultRenderParams, "provisioning", mappings.ProvisioningConfig{
+				Storage: mappings.StorageConfig{
+					Mode: "lvm",
+				},
+			}),
+			want: "d-i partman-auto/method string lvm",
+		},
+		{
+			name:   "explicit lvm",
+			params: paramsWith(defaultRenderParams, "storage_mode", "lvm"),
+			want:   "d-i partman-auto/method string lvm",
+		},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, "preseed/debian", tt.params)
+
+			assert.Contains(t, rendered, tt.want)
+		})
+	}
+}
+
+func TestRenderedDebianPreseedPreservesStorageFlow(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
+
+	assertInOrder(t, rendered,
+		"d-i apt-setup/contrib boolean",
+		"d-i partman-auto/disk string",
+		"d-i partman/early_command string",
+		"d-i partman-auto/method string",
+		"d-i partman-partitioning/confirm_write_new_label boolean true",
+		"d-i grub2/linux_cmdline string",
+		"d-i user-setup/encrypt-home boolean",
+		"d-i grub-installer/timeout string",
+	)
+}
+
+func TestRenderedDebianPreseedDefaultRegularRecipeIsNonLVM(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
+
+	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular")
+	assert.Contains(t, rendered, "512 512 512 fat32")
+	assert.Contains(t, rendered, "1024 1024 1024 ext4")
+	assert.Contains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.Contains(t, rendered, "20000 100000000 -1 ext4")
+	assert.Contains(t, rendered, "mountpoint{ / }")
+	assert.Contains(t, rendered, "method{ swap }")
+	assert.NotContains(t, rendered, "partman-lvm")
+	assert.NotContains(t, rendered, "partman-auto-lvm")
+	assert.NotContains(t, rendered, "method{ lvm }")
+	assert.NotContains(t, rendered, "$lvmok{ }")
+	assert.NotContains(t, rendered, "in_vg{")
+	assert.NotContains(t, rendered, "vg_name{")
+	assert.NotContains(t, rendered, "lv_name{")
+}
+
+func TestRenderedDebianPreseedRegularRecipeAppliesStructuredFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Filesystems: map[string]mappings.FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i anna/choose_modules string partman-xfs")
+	assert.Contains(t, rendered, "768 768 768 fat32")
+	assert.Contains(t, rendered, "mountpoint{ /efi }")
+	assert.Contains(t, rendered, "2048 2048 2048 xfs")
+	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ xfs }")
+	assert.Contains(t, rendered, "4096 4096 4096 linux-swap")
+	assert.Contains(t, rendered, "65536 100000000 -1 xfs")
+	assert.NotContains(t, rendered, "1024 1024 1024 ext4")
+	assert.NotContains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.NotContains(t, rendered, "20000 100000000 -1 ext4")
+}
+
+func TestRenderedDebianPreseedPreservesExplicitLVMRecipe(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_mode", "lvm"))
+
+	assert.Contains(t, rendered, "d-i partman-auto/method string lvm")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-lvm")
+	assert.Contains(t, rendered, "vg_name{ vg0 }")
+	assert.Contains(t, rendered, "lv_name{ root }")
+	assert.Contains(t, rendered, "lv_name{ swap }")
+}
+
+func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]interface{}
+		want   string
+	}{
+		{
+			name:   "explicit query style param",
+			params: paramsWith(defaultRenderParams, "storage_mode", "zfs"),
+			want:   `preseed/debian storage_mode must be "regular" or "lvm", got "zfs"`,
+		},
+		{
+			name: "structured provisioning",
+			params: paramsWith(defaultRenderParams, "provisioning", mappings.ProvisioningConfig{
+				Storage: mappings.StorageConfig{
+					Mode: "zfs",
+				},
+			}),
+			want: `preseed/debian storage_mode must be "regular" or "lvm", got "zfs"`,
+		},
+		{
+			name:   "legacy plain mode",
+			params: paramsWith(defaultRenderParams, "storage_mode", "plain"),
+			want:   `preseed/debian storage_mode must be "regular" or "lvm", got "plain"`,
+		},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := renderTemplateError(t, renderer, "preseed/debian", tt.params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
 func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	utc := false
 	ntp := false
@@ -393,7 +558,8 @@ func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/vda")
 	assert.Contains(t, rendered, "for d in /dev/nvme*n* /dev/sd*; do \\")
 	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
-	assert.Contains(t, rendered, "vg_name{ vgtest }")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular")
+	assert.NotContains(t, rendered, "vg_name{ vgtest }")
 	assert.Contains(t, rendered, "d-i grub2/linux_cmdline string panic=30")
 	assert.Contains(t, rendered, "d-i clock-setup/ntp boolean false")
 	assert.Contains(t, rendered, "d-i pkgsel/update-policy select none")
@@ -540,6 +706,25 @@ func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name s
 	rendered, err := renderer.RenderTemplate(name, params, "")
 	require.NoError(t, err)
 	return rendered
+}
+
+func renderTemplateError(t *testing.T, renderer *templates.ShoelacesTemplates, name string, params map[string]interface{}) error {
+	t.Helper()
+
+	_, err := renderer.RenderTemplate(name, params, "")
+	return err
+}
+
+func assertInOrder(t *testing.T, text string, needles ...string) {
+	t.Helper()
+
+	previous := -1
+	for _, needle := range needles {
+		current := strings.Index(text, needle)
+		require.NotEqualf(t, -1, current, "missing %q", needle)
+		require.Greaterf(t, current, previous, "%q was not after previous marker", needle)
+		previous = current
+	}
 }
 
 func assertValidIPXEScript(t *testing.T, rendered string) []string {

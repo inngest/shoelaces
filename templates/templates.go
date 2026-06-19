@@ -18,12 +18,14 @@ package templates
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -302,6 +304,10 @@ func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[stri
 		s.logger.Info("Failed to render installer extra", "action", "render-installer-extra", "err", err)
 		return "", err
 	}
+	if err := validateRenderParams(configName, paramMap); err != nil {
+		s.logger.Info("Invalid template parameters", "action", "validate-template-params", "template", configName, "err", err)
+		return "", err
+	}
 	s.logger.Info("Template request", "action", "template-request", "template", configName, "env", envName, "parameters", utils.RedactedMapToString(paramMap))
 
 	requiredVariables := s.envTemplates[envName].listVariables(configName)
@@ -334,6 +340,25 @@ func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[stri
 	}
 
 	return r, nil
+}
+
+func validateRenderParams(configName string, paramMap map[string]interface{}) error {
+	switch configName {
+	case "preseed/debian":
+		return validateDebianPreseedParams(paramMap)
+	default:
+		return nil
+	}
+}
+
+func validateDebianPreseedParams(paramMap map[string]interface{}) error {
+	mode := strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"]))
+	switch mode {
+	case "regular", "lvm":
+		return nil
+	default:
+		return errors.New(`preseed/debian storage_mode must be "regular" or "lvm", got ` + strconv.Quote(mode))
+	}
 }
 
 func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {

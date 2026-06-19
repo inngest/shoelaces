@@ -62,6 +62,7 @@ func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing
 
 	assert.Equal(t, "/dev/explicit", params["storage_disk"])
 	assert.Equal(t, "/dev/explicit", params["storage_wipe_disks"])
+	assert.Equal(t, "regular", params["storage_mode"])
 	assert.Equal(t, "vgstructured", params["vg_name"])
 	assert.Equal(t, "en_GB.UTF-8", params["locale_language"])
 	assert.Equal(t, "gb", params["locale_keyboard"])
@@ -141,4 +142,82 @@ func TestParamsWithProvisioningKeepsDefaultWipeDiskFallback(t *testing.T) {
 
 	assert.Equal(t, "/dev/nvme0n1", params["storage_disk"])
 	assert.Equal(t, "/dev/nvme0n1 /dev/nvme1n1", params["storage_wipe_disks"])
+	assert.Equal(t, "regular", params["storage_mode"])
+}
+
+func TestParamsWithProvisioningProjectsStructuredStorageMode(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Mode: "lvm",
+		},
+	})
+
+	assert.Equal(t, "lvm", params["storage_mode"])
+}
+
+func TestParamsWithProvisioningProjectsStructuredRegularFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Filesystems: map[string]FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+	})
+
+	assert.Equal(t, "partman-xfs", params["debian_regular_partman_modules"])
+	assert.Equal(t, "768", params["debian_regular_esp_min_size_mib"])
+	assert.Equal(t, "768", params["debian_regular_esp_priority"])
+	assert.Equal(t, "768", params["debian_regular_esp_max_size_mib"])
+	assert.Equal(t, "/efi", params["debian_regular_esp_mountpoint"])
+	assert.Equal(t, "2048", params["debian_regular_boot_min_size_mib"])
+	assert.Equal(t, "2048", params["debian_regular_boot_priority"])
+	assert.Equal(t, "2048", params["debian_regular_boot_max_size_mib"])
+	assert.Equal(t, "xfs", params["debian_regular_boot_fstype"])
+	assert.Equal(t, "4096", params["debian_regular_swap_min_size_mib"])
+	assert.Equal(t, "4096", params["debian_regular_swap_priority"])
+	assert.Equal(t, "4096", params["debian_regular_swap_max_size_mib"])
+	assert.Equal(t, "65536", params["debian_regular_root_min_size_mib"])
+	assert.Equal(t, "100000000", params["debian_regular_root_priority"])
+	assert.Equal(t, "-1", params["debian_regular_root_max_size_mib"])
+	assert.Equal(t, "xfs", params["debian_regular_root_fstype"])
+}
+
+func TestParamsWithProvisioningInfersMixedRegularPartmanModules(t *testing.T) {
+	rootMinSize := 65536
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Filesystems: map[string]FilesystemConfig{
+				"root": {
+					FSType:  "xfs",
+					Size:    "grow",
+					SizeMiB: &rootMinSize,
+				},
+			},
+		},
+	})
+
+	assert.Equal(t, "partman-ext4 partman-xfs", params["debian_regular_partman_modules"])
+	assert.Equal(t, "ext4", params["debian_regular_boot_fstype"])
+	assert.Equal(t, "xfs", params["debian_regular_root_fstype"])
 }

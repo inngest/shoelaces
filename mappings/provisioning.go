@@ -93,6 +93,9 @@ type StorageConfig struct {
 	VolumeGroup string `koanf:"volumeGroup"`
 	// Filesystems contains named filesystem definitions.
 	Filesystems map[string]FilesystemConfig `koanf:"filesystems"`
+
+	// absentFilesystems tracks inherited entries suppressed during merging.
+	absentFilesystems map[string]bool
 }
 
 // FilesystemConfig describes one named filesystem entry.
@@ -191,6 +194,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "packages_update_policy", provisioning.Packages.UpdatePolicy)
 	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
 	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
+	projectDebianRegularFilesystemParams(params, provisioning.Storage)
 	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_ubuntu_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_centos_mirror", provisioning.Repos.OSMirror)
@@ -295,8 +299,28 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "storage_template_disk", "/dev/sda /dev/sdb")
 	setDefaultParamValue(params, "kickstart_storage_drive", "sda")
 	setDefaultParamValue(params, "storage_wipe", "true")
-	setDefaultParamValue(params, "storage_mode", "lvm")
+	setDefaultParamValue(params, "storage_mode", "regular")
 	setDefaultParamValue(params, "ubuntu_minimal_storage_mode", "regular")
+	setDefaultParamValue(params, "debian_regular_partman_modules", "partman-ext4")
+	setDefaultParamValue(params, "debian_regular_esp_min_size_mib", "512")
+	setDefaultParamValue(params, "debian_regular_esp_priority", "512")
+	setDefaultParamValue(params, "debian_regular_esp_max_size_mib", "512")
+	setDefaultParamValue(params, "debian_regular_esp_fstype", "fat32")
+	setDefaultParamValue(params, "debian_regular_esp_mountpoint", "/boot/efi")
+	setDefaultParamValue(params, "debian_regular_boot_min_size_mib", "1024")
+	setDefaultParamValue(params, "debian_regular_boot_priority", "1024")
+	setDefaultParamValue(params, "debian_regular_boot_max_size_mib", "1024")
+	setDefaultParamValue(params, "debian_regular_boot_fstype", "ext4")
+	setDefaultParamValue(params, "debian_regular_boot_mountpoint", "/boot")
+	setDefaultParamValue(params, "debian_regular_swap_enabled", "true")
+	setDefaultParamValue(params, "debian_regular_swap_min_size_mib", "8192")
+	setDefaultParamValue(params, "debian_regular_swap_priority", "8192")
+	setDefaultParamValue(params, "debian_regular_swap_max_size_mib", "8192")
+	setDefaultParamValue(params, "debian_regular_root_min_size_mib", "20000")
+	setDefaultParamValue(params, "debian_regular_root_priority", "100000000")
+	setDefaultParamValue(params, "debian_regular_root_max_size_mib", "-1")
+	setDefaultParamValue(params, "debian_regular_root_fstype", "ext4")
+	setDefaultParamValue(params, "debian_regular_root_mountpoint", "/")
 	setDefaultParamValue(params, "repo_firmware", "true")
 	setDefaultParamValue(params, "repo_contrib", "true")
 	setDefaultParamValue(params, "repo_non_free", "true")
@@ -332,6 +356,91 @@ func setDefaultParam(params map[string]interface{}, key string, value string) {
 func setDefaultParamValue(params map[string]interface{}, key string, value any) {
 	if _, ok := params[key]; !ok {
 		params[key] = fmt.Sprint(value)
+	}
+}
+
+func projectDebianRegularFilesystemParams(params map[string]interface{}, storage StorageConfig) {
+	filesystems := storage.Filesystems
+	if len(filesystems) == 0 {
+		if storage.absentFilesystems["swap"] {
+			setDefaultParamValue(params, "debian_regular_swap_enabled", "false")
+		}
+		return
+	}
+
+	projectDebianRegularPartitionParams(params, "esp", "debian_regular_esp", filesystems["esp"])
+	projectDebianRegularPartitionParams(params, "boot", "debian_regular_boot", filesystems["boot"])
+	projectDebianRegularPartitionParams(params, "swap", "debian_regular_swap", filesystems["swap"])
+	projectDebianRegularPartitionParams(params, "root", "debian_regular_root", filesystems["root"])
+
+	if modules := debianRegularPartmanModules(filesystems); modules != "" {
+		setDefaultParamValue(params, "debian_regular_partman_modules", modules)
+	}
+	if storage.absentFilesystems["swap"] {
+		setDefaultParamValue(params, "debian_regular_swap_enabled", "false")
+	}
+}
+
+func projectDebianRegularPartitionParams(params map[string]interface{}, name, prefix string, filesystem FilesystemConfig) {
+	if boolValue(filesystem.Absent) {
+		if name == "swap" {
+			setDefaultParamValue(params, prefix+"_enabled", "false")
+		}
+		return
+	}
+	if filesystem.Mountpoint != "" && name != "swap" {
+		setDefaultParamValue(params, prefix+"_mountpoint", filesystem.Mountpoint)
+	}
+	if filesystem.FSType != "" && name != "swap" {
+		setDefaultParamValue(params, prefix+"_fstype", filesystem.FSType)
+	}
+	if filesystem.SizeMiB != nil {
+		setDefaultParamValue(params, prefix+"_min_size_mib", *filesystem.SizeMiB)
+		if name == "root" && strings.EqualFold(filesystem.Size, "grow") {
+			setDefaultParamValue(params, prefix+"_max_size_mib", "-1")
+		} else {
+			setDefaultParamValue(params, prefix+"_priority", *filesystem.SizeMiB)
+			setDefaultParamValue(params, prefix+"_max_size_mib", *filesystem.SizeMiB)
+		}
+		return
+	}
+	if name == "root" && strings.EqualFold(filesystem.Size, "grow") {
+		setDefaultParamValue(params, prefix+"_max_size_mib", "-1")
+	}
+}
+
+func debianRegularPartmanModules(filesystems map[string]FilesystemConfig) string {
+	modules := make([]string, 0, 3)
+	seen := map[string]bool{}
+	for _, name := range []string{"boot", "root"} {
+		filesystem := filesystems[name]
+		if boolValue(filesystem.Absent) {
+			continue
+		}
+		fstype := filesystem.FSType
+		if fstype == "" {
+			fstype = "ext4"
+		}
+		module := debianPartmanModule(fstype)
+		if module == "" || seen[module] {
+			continue
+		}
+		modules = append(modules, module)
+		seen[module] = true
+	}
+	return strings.Join(modules, " ")
+}
+
+func debianPartmanModule(fstype string) string {
+	switch strings.ToLower(strings.TrimSpace(fstype)) {
+	case "ext2", "ext3", "ext4":
+		return "partman-ext4"
+	case "xfs":
+		return "partman-xfs"
+	case "btrfs":
+		return "partman-btrfs"
+	default:
+		return ""
 	}
 }
 
@@ -507,6 +616,7 @@ func mergePackagesConfig(base PackagesConfig, override PackagesConfig) PackagesC
 }
 
 func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfig {
+	base.absentFilesystems = copyBoolMap(base.absentFilesystems)
 	if override.Disk != "" {
 		base.Disk = override.Disk
 	}
@@ -523,24 +633,34 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 		base.VolumeGroup = override.VolumeGroup
 	}
 	if override.Filesystems != nil {
-		base.Filesystems = mergeFilesystemConfigMap(base.Filesystems, override.Filesystems)
+		base = mergeFilesystemConfigMapWithAbsent(base, override.Filesystems)
 	}
 	return base
 }
 
-func mergeFilesystemConfigMap(base map[string]FilesystemConfig, override map[string]FilesystemConfig) map[string]FilesystemConfig {
-	merged := copyFilesystemConfigMap(base)
+func mergeFilesystemConfigMapWithAbsent(base StorageConfig, override map[string]FilesystemConfig) StorageConfig {
+	merged := copyFilesystemConfigMap(base.Filesystems)
 	if merged == nil {
 		merged = make(map[string]FilesystemConfig, len(override))
 	}
+	absent := copyBoolMap(base.absentFilesystems)
 	for name, filesystem := range override {
 		if boolValue(filesystem.Absent) {
 			delete(merged, name)
+			if absent == nil {
+				absent = make(map[string]bool)
+			}
+			absent[name] = true
 			continue
+		}
+		if absent != nil {
+			delete(absent, name)
 		}
 		merged[name] = mergeFilesystemConfig(merged[name], filesystem)
 	}
-	return merged
+	base.Filesystems = merged
+	base.absentFilesystems = absent
+	return base
 }
 
 func mergeFilesystemConfig(base FilesystemConfig, override FilesystemConfig) FilesystemConfig {
@@ -641,6 +761,7 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Storage.Wipe = copyBoolPtr(config.Storage.Wipe)
 	config.Storage.WipeDiskPatterns = append([]string(nil), config.Storage.WipeDiskPatterns...)
 	config.Storage.Filesystems = copyFilesystemConfigMap(config.Storage.Filesystems)
+	config.Storage.absentFilesystems = copyBoolMap(config.Storage.absentFilesystems)
 	config.Boot.Netboot.KernelArgs = append([]string(nil), config.Boot.Netboot.KernelArgs...)
 	if config.Boot.Installed.TimeoutSeconds != nil {
 		copied := *config.Boot.Installed.TimeoutSeconds
@@ -672,4 +793,15 @@ func copyFilesystemConfig(filesystem FilesystemConfig) FilesystemConfig {
 		filesystem.SizeMiB = &copied
 	}
 	return filesystem
+}
+
+func copyBoolMap(values map[string]bool) map[string]bool {
+	if values == nil {
+		return nil
+	}
+	copied := make(map[string]bool, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
 }

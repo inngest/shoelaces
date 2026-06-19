@@ -17,6 +17,17 @@ d-i apt-setup/contrib boolean {{.repo_contrib}}
 # ---- Select installation disk
 d-i partman-auto/disk string {{.storage_disk}}
 
+{{template "preseed/debian/storage/wipe" .}}
+{{if eq .storage_mode "lvm" -}}
+{{template "preseed/debian/storage/lvm" .}}
+{{else -}}
+{{template "preseed/debian/storage/regular" .}}
+{{end -}}
+{{template "preseed/debian/storage/commit" .}}
+{{template "preseed/debian/storage/grub" .}}
+{{end}}
+
+{{define "preseed/debian/storage/wipe" -}}
 # ---- HARD RESET OF SELECTED WIPE DISKS (kills old GPT/md/LVM) ----
 # Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
 # storage_wipe_disks may contain explicit /dev glob patterns; unmatched globs
@@ -32,10 +43,55 @@ d-i partman/early_command string \
       sfdisk --delete "$d" 2>/dev/null || true; \
       dd if=/dev/zero of="$d" bs=1M count=10 conv=fsync || true; \
     done'
+{{end}}
 
+{{define "preseed/debian/storage/regular" -}}
+d-i anna/choose_modules string {{.debian_regular_partman_modules}}
+
+# Use selected storage method
+d-i partman-auto/method string regular
+
+# Make sure any md leftovers can be replaced without prompts
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
+
+# Expert recipe: ESP + /boot + swap + root on regular partitions
+d-i partman-auto/expert_recipe string \
+  uefi-regular ::                                                        \
+    {{.debian_regular_esp_min_size_mib}} {{.debian_regular_esp_priority}} {{.debian_regular_esp_max_size_mib}} {{.debian_regular_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        mountpoint{ {{.debian_regular_esp_mountpoint}} }                 \
+    .                                                                    \
+    {{.debian_regular_boot_min_size_mib}} {{.debian_regular_boot_priority}} {{.debian_regular_boot_max_size_mib}} {{.debian_regular_boot_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ {{.debian_regular_boot_fstype}} }  \
+        mountpoint{ {{.debian_regular_boot_mountpoint}} }                \
+    .                                                                    \
+{{if eq .debian_regular_swap_enabled "true" -}}
+    {{.debian_regular_swap_min_size_mib}} {{.debian_regular_swap_priority}} {{.debian_regular_swap_max_size_mib}} linux-swap \
+        method{ swap } format{ }                                         \
+    .                                                                    \
+{{end -}}
+    {{.debian_regular_root_min_size_mib}} {{.debian_regular_root_priority}} {{.debian_regular_root_max_size_mib}} {{.debian_regular_root_fstype}} \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ {{.debian_regular_root_fstype}} }  \
+        mountpoint{ {{.debian_regular_root_mountpoint}} }                \
+    .
+
+d-i partman-auto/choose_recipe select uefi-regular
+{{end}}
+
+{{define "preseed/debian/storage/lvm" -}}
+{{template "preseed/debian/storage/legacy-lvm-layout" .}}
+{{end}}
+
+{{define "preseed/debian/storage/legacy-lvm-layout" -}}
 d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4
 
-# Use LVM
+# Use selected storage method
 d-i partman-auto/method string {{.storage_mode}}
 d-i partman-auto-lvm/guided_size string max
 
@@ -84,13 +140,17 @@ d-i partman-auto/expert_recipe string \
     .
 
 d-i partman-auto/choose_recipe select uefi-lvm
+{{end}}
 
+{{define "preseed/debian/storage/commit" -}}
 # Commit without asking
 d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/confirm boolean true
 d-i partman/confirm_nooverwrite boolean true
 d-i partman/choose_partition select finish
+{{end}}
 
+{{define "preseed/debian/storage/grub" -}}
 # ---- GRUB (UEFI)
 d-i grub-installer/target string amd64-efi
 d-i grub2/linux_cmdline string {{.boot_installed_args}}

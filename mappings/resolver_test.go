@@ -711,6 +711,44 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 	}, result.Provisioning.Installer.ConfigParams)
 }
 
+func TestResolverProjectsInheritedSwapAbsentToRegularParams(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Storage: StorageConfig{
+				Filesystems: map[string]FilesystemConfig{
+					"root": {Mountpoint: "/", FSType: "ext4", Size: "grow"},
+					"swap": {FSType: "swap", SizeMiB: intPtr(8192)},
+				},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+			Storage: StorageConfig{
+				Filesystems: map[string]FilesystemConfig{
+					"swap": {Absent: boolPtr(true)},
+				},
+			},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+	})
+	require.NoError(t, err)
+
+	params := ParamsWithProvisioning(result.Params, result.Users, result.Provisioning)
+
+	assert.Equal(t, "false", params["debian_regular_swap_enabled"])
+}
+
 func TestResolverDoesNotLeakResolvedProvisioningBetweenBoots(t *testing.T) {
 	resolver, err := NewResolver(&Mappings{
 		Targets: map[string]Target{

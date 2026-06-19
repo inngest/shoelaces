@@ -210,6 +210,26 @@ func TestParseMappingsLoadsRepositoryExample(t *testing.T) {
 	assert.NotEmpty(t, parsed.NetworkMaps)
 }
 
+func TestParseMappingsAcceptsRegularStorageMode(t *testing.T) {
+	mappingsPath := writeMappingsFile(t, `
+targets:
+  debian12:
+    script: debian.ipxe
+    storage:
+      mode: regular
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`)
+
+	parsed, err := ParseMappings(log.MakeLogger(io.Discard), mappingsPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, "regular", parsed.Targets["debian12"].Storage.Mode)
+}
+
 func TestParseMappingsReturnsErrors(t *testing.T) {
 	tests := []struct {
 		name    string
