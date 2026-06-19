@@ -197,7 +197,7 @@ func (env *Environment) cleanupBootSessionRetention() {
 	if retention <= 0 || env.BootSessions == nil {
 		return
 	}
-	cutoff := time.Now().Add(-retention)
+	cutoff := time.Now()
 	deleted, err := env.BootSessions.DeleteExpired(context.Background(), cutoff)
 	if err != nil {
 		env.Logger.Error("Failed to clean up old boot sessions", "component", "environment", "err", err)

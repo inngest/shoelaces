@@ -240,6 +240,15 @@ func TestNewCleansUpExpiredBootSessions(t *testing.T) {
 		ExpiresAt:        now.Add(-time.Hour),
 	}))
 	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
+		Ref:              "recently-expired-ref",
+		MAC:              "06:66:de:ad:be:f1",
+		ParamsJSON:       []byte(`{}`),
+		UsersJSON:        []byte(`{}`),
+		ProvisioningJSON: []byte(`{}`),
+		CreatedAt:        now.Add(-61 * time.Minute),
+		ExpiresAt:        now.Add(-time.Minute),
+	}))
+	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
 		Ref:              "active-ref",
 		MAC:              "06:66:de:ad:be:f0",
 		ParamsJSON:       []byte(`{}`),
