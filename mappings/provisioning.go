@@ -93,6 +93,9 @@ type StorageConfig struct {
 	VolumeGroup string `koanf:"volumeGroup"`
 	// Filesystems contains named filesystem definitions.
 	Filesystems map[string]FilesystemConfig `koanf:"filesystems"`
+
+	// absentFilesystems tracks inherited entries suppressed during merging.
+	absentFilesystems map[string]bool
 }
 
 // FilesystemConfig describes one named filesystem entry.
@@ -191,7 +194,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "packages_update_policy", provisioning.Packages.UpdatePolicy)
 	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
 	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
-	projectDebianRegularFilesystemParams(params, provisioning.Storage.Filesystems)
+	projectDebianRegularFilesystemParams(params, provisioning.Storage)
 	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_ubuntu_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_centos_mirror", provisioning.Repos.OSMirror)
@@ -356,8 +359,12 @@ func setDefaultParamValue(params map[string]interface{}, key string, value any) 
 	}
 }
 
-func projectDebianRegularFilesystemParams(params map[string]interface{}, filesystems map[string]FilesystemConfig) {
+func projectDebianRegularFilesystemParams(params map[string]interface{}, storage StorageConfig) {
+	filesystems := storage.Filesystems
 	if len(filesystems) == 0 {
+		if storage.absentFilesystems["swap"] {
+			setDefaultParamValue(params, "debian_regular_swap_enabled", "false")
+		}
 		return
 	}
 
@@ -368,6 +375,9 @@ func projectDebianRegularFilesystemParams(params map[string]interface{}, filesys
 
 	if modules := debianRegularPartmanModules(filesystems); modules != "" {
 		setDefaultParamValue(params, "debian_regular_partman_modules", modules)
+	}
+	if storage.absentFilesystems["swap"] {
+		setDefaultParamValue(params, "debian_regular_swap_enabled", "false")
 	}
 }
 
@@ -606,6 +616,7 @@ func mergePackagesConfig(base PackagesConfig, override PackagesConfig) PackagesC
 }
 
 func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfig {
+	base.absentFilesystems = copyBoolMap(base.absentFilesystems)
 	if override.Disk != "" {
 		base.Disk = override.Disk
 	}
@@ -622,24 +633,34 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 		base.VolumeGroup = override.VolumeGroup
 	}
 	if override.Filesystems != nil {
-		base.Filesystems = mergeFilesystemConfigMap(base.Filesystems, override.Filesystems)
+		base = mergeFilesystemConfigMapWithAbsent(base, override.Filesystems)
 	}
 	return base
 }
 
-func mergeFilesystemConfigMap(base map[string]FilesystemConfig, override map[string]FilesystemConfig) map[string]FilesystemConfig {
-	merged := copyFilesystemConfigMap(base)
+func mergeFilesystemConfigMapWithAbsent(base StorageConfig, override map[string]FilesystemConfig) StorageConfig {
+	merged := copyFilesystemConfigMap(base.Filesystems)
 	if merged == nil {
 		merged = make(map[string]FilesystemConfig, len(override))
 	}
+	absent := copyBoolMap(base.absentFilesystems)
 	for name, filesystem := range override {
 		if boolValue(filesystem.Absent) {
 			delete(merged, name)
+			if absent == nil {
+				absent = make(map[string]bool)
+			}
+			absent[name] = true
 			continue
+		}
+		if absent != nil {
+			delete(absent, name)
 		}
 		merged[name] = mergeFilesystemConfig(merged[name], filesystem)
 	}
-	return merged
+	base.Filesystems = merged
+	base.absentFilesystems = absent
+	return base
 }
 
 func mergeFilesystemConfig(base FilesystemConfig, override FilesystemConfig) FilesystemConfig {
@@ -740,6 +761,7 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Storage.Wipe = copyBoolPtr(config.Storage.Wipe)
 	config.Storage.WipeDiskPatterns = append([]string(nil), config.Storage.WipeDiskPatterns...)
 	config.Storage.Filesystems = copyFilesystemConfigMap(config.Storage.Filesystems)
+	config.Storage.absentFilesystems = copyBoolMap(config.Storage.absentFilesystems)
 	config.Boot.Netboot.KernelArgs = append([]string(nil), config.Boot.Netboot.KernelArgs...)
 	if config.Boot.Installed.TimeoutSeconds != nil {
 		copied := *config.Boot.Installed.TimeoutSeconds
@@ -771,4 +793,15 @@ func copyFilesystemConfig(filesystem FilesystemConfig) FilesystemConfig {
 		filesystem.SizeMiB = &copied
 	}
 	return filesystem
+}
+
+func copyBoolMap(values map[string]bool) map[string]bool {
+	if values == nil {
+		return nil
+	}
+	copied := make(map[string]bool, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
 }
