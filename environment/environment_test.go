@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -283,6 +284,25 @@ func TestNewCleansUpExpiredBootSessions(t *testing.T) {
 	var ref string
 	require.NoError(t, db.QueryRow(`SELECT ref FROM boot_sessions`).Scan(&ref))
 	assert.Equal(t, "active-ref", ref)
+}
+
+func TestStartRetentionCleanerRunsUntilStopped(t *testing.T) {
+	var sweeps atomic.Int64
+	done := make(chan struct{})
+	stop := startRetentionCleaner(log.MakeLogger(io.Discard), "test", time.Millisecond, func() {
+		if sweeps.Add(1) == 1 {
+			close(done)
+		}
+	})
+	t.Cleanup(stop)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("retention cleaner did not run before timeout")
+	}
+	stop()
+	stop()
 }
 
 func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {

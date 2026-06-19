@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"time"
 
 	shoelaces "github.com/inngest/shoelaces"
@@ -112,12 +113,13 @@ func New(options Options) *Environment {
 	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 	server.StartStateStoreCleaner(env.Logger, env.ServerStates)
+	env.startRetentionCleaners()
 
 	return env
 }
 
 func (env *Environment) logStartupConfig() {
-	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler, "persistence_backend", env.PersistenceConfig.Backend, "persistence_path", env.persistencePathForLog())
+	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler, "persistence_backend", env.PersistenceConfig.Backend, "persistence_path", env.persistencePathForLog(), "events_retention", env.PersistenceConfig.Retention.Events, "events_sweep_interval", env.PersistenceConfig.Retention.EventsSweepInterval, "boot_sessions_retention", env.PersistenceConfig.Retention.BootSessions, "boot_sessions_sweep_interval", env.PersistenceConfig.Retention.BootSessionsSweepInterval)
 	if env.TFTP == nil {
 		env.Logger.Info("Configured TFTP", "component", "environment", "enabled", false)
 		return
@@ -205,6 +207,43 @@ func (env *Environment) cleanupBootSessionRetention() {
 	}
 	if deleted > 0 {
 		env.Logger.Info("Cleaned up old boot sessions", "component", "environment", "deleted", deleted, "retention", retention.String())
+	}
+}
+
+func (env *Environment) startRetentionCleaners() {
+	retention := env.PersistenceConfig.Retention
+	startRetentionCleaner(env.Logger, "events", retention.EventsSweepInterval, env.cleanupEventRetention)
+	startRetentionCleaner(env.Logger, "boot_sessions", retention.BootSessionsSweepInterval, env.cleanupBootSessionRetention)
+}
+
+func startRetentionCleaner(logger log.Logger, name string, interval time.Duration, sweep func()) func() {
+	if interval <= 0 || sweep == nil {
+		return func() {}
+	}
+	if logger == nil {
+		logger = log.MakeLogger(os.Stdout)
+	}
+	logger = logger.With("component", "retention", "records", name)
+	logger.Debug("Starting retention cleaner", "interval", interval.String())
+
+	stop := make(chan struct{})
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sweep()
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() {
+		once.Do(func() {
+			close(stop)
+		})
 	}
 }
 

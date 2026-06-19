@@ -73,7 +73,9 @@ persistence:
   path: runtime/shoelaces.db
   retention:
     events: 720h
+    eventsSweepInterval: 24h
     bootSessions: 24h
+    bootSessionsSweepInterval: 1h
 #+end_src
 
 - =persistence.backend= starts with =sqlite= and =memory=.
@@ -82,7 +84,11 @@ persistence:
   connection setup, and backend wiring.
 - =persistence.path= is relative to =data-dir= unless absolute.
 - =persistence.retention.events= controls UI/audit event retention.
+- =persistence.retention.eventsSweepInterval= controls how often old events are
+  cleaned while Shoelaces is running.
 - =persistence.retention.bootSessions= controls reference/session retention.
+- =persistence.retention.bootSessionsSweepInterval= controls how often expired
+  boot/config references are cleaned while Shoelaces is running.
 
 ** Phased Implementation Plan
 
@@ -176,6 +182,8 @@ persistence:
   sensitive or large structured values directly.
 - [X] Add router/integration tests for =/poll/*= followed by =/configs/*?ref=...=
   across a process restart.
+- [X] Add periodic retention sweepers for events and boot sessions so long-lived
+  Shoelaces processes do not require restarts to bound persistent data growth.
 
 *** Phase 5: Data Reuse And Reference APIs
 
