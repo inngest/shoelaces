@@ -99,7 +99,7 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 	return &cli.Command{
 		Name:        "shoelaces",
 		Usage:       "automated server bootstrapping",
-		UsageText:   "shoelaces [options...]",
+		UsageText:   "shoelaces [options...] <command>",
 		HideVersion: true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -248,12 +248,45 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 				_, err := fmt.Fprint(cmd.Writer, versionString())
 				return err
 			}
-
-			options := optionsFromCommand(cmd)
-			if err := validateOptions(options); err != nil {
-				return err
-			}
-			return run(environment.New(options))
+			return cli.ShowRootCommandHelp(cmd)
+		},
+		Commands: []*cli.Command{
+			{
+				Name:      "run",
+				Usage:     "Start the Shoelaces server",
+				UsageText: "shoelaces [options...] run",
+				Action: func(_ context.Context, cmd *cli.Command) error {
+					options := optionsFromCommand(cmd)
+					if err := validateOptions(options); err != nil {
+						return err
+					}
+					return run(environment.New(options))
+				},
+			},
+			{
+				Name:      "events",
+				Usage:     "Inspect persisted event history",
+				UsageText: "shoelaces [options...] events <command>",
+				Action: func(_ context.Context, cmd *cli.Command) error {
+					return cli.ShowSubcommandHelp(cmd)
+				},
+			},
+			{
+				Name:      "servers",
+				Usage:     "Inspect persisted server state",
+				UsageText: "shoelaces [options...] servers <command>",
+				Action: func(_ context.Context, cmd *cli.Command) error {
+					return cli.ShowSubcommandHelp(cmd)
+				},
+			},
+			{
+				Name:      "boot-sessions",
+				Usage:     "Inspect persisted boot-session references",
+				UsageText: "shoelaces [options...] boot-sessions <command>",
+				Action: func(_ context.Context, cmd *cli.Command) error {
+					return cli.ShowSubcommandHelp(cmd)
+				},
+			},
 		},
 	}
 }

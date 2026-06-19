@@ -113,14 +113,14 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 1: Command Structure
 
-- [ ] Add an explicit =run= subcommand that starts the server.
-- [ ] Make bare =shoelaces= print command help and exit successfully.
-- [ ] Do not add a =start= alias in this plan; keep one canonical server
+- [X] Add an explicit =run= subcommand that starts the server.
+- [X] Make bare =shoelaces= print command help and exit successfully.
+- [X] Do not add a =start= alias in this plan; keep one canonical server
   command.
-- [ ] Keep existing root flags and config/env/default precedence unchanged.
-- [ ] Update CLI help text so the server command and inspection commands are
+- [X] Keep existing root flags and config/env/default precedence unchanged.
+- [X] Update CLI help text so the server command and inspection commands are
   discoverable.
-- [ ] Add tests for no-command help output, explicit server startup, version
+- [X] Add tests for no-command help output, explicit server startup, version
   output, and invalid option handling.
 
 *** Phase 2: Read-Only Store Opening

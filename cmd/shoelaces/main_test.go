@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -83,6 +84,7 @@ func TestCommandValuePrecedence(t *testing.T) {
 			if tt.cliValue != "" {
 				args = append(args, "--bind-addr", tt.cliValue)
 			}
+			args = append(args, "run")
 
 			require.NoError(t, cmd.Run(context.Background(), args))
 			require.NotNil(t, got)
@@ -108,7 +110,7 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run"}))
 	require.NotNil(t, got)
 
 	require.NotNil(t, got.TFTP)
@@ -133,7 +135,7 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--log-handler", "json"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--log-handler", "json", "run"}))
 	require.NotNil(t, got)
 
 	assert.Equal(t, "error", got.LogLevel)
@@ -165,6 +167,7 @@ func TestCommandAppliesPrecedenceToPersistenceConfig(t *testing.T) {
 		"--persistence-path", "runtime/cli.db",
 		"--persistence-retention-boot-sessions", "6h",
 		"--persistence-retention-boot-sessions-sweep-interval", "15m",
+		"run",
 	}))
 	require.NotNil(t, got)
 
@@ -187,8 +190,33 @@ func TestCommandRejectsInvalidPersistenceBackend(t *testing.T) {
 		return nil
 	})
 
-	err := cmd.Run(context.Background(), []string{"shoelaces"})
+	err := cmd.Run(context.Background(), []string{"shoelaces", "run"})
 	assert.ErrorContains(t, err, `unsupported persistence backend "postgres"`)
+}
+
+func TestCommandWithoutSubcommandPrintsHelp(t *testing.T) {
+	var output bytes.Buffer
+	cmd := command("", nil, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute without a subcommand")
+		return nil
+	})
+	cmd.Writer = &output
+
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
+	assert.Contains(t, output.String(), "USAGE")
+	assert.Contains(t, output.String(), "COMMANDS")
+	assert.Contains(t, output.String(), "run")
+	assert.Contains(t, output.String(), "events")
+	assert.Contains(t, output.String(), "servers")
+	assert.Contains(t, output.String(), "boot-sessions")
+}
+
+func TestCommandDoesNotRegisterStartAlias(t *testing.T) {
+	cmd := command("", nil, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute for start")
+		return nil
+	})
+	assert.Nil(t, cmd.Command("start"))
 }
 
 func TestCommandDebugIsCLIOnly(t *testing.T) {
@@ -205,7 +233,7 @@ func TestCommandDebugIsCLIOnly(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, envCmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NoError(t, envCmd.Run(context.Background(), []string{"shoelaces", "run"}))
 	require.NotNil(t, envOnly)
 	assert.False(t, envOnly.Debug)
 
@@ -215,7 +243,7 @@ func TestCommandDebugIsCLIOnly(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "--debug"}))
+	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "--debug", "run"}))
 	require.NotNil(t, cliDebug)
 	assert.True(t, cliDebug.Debug)
 }
@@ -285,6 +313,7 @@ func TestCommandUIDirPrecedence(t *testing.T) {
 			if cliValue != "" {
 				args = append(args, "--ui-dir", cliValue)
 			}
+			args = append(args, "run")
 
 			require.NoError(t, cmd.Run(context.Background(), args))
 			require.NotNil(t, got)
@@ -308,7 +337,7 @@ func TestCommandStaticDirCompatibilityAlias(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run"}))
 	require.NotNil(t, got)
 	assert.Equal(t, uiDir, got.UIDir)
 	assert.True(t, got.UIOverrideDirSet)
