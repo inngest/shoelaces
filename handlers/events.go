@@ -57,6 +57,7 @@ func GetEvent(w http.ResponseWriter, r *http.Request) {
 	event, err := env.EventLog.GetEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			env.Logger.Warn("Event not found", "component", "handler", "event_id", id)
 			http.Error(w, "event not found", http.StatusNotFound)
 			return
 		}

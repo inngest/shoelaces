@@ -93,6 +93,9 @@ When reverse DNS resolves, the hostname is shown in the UI; otherwise the UI sho
 See [Provisioning Defaults And Overrides](provisioning-overrides.md) for how
 `/configs/*` installer templates, `/configs/static/*` provisioning assets,
 embedded defaults, and disk overrides interact after a boot target is selected.
+See [Runtime Persistence](persistence.md) for how boot scripts carry opaque
+`ref` values and how Shoelaces resolves those references for later
+`/configs/*` requests.
 
 ## Requirements
 

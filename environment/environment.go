@@ -184,7 +184,7 @@ func (env *Environment) initPersistence() persistence.Store {
 	case persistence.BackendMemory:
 		return memory.New()
 	case persistence.BackendSQLite:
-		store, err := persistencesqlite.Open(context.Background(), persistence.ResolvePath(env.DataDir, env.PersistenceConfig))
+		store, err := persistencesqlite.OpenWithLogger(context.Background(), persistence.ResolvePath(env.DataDir, env.PersistenceConfig), env.Logger)
 		if err != nil {
 			panic(err)
 		}

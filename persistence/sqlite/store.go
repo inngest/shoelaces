@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/persistence"
 	sqlitedb "github.com/inngest/shoelaces/persistence/sqlite/db"
 	"github.com/oklog/ulid/v2"
@@ -40,10 +41,19 @@ type store struct {
 // Open creates the database parent directory, opens SQLite, and applies schema
 // migrations before returning a store.
 func Open(ctx context.Context, path string) (persistence.Store, error) {
+	return OpenWithLogger(ctx, path, nil)
+}
+
+// OpenWithLogger is Open plus operational logging for database startup and
+// migration activity. The logger may be nil for tests and non-server callers.
+func OpenWithLogger(ctx context.Context, path string, logger log.Logger) (persistence.Store, error) {
 	if err := persistence.EnsureParentDir(path); err != nil {
 		return nil, fmt.Errorf("create sqlite parent directory: %w", err)
 	}
 
+	if logger != nil {
+		logger.Info("Opening SQLite runtime database", "component", "persistence", "backend", "sqlite", "path", path)
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
@@ -52,7 +62,7 @@ func Open(ctx context.Context, path string) (persistence.Store, error) {
 		db:      db,
 		queries: sqlitedb.New(db),
 	}
-	if err := store.migrate(ctx); err != nil {
+	if err := store.migrate(ctx, logger); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -64,14 +74,20 @@ func (s *store) Close() error {
 	return s.db.Close()
 }
 
-func (s *store) migrate(ctx context.Context) error {
+func (s *store) migrate(ctx context.Context, logger log.Logger) error {
 	goose.SetBaseFS(migrationFS)
 	goose.SetLogger(goose.NopLogger())
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return fmt.Errorf("configure goose sqlite dialect: %w", err)
 	}
+	if logger != nil {
+		logger.Info("Applying SQLite runtime migrations", "component", "persistence", "backend", "sqlite")
+	}
 	if err := goose.UpContext(ctx, s.db, "migrations"); err != nil {
 		return fmt.Errorf("apply sqlite migrations: %w", err)
+	}
+	if logger != nil {
+		logger.Info("SQLite runtime migrations are current", "component", "persistence", "backend", "sqlite")
 	}
 	return nil
 }
