@@ -72,6 +72,31 @@ func TestOpenAppliesSchema(t *testing.T) {
 	assert.Equal(t, 1, version)
 }
 
+func TestOpenReadOnlyReadsExistingDatabase(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	readOnlyStore, err := sqlite.OpenReadOnly(context.Background(), dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, readOnlyStore.Close())
+	})
+
+	events, err := readOnlyStore.ListEvents(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
+func TestOpenReadOnlyDoesNotCreateDatabase(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
+
+	_, err := sqlite.OpenReadOnly(context.Background(), dbPath)
+	assert.ErrorContains(t, err, "open sqlite database read-only")
+	assert.NoFileExists(t, dbPath)
+}
+
 func TestOpenReturnsDirectoryCreationError(t *testing.T) {
 	root := t.TempDir()
 	blocker := filepath.Join(root, "runtime")

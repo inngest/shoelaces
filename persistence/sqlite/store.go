@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/inngest/shoelaces/log"
@@ -36,6 +37,12 @@ var migrationFS embed.FS
 type store struct {
 	db      *sql.DB
 	queries *sqlitedb.Queries
+}
+
+// ReadOnlyStore exposes query access to an existing SQLite persistence store.
+type ReadOnlyStore interface {
+	persistence.Queries
+	Close() error
 }
 
 // Open creates the database parent directory, opens SQLite, and applies schema
@@ -67,6 +74,33 @@ func OpenWithLogger(ctx context.Context, path string, logger log.Logger) (persis
 		return nil, err
 	}
 	return store, nil
+}
+
+// OpenReadOnly opens an existing SQLite database without creating parent
+// directories or applying migrations.
+func OpenReadOnly(ctx context.Context, path string) (ReadOnlyStore, error) {
+	db, err := sql.Open("sqlite", readOnlyDSN(path))
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite database read-only: %w", err)
+	}
+	store := &store{
+		db:      db,
+		queries: sqlitedb.New(db),
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open sqlite database read-only: %w", err)
+	}
+	return store, nil
+}
+
+func readOnlyDSN(path string) string {
+	u := url.URL{
+		Scheme:   "file",
+		Path:     path,
+		RawQuery: "mode=ro",
+	}
+	return u.String()
 }
 
 // Close releases the underlying SQLite connection pool.
