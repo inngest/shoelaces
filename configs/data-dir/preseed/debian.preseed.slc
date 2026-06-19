@@ -106,6 +106,7 @@ d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4
 # Use selected storage method
 d-i partman-auto/method string {{.storage_mode}}
 d-i partman-auto-lvm/guided_size string max
+d-i partman-auto-lvm/new_vg_name string {{.vg_name}}
 
 # Make sure any leftovers can be replaced without prompts
 d-i partman-lvm/device_remove_lvm boolean true

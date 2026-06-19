@@ -507,12 +507,17 @@ func TestRenderedDebianPreseedRegularRecipeAppliesStructuredFilesystems(t *testi
 }
 
 func TestRenderedDebianPreseedPreservesExplicitLVMRecipe(t *testing.T) {
-	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_mode", "lvm"))
+	params := paramsWith(defaultRenderParams, "storage_mode", "lvm")
+	params = paramsWith(params, "vg_name", "vgtest")
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
 
 	assert.Contains(t, rendered, "d-i partman-auto/method string lvm")
 	assert.Contains(t, rendered, "d-i anna/choose_modules string lvm2-udeb partman-lvm partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto-lvm/new_vg_name string vgtest")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-lvm")
-	assert.Contains(t, rendered, "vg_name{ vg0 }")
+	assert.Contains(t, rendered, "vg_name{ vgtest }")
+	assert.Contains(t, rendered, "in_vg{ vgtest }")
 	assert.Contains(t, rendered, "lv_name{ root }")
 	assert.Contains(t, rendered, "lv_name{ swap }")
 }
