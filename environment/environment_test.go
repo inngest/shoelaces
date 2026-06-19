@@ -305,6 +305,32 @@ func TestStartRetentionCleanerRunsUntilStopped(t *testing.T) {
 	stop()
 }
 
+func TestEnvironmentCloseStopsRetentionCleanersBeforeClosingStore(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+	var logs bytes.Buffer
+	env := New(Options{
+		BindAddr:   "localhost:0",
+		DataDir:    dataDir,
+		LogHandler: "text",
+		Persistence: persistence.Config{
+			Backend: persistence.BackendSQLite,
+			Retention: persistence.RetentionConfig{
+				Events:                    time.Hour,
+				EventsSweepInterval:       time.Millisecond,
+				BootSessions:              time.Hour,
+				BootSessionsSweepInterval: time.Millisecond,
+			},
+		},
+	})
+	env.Logger = log.MakeLogger(&logs, log.WithHandler(log.HandlerText))
+
+	require.NoError(t, env.Close())
+	time.Sleep(25 * time.Millisecond)
+
+	assert.NotContains(t, logs.String(), "Failed to clean up old events")
+	assert.NotContains(t, logs.String(), "Failed to clean up old boot sessions")
+}
+
 func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {
 	assert.Panics(t, func() {
 		New(Options{

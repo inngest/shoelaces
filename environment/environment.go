@@ -46,17 +46,20 @@ type Environment struct {
 	NetworkMaps  []mappings.NetworkMap
 	// MappingResolver holds the new target resolver for the mappings.yaml
 	// schema used by polling and manual boot paths.
-	MappingResolver *mappings.Resolver
-	ServerStates    server.StateStore
-	EventLog        *event.Log
-	Polling         *polling.Service
-	ParamsBlacklist []string
-	Templates       *templates.ShoelacesTemplates // Dynamic slc templates
-	StaticTemplates *template.Template            // Static Templates
-	Environments    []string                      // Valid config environments
-	Logger          log.Logger
-	RuntimeStore    persistence.Store
-	BootSessions    *bootsession.Store
+	MappingResolver       *mappings.Resolver
+	ServerStates          server.StateStore
+	EventLog              *event.Log
+	Polling               *polling.Service
+	ParamsBlacklist       []string
+	Templates             *templates.ShoelacesTemplates // Dynamic slc templates
+	StaticTemplates       *template.Template            // Static Templates
+	Environments          []string                      // Valid config environments
+	Logger                log.Logger
+	RuntimeStore          persistence.Store
+	BootSessions          *bootsession.Store
+	stopRetentionCleaners func()
+	closeOnce             sync.Once
+	closeErr              error
 
 	BindAddr          string
 	BaseURL           string
@@ -113,9 +116,22 @@ func New(options Options) *Environment {
 	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
 	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 	server.StartStateStoreCleaner(env.Logger, env.ServerStates)
-	env.startRetentionCleaners()
+	env.stopRetentionCleaners = env.startRetentionCleaners()
 
 	return env
+}
+
+// Close stops retention cleaners and closes runtime storage.
+func (env *Environment) Close() error {
+	env.closeOnce.Do(func() {
+		if env.stopRetentionCleaners != nil {
+			env.stopRetentionCleaners()
+		}
+		if env.RuntimeStore != nil {
+			env.closeErr = env.RuntimeStore.Close()
+		}
+	})
+	return env.closeErr
 }
 
 func (env *Environment) logStartupConfig() {
@@ -210,10 +226,14 @@ func (env *Environment) cleanupBootSessionRetention() {
 	}
 }
 
-func (env *Environment) startRetentionCleaners() {
+func (env *Environment) startRetentionCleaners() func() {
 	retention := env.PersistenceConfig.Retention
-	startRetentionCleaner(env.Logger, "events", retention.EventsSweepInterval, env.cleanupEventRetention)
-	startRetentionCleaner(env.Logger, "boot_sessions", retention.BootSessionsSweepInterval, env.cleanupBootSessionRetention)
+	stopEvents := startRetentionCleaner(env.Logger, "events", retention.EventsSweepInterval, env.cleanupEventRetention)
+	stopBootSessions := startRetentionCleaner(env.Logger, "boot_sessions", retention.BootSessionsSweepInterval, env.cleanupBootSessionRetention)
+	return func() {
+		stopEvents()
+		stopBootSessions()
+	}
 }
 
 func startRetentionCleaner(logger log.Logger, name string, interval time.Duration, sweep func()) func() {
@@ -227,8 +247,10 @@ func startRetentionCleaner(logger log.Logger, name string, interval time.Duratio
 	logger.Debug("Starting retention cleaner", "interval", interval.String())
 
 	stop := make(chan struct{})
+	done := make(chan struct{})
 	var once sync.Once
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -243,6 +265,7 @@ func startRetentionCleaner(logger log.Logger, name string, interval time.Duratio
 	return func() {
 		once.Do(func() {
 			close(stop)
+			<-done
 		})
 	}
 }
