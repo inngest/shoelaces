@@ -536,18 +536,6 @@ targets:
 			want: `targets["debian12"].boot.firmware must be "uefi" when storage.mode is raid`,
 		},
 		{
-			name: "enabled encryption requires passphrase",
-			content: `
-targets:
-  debian13:
-    script: debian.ipxe
-    storage:
-      encryption:
-        enabled: true
-`,
-			want: `targets["debian13"].storage.encryption.passphrase is required when encryption is enabled`,
-		},
-		{
 			name: "encryption passphrase must be non-empty",
 			content: `
 targets:

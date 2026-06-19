@@ -371,7 +371,7 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	if err := validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, false); err != nil {
 		return err
 	}
-	if err := validateStorageEncryptionConfig(path+".storage.encryption", config.Storage.Encryption); err != nil {
+	if err := validateStorageEncryptionConfig(path+".storage.encryption", config.Storage.Encryption, false); err != nil {
 		return err
 	}
 	if err := validateFilesystems(path+".storage.filesystems", config.Storage.Filesystems); err != nil {
@@ -408,10 +408,10 @@ func validateResolvedProvisioningConfig(path string, config ProvisioningConfig) 
 	if err := validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, true); err != nil {
 		return err
 	}
-	return validateStorageEncryptionConfig(path+".storage.encryption", config.Storage.Encryption)
+	return validateStorageEncryptionConfig(path+".storage.encryption", config.Storage.Encryption, true)
 }
 
-func validateStorageEncryptionConfig(path string, encryption StorageEncryptionConfig) error {
+func validateStorageEncryptionConfig(path string, encryption StorageEncryptionConfig, requirePassphrase bool) error {
 	if encryption.KeySize != nil && *encryption.KeySize <= 0 {
 		return fmt.Errorf("%s.keySize must be greater than 0", path)
 	}
@@ -420,7 +420,7 @@ func validateStorageEncryptionConfig(path string, encryption StorageEncryptionCo
 			return err
 		}
 	}
-	if boolValue(encryption.Enabled) && encryption.Passphrase == nil {
+	if requirePassphrase && boolValue(encryption.Enabled) && encryption.Passphrase == nil {
 		return fmt.Errorf("%s.passphrase is required when encryption is enabled", path)
 	}
 	return nil

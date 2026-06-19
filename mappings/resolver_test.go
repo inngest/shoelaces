@@ -915,6 +915,77 @@ func TestResolverMergesStructuredStorageEncryption(t *testing.T) {
 	assert.Equal(t, "sha512", encryption.Hash)
 }
 
+func TestResolverAcceptsStorageEncryptionPassphraseFromMergedDefaults(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Storage: StorageConfig{
+				Encryption: StorageEncryptionConfig{
+					Passphrase: map[string]any{"env": "DEFAULT_LUKS_PASSPHRASE"},
+				},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						Enabled: boolPtr(true),
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			if key == "DEFAULT_LUKS_PASSPHRASE" {
+				return "default-passphrase", true
+			}
+			return "", false
+		},
+	})
+
+	require.NoError(t, err)
+	encryption := result.Provisioning.Storage.Encryption
+	require.NotNil(t, encryption.Enabled)
+	assert.True(t, *encryption.Enabled)
+	assert.Equal(t, "default-passphrase", encryption.Passphrase)
+}
+
+func TestResolverRejectsResolvedStorageEncryptionWithoutPassphrase(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						Enabled: boolPtr(true),
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+	})
+
+	require.EqualError(t, err, "resolved provisioning.storage.encryption.passphrase is required when encryption is enabled")
+}
+
 func TestResolverDoesNotResolveDisabledStorageEncryptionPassphrase(t *testing.T) {
 	resolver, err := NewResolver(&Mappings{
 		Defaults: DefaultsMap{
