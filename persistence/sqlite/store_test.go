@@ -89,6 +89,25 @@ func TestOpenReadOnlyReadsExistingDatabase(t *testing.T) {
 	assert.Empty(t, events)
 }
 
+func TestOpenReadOnlyReadsExistingDatabaseAtRelativePath(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	dbPath := filepath.Join("data", "runtime", "shoelaces.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	readOnlyStore, err := sqlite.OpenReadOnly(context.Background(), dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, readOnlyStore.Close())
+	})
+
+	events, err := readOnlyStore.ListEvents(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
 func TestOpenReadOnlyDoesNotCreateDatabase(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
 

@@ -20,6 +20,7 @@ import (
 	"embed"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/inngest/shoelaces/log"
@@ -79,7 +80,12 @@ func OpenWithLogger(ctx context.Context, path string, logger log.Logger) (persis
 // OpenReadOnly opens an existing SQLite database without creating parent
 // directories or applying migrations.
 func OpenReadOnly(ctx context.Context, path string) (ReadOnlyStore, error) {
-	db, err := sql.Open("sqlite", readOnlyDSN(path))
+	dsn, err := readOnlyDSN(path)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite database read-only: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database read-only: %w", err)
 	}
@@ -94,13 +100,17 @@ func OpenReadOnly(ctx context.Context, path string) (ReadOnlyStore, error) {
 	return store, nil
 }
 
-func readOnlyDSN(path string) string {
+func readOnlyDSN(path string) (string, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve sqlite database path: %w", err)
+	}
 	u := url.URL{
 		Scheme:   "file",
-		Path:     path,
+		Path:     filepath.ToSlash(absolutePath),
 		RawQuery: "mode=ro",
 	}
-	return u.String()
+	return u.String(), nil
 }
 
 // Close releases the underlying SQLite connection pool.
