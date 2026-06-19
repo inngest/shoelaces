@@ -795,6 +795,167 @@ func TestResolverMergesStructuredRAIDStorage(t *testing.T) {
 	assert.True(t, *result.Provisioning.Storage.RAID.BootDegraded)
 }
 
+func TestResolverResolvesRawStorageEncryptionPassphrase(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						Enabled:    boolPtr(true),
+						Passphrase: "lab-passphrase",
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{Mac: "0c:42:a1:c3:52:96"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "lab-passphrase", result.Provisioning.Storage.Encryption.Passphrase)
+}
+
+func TestResolverResolvesEnvironmentBackedStorageEncryptionPassphrase(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						Enabled:    boolPtr(true),
+						Passphrase: map[string]any{"env": "SHOELACES_LUKS_PASSPHRASE"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			if key == "SHOELACES_LUKS_PASSPHRASE" {
+				return "env-passphrase", true
+			}
+			return "", false
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "env-passphrase", result.Provisioning.Storage.Encryption.Passphrase)
+}
+
+func TestResolverMergesStructuredStorageEncryption(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Storage: StorageConfig{
+				Encryption: StorageEncryptionConfig{
+					Enabled:    boolPtr(true),
+					Passphrase: map[string]any{"env": "DEFAULT_LUKS_PASSPHRASE"},
+					Cipher:     "aes-xts-plain64",
+					KeySize:    intPtr(256),
+					Hash:       "sha256",
+				},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						KeySize: intPtr(512),
+						Hash:    "sha512",
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+			Storage: StorageConfig{
+				Encryption: StorageEncryptionConfig{
+					Passphrase: map[string]any{"env": "HOST_LUKS_PASSPHRASE"},
+				},
+			},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(key string) (string, bool) {
+			if key == "HOST_LUKS_PASSPHRASE" {
+				return "host-passphrase", true
+			}
+			return "", false
+		},
+	})
+
+	require.NoError(t, err)
+	encryption := result.Provisioning.Storage.Encryption
+	require.NotNil(t, encryption.Enabled)
+	assert.True(t, *encryption.Enabled)
+	assert.Equal(t, "host-passphrase", encryption.Passphrase)
+	assert.Equal(t, "aes-xts-plain64", encryption.Cipher)
+	require.NotNil(t, encryption.KeySize)
+	assert.Equal(t, 512, *encryption.KeySize)
+	assert.Equal(t, "sha512", encryption.Hash)
+}
+
+func TestResolverDoesNotResolveDisabledStorageEncryptionPassphrase(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Storage: StorageConfig{
+				Encryption: StorageEncryptionConfig{
+					Enabled:    boolPtr(true),
+					Passphrase: map[string]any{"env": "DEFAULT_LUKS_PASSPHRASE"},
+				},
+			},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						Enabled: boolPtr(false),
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+		EnvLookup: func(string) (string, bool) {
+			return "", false
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Provisioning.Storage.Encryption.Enabled)
+	assert.False(t, *result.Provisioning.Storage.Encryption.Enabled)
+	assert.Equal(t, map[string]any{"env": "DEFAULT_LUKS_PASSPHRASE"}, result.Provisioning.Storage.Encryption.Passphrase)
+}
+
 func TestResolverRejectsIncompleteRAIDStorage(t *testing.T) {
 	tests := []struct {
 		name      string

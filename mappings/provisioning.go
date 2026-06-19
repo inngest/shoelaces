@@ -93,11 +93,27 @@ type StorageConfig struct {
 	VolumeGroup string `koanf:"volumeGroup"`
 	// RAID contains mdraid settings when Mode is raid.
 	RAID RAIDConfig `koanf:"raid"`
+	// Encryption contains disk encryption settings.
+	Encryption StorageEncryptionConfig `koanf:"encryption"`
 	// Filesystems contains named filesystem definitions.
 	Filesystems map[string]FilesystemConfig `koanf:"filesystems"`
 
 	// absentFilesystems tracks inherited entries suppressed during merging.
 	absentFilesystems map[string]bool
+}
+
+// StorageEncryptionConfig describes full-disk encryption settings.
+type StorageEncryptionConfig struct {
+	// Enabled controls whether installer storage should be encrypted.
+	Enabled *bool `koanf:"enabled"`
+	// Passphrase is a raw passphrase or { env: ENV_VAR } reference.
+	Passphrase any `koanf:"passphrase"`
+	// Cipher optionally selects the LUKS cipher.
+	Cipher string `koanf:"cipher"`
+	// KeySize optionally selects the LUKS key size in bits.
+	KeySize *int `koanf:"keySize"`
+	// Hash optionally selects the LUKS hash.
+	Hash string `koanf:"hash"`
 }
 
 // RAIDConfig describes the narrow mdraid shape supported by installers.
@@ -869,8 +885,29 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 		base.VolumeGroup = override.VolumeGroup
 	}
 	base.RAID = mergeRAIDConfig(base.RAID, override.RAID)
+	base.Encryption = mergeStorageEncryptionConfig(base.Encryption, override.Encryption)
 	if override.Filesystems != nil {
 		base = mergeFilesystemConfigMapWithAbsent(base, override.Filesystems)
+	}
+	return base
+}
+
+func mergeStorageEncryptionConfig(base StorageEncryptionConfig, override StorageEncryptionConfig) StorageEncryptionConfig {
+	if override.Enabled != nil {
+		base.Enabled = copyBoolPtr(override.Enabled)
+	}
+	if override.Passphrase != nil {
+		base.Passphrase = copyParamValue(override.Passphrase)
+	}
+	if override.Cipher != "" {
+		base.Cipher = override.Cipher
+	}
+	if override.KeySize != nil {
+		copied := *override.KeySize
+		base.KeySize = &copied
+	}
+	if override.Hash != "" {
+		base.Hash = override.Hash
 	}
 	return base
 }
@@ -1011,6 +1048,7 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Storage.Wipe = copyBoolPtr(config.Storage.Wipe)
 	config.Storage.WipeDiskPatterns = append([]string(nil), config.Storage.WipeDiskPatterns...)
 	config.Storage.RAID = copyRAIDConfig(config.Storage.RAID)
+	config.Storage.Encryption = copyStorageEncryptionConfig(config.Storage.Encryption)
 	config.Storage.Filesystems = copyFilesystemConfigMap(config.Storage.Filesystems)
 	config.Storage.absentFilesystems = copyBoolMap(config.Storage.absentFilesystems)
 	config.Boot.Netboot.KernelArgs = append([]string(nil), config.Boot.Netboot.KernelArgs...)
@@ -1024,6 +1062,16 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Repos.NonFree = copyBoolPtr(config.Repos.NonFree)
 	config.Installer.ConfigParams = copyParamMap(config.Installer.ConfigParams)
 	return config
+}
+
+func copyStorageEncryptionConfig(encryption StorageEncryptionConfig) StorageEncryptionConfig {
+	encryption.Enabled = copyBoolPtr(encryption.Enabled)
+	encryption.Passphrase = copyParamValue(encryption.Passphrase)
+	if encryption.KeySize != nil {
+		copied := *encryption.KeySize
+		encryption.KeySize = &copied
+	}
+	return encryption
 }
 
 func copyRAIDConfig(raid RAIDConfig) RAIDConfig {

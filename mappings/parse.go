@@ -371,6 +371,9 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	if err := validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, false); err != nil {
 		return err
 	}
+	if err := validateStorageEncryptionConfig(path+".storage.encryption", config.Storage.Encryption); err != nil {
+		return err
+	}
 	if err := validateFilesystems(path+".storage.filesystems", config.Storage.Filesystems); err != nil {
 		return err
 	}
@@ -402,7 +405,46 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 }
 
 func validateResolvedProvisioningConfig(path string, config ProvisioningConfig) error {
-	return validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, true)
+	if err := validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, true); err != nil {
+		return err
+	}
+	return validateStorageEncryptionConfig(path+".storage.encryption", config.Storage.Encryption)
+}
+
+func validateStorageEncryptionConfig(path string, encryption StorageEncryptionConfig) error {
+	if encryption.KeySize != nil && *encryption.KeySize <= 0 {
+		return fmt.Errorf("%s.keySize must be greater than 0", path)
+	}
+	if encryption.Passphrase != nil {
+		if err := validateStorageEncryptionPassphrase(path+".passphrase", encryption.Passphrase); err != nil {
+			return err
+		}
+	}
+	if boolValue(encryption.Enabled) && encryption.Passphrase == nil {
+		return fmt.Errorf("%s.passphrase is required when encryption is enabled", path)
+	}
+	return nil
+}
+
+func validateStorageEncryptionPassphrase(path string, passphrase any) error {
+	switch typed := passphrase.(type) {
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return fmt.Errorf("%s must not be empty", path)
+		}
+		return nil
+	case map[string]any:
+		env, ok, err := envReference(typed)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if !ok || env == "" {
+			return fmt.Errorf("%s must be a string or { env: ENV_VAR } reference", path)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%s must be a string or { env: ENV_VAR } reference", path)
+	}
 }
 
 func validateFilesystems(path string, filesystems map[string]FilesystemConfig) error {

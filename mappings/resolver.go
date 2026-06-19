@@ -519,6 +519,13 @@ func (r *Resolver) resolveProvisioning(target ProvisioningConfig, mapping Provis
 		}
 		merged.Installer.ConfigParams[key] = resolved
 	}
+	if boolValue(merged.Storage.Encryption.Enabled) && merged.Storage.Encryption.Passphrase != nil {
+		passphrase, err := resolveStringValue("storage.encryption.passphrase", merged.Storage.Encryption.Passphrase, lookup)
+		if err != nil {
+			return ProvisioningConfig{}, err
+		}
+		merged.Storage.Encryption.Passphrase = passphrase
+	}
 	if err := validateResolvedProvisioningConfig("resolved provisioning", merged); err != nil {
 		return ProvisioningConfig{}, err
 	}
@@ -631,9 +638,30 @@ func copyParamMap(params map[string]any) map[string]any {
 	}
 	copied := make(map[string]any, len(params))
 	for key, value := range params {
-		copied[key] = value
+		copied[key] = copyParamValue(value)
 	}
 	return copied
+}
+
+func copyParamValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		copied := make(map[string]any, len(typed))
+		for key, value := range typed {
+			copied[key] = copyParamValue(value)
+		}
+		return copied
+	case []any:
+		copied := make([]any, len(typed))
+		for i, value := range typed {
+			copied[i] = copyParamValue(value)
+		}
+		return copied
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return value
+	}
 }
 
 func parseRequestMAC(mac string) (string, error) {
