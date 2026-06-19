@@ -112,24 +112,21 @@ func (s *store) ListEvents(ctx context.Context) ([]persistence.EventRecord, erro
 	}
 	events := make([]persistence.EventRecord, len(rows))
 	for i, row := range rows {
-		id, err := ulidFromBytes(row.ID)
+		events[i], err = eventRecordFromRow(row)
 		if err != nil {
 			return nil, err
 		}
-		events[i] = persistence.EventRecord{
-			ID:         id,
-			Type:       int(row.EventType),
-			OccurredAt: fromUnixNano(row.OccurredAtUnixNano),
-			MAC:        row.Mac,
-			IP:         row.Ip,
-			Hostname:   row.Hostname,
-			BootType:   row.BootType,
-			Script:     row.Script,
-			Message:    row.Message,
-			ParamsJSON: cloneBytes(row.ParamsJson),
-		}
 	}
 	return events, nil
+}
+
+// GetEvent returns one persisted event by public ID.
+func (s *store) GetEvent(ctx context.Context, id ulid.ULID) (persistence.EventRecord, error) {
+	row, err := s.queries.GetEvent(ctx, id[:])
+	if err != nil {
+		return persistence.EventRecord{}, err
+	}
+	return eventRecordFromRow(row)
 }
 
 // UpsertServerState creates or replaces host state by MAC.
@@ -241,6 +238,25 @@ func serverStateFromRow(row sqlitedb.ServerState) persistence.ServerStateRecord 
 		Retry:              row.Retry,
 		LastAccess:         fromUnixNano(row.LastAccessUnixNano),
 	}
+}
+
+func eventRecordFromRow(row sqlitedb.Event) (persistence.EventRecord, error) {
+	id, err := ulidFromBytes(row.ID)
+	if err != nil {
+		return persistence.EventRecord{}, err
+	}
+	return persistence.EventRecord{
+		ID:         id,
+		Type:       int(row.EventType),
+		OccurredAt: fromUnixNano(row.OccurredAtUnixNano),
+		MAC:        row.Mac,
+		IP:         row.Ip,
+		Hostname:   row.Hostname,
+		BootType:   row.BootType,
+		Script:     row.Script,
+		Message:    row.Message,
+		ParamsJSON: cloneBytes(row.ParamsJson),
+	}, nil
 }
 
 func unixNano(t time.Time) int64 {

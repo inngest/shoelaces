@@ -22,6 +22,40 @@ func (q *Queries) DeleteEventsBefore(ctx context.Context, occurredAtUnixNano int
 	return result.RowsAffected()
 }
 
+const getEvent = `-- name: GetEvent :one
+SELECT
+  id,
+  event_type,
+  occurred_at_unix_nano,
+  mac,
+  ip,
+  hostname,
+  boot_type,
+  script,
+  message,
+  params_json
+FROM events
+WHERE id = ?
+`
+
+func (q *Queries) GetEvent(ctx context.Context, id []byte) (Event, error) {
+	row := q.db.QueryRowContext(ctx, getEvent, id)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.EventType,
+		&i.OccurredAtUnixNano,
+		&i.Mac,
+		&i.Ip,
+		&i.Hostname,
+		&i.BootType,
+		&i.Script,
+		&i.Message,
+		&i.ParamsJson,
+	)
+	return i, err
+}
+
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO events (
   id,

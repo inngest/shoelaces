@@ -82,6 +82,19 @@ func (s *store) ListEvents(_ context.Context) ([]persistence.EventRecord, error)
 	return events, nil
 }
 
+// GetEvent returns one event by public ID.
+func (s *store) GetEvent(_ context.Context, id ulid.ULID) (persistence.EventRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, event := range s.events {
+		if event.ID == id {
+			return copyEvent(event), nil
+		}
+	}
+	return persistence.EventRecord{}, sql.ErrNoRows
+}
+
 // UpsertServerState creates or replaces host state by MAC.
 func (s *store) UpsertServerState(_ context.Context, state persistence.ServerStateRecord) error {
 	s.mu.Lock()

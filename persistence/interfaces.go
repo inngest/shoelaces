@@ -33,6 +33,8 @@ type EventCommands interface {
 type EventQueries interface {
 	// ListEvents returns persisted events ordered by occurrence time.
 	ListEvents(ctx context.Context) ([]EventRecord, error)
+	// GetEvent returns one persisted event by public ID.
+	GetEvent(ctx context.Context, id ulid.ULID) (EventRecord, error)
 }
 
 // ServerStateCommands owns write-side waiting/manual boot state mutations.
