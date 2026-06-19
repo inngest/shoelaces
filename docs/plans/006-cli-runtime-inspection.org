@@ -117,7 +117,8 @@ shoelaces boot-sessions get 01J... --output json
 - [X] Make bare =shoelaces= print command help and exit successfully.
 - [X] Do not add a =start= alias in this plan; keep one canonical server
   command.
-- [X] Keep existing root flags and config/env/default precedence unchanged.
+- [X] Move server-only flags to =run= while preserving config/env/default
+  precedence for server startup.
 - [X] Update CLI help text so the server command and inspection commands are
   discoverable.
 - [X] Add tests for no-command help output, explicit server startup, version

@@ -81,10 +81,10 @@ func TestCommandValuePrecedence(t *testing.T) {
 			})
 
 			args := []string{"shoelaces"}
+			args = append(args, "run")
 			if tt.cliValue != "" {
 				args = append(args, "--bind-addr", tt.cliValue)
 			}
-			args = append(args, "run")
 
 			require.NoError(t, cmd.Run(context.Background(), args))
 			require.NotNil(t, got)
@@ -135,7 +135,7 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--log-handler", "json", "run"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run", "--log-handler", "json"}))
 	require.NotNil(t, got)
 
 	assert.Equal(t, "error", got.LogLevel)
@@ -164,10 +164,10 @@ func TestCommandAppliesPrecedenceToPersistenceConfig(t *testing.T) {
 
 	require.NoError(t, cmd.Run(context.Background(), []string{
 		"shoelaces",
+		"run",
 		"--persistence-path", "runtime/cli.db",
 		"--persistence-retention-boot-sessions", "6h",
 		"--persistence-retention-boot-sessions-sweep-interval", "15m",
-		"run",
 	}))
 	require.NotNil(t, got)
 
@@ -209,6 +209,42 @@ func TestCommandWithoutSubcommandPrintsHelp(t *testing.T) {
 	assert.Contains(t, output.String(), "events")
 	assert.Contains(t, output.String(), "servers")
 	assert.Contains(t, output.String(), "boot-sessions")
+	assert.Contains(t, output.String(), "--config")
+	assert.Contains(t, output.String(), "--version")
+	assert.NotContains(t, output.String(), "--bind-addr")
+	assert.NotContains(t, output.String(), "--tftp-enabled")
+	assert.NotContains(t, output.String(), "--persistence-backend")
+}
+
+func TestRunCommandHelpShowsServerOptions(t *testing.T) {
+	var output bytes.Buffer
+	cmd := command("", nil, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute for run help")
+		return nil
+	})
+	cmd.Writer = &output
+
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run", "--help"}))
+	assert.Contains(t, output.String(), "--config")
+	assert.Contains(t, output.String(), "--bind-addr")
+	assert.Contains(t, output.String(), "--tftp-enabled")
+	assert.Contains(t, output.String(), "--persistence-backend")
+	assert.NotContains(t, output.String(), "--version")
+}
+
+func TestServerOptionsAreRunLocal(t *testing.T) {
+	cmd := command("test.toml", map[any]any{
+		"data-dir":            "../../configs/data-dir",
+		"persistence-backend": "memory",
+	}, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute for invalid root options")
+		return nil
+	})
+	cmd.Writer = io.Discard
+	cmd.ErrWriter = io.Discard
+
+	err := cmd.Run(context.Background(), []string{"shoelaces", "--bind-addr", "localhost:9999", "run"})
+	assert.ErrorContains(t, err, "flag provided but not defined")
 }
 
 func TestCommandDoesNotRegisterStartAlias(t *testing.T) {
@@ -243,7 +279,7 @@ func TestCommandDebugIsCLIOnly(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "--debug", "run"}))
+	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "run", "--debug"}))
 	require.NotNil(t, cliDebug)
 	assert.True(t, cliDebug.Debug)
 }
@@ -310,10 +346,10 @@ func TestCommandUIDirPrecedence(t *testing.T) {
 			})
 
 			args := []string{"shoelaces"}
+			args = append(args, "run")
 			if cliValue != "" {
 				args = append(args, "--ui-dir", cliValue)
 			}
-			args = append(args, "run")
 
 			require.NoError(t, cmd.Run(context.Background(), args))
 			require.NotNil(t, got)
