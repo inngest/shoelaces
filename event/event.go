@@ -17,6 +17,7 @@ package event
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"time"
 
@@ -177,6 +178,31 @@ func (el *Log) ListEvents(ctx context.Context) (map[string][]Event, error) {
 		grouped[event.Server.Mac] = append(grouped[event.Server.Mac], event)
 	}
 	return grouped, nil
+}
+
+// GetEvent resolves one event by public ULID string. Persisted events already
+// contain redacted params, so this is safe for UI/API handlers to expose.
+func (el *Log) GetEvent(ctx context.Context, rawID string) (Event, error) {
+	id, err := ulid.Parse(rawID)
+	if err != nil {
+		return Event{}, err
+	}
+	if el.queries == nil {
+		for _, events := range el.Events {
+			for _, event := range events {
+				if event.ID == id {
+					return event, nil
+				}
+			}
+		}
+		return Event{}, sql.ErrNoRows
+	}
+
+	record, err := el.queries.GetEvent(ctx, id)
+	if err != nil {
+		return Event{}, err
+	}
+	return recordToEvent(record)
 }
 
 // DeleteEventsBefore removes persisted events older than the supplied cutoff.

@@ -24,6 +24,7 @@ import (
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/persistence"
 	"github.com/inngest/shoelaces/server"
+	"github.com/inngest/shoelaces/utils"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -65,6 +66,29 @@ type Snapshot struct {
 	CreatedAt time.Time
 	// ExpiresAt records when the reference should stop resolving.
 	ExpiresAt time.Time
+}
+
+// Reference is the UI/API-safe view of a boot session. It preserves useful
+// operator context but redacts params, users, and provisioning secrets.
+type Reference struct {
+	// Ref is the opaque URL-safe token carried by boot/config URLs.
+	Ref string `json:"ref"`
+	// Server is the host identity observed when the boot script was rendered.
+	Server server.Server `json:"server"`
+	// Target is the resolved target name or script associated with the boot.
+	Target string `json:"target"`
+	// Environment is the selected Shoelaces template override environment.
+	Environment string `json:"environment"`
+	// Params contains redacted resolved template parameters.
+	Params map[string]any `json:"params"`
+	// Users contains redacted structured account data.
+	Users any `json:"users,omitempty"`
+	// Provisioning contains redacted structured installer data.
+	Provisioning any `json:"provisioning,omitempty"`
+	// CreatedAt records when the reference was created.
+	CreatedAt time.Time `json:"created_at"`
+	// ExpiresAt records when the reference should stop resolving.
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // NewStore returns a boot-session store backed by persistence.
@@ -131,6 +155,15 @@ func (s *Store) Get(ctx context.Context, ref string) (Snapshot, error) {
 	return snapshotFromRecord(record)
 }
 
+// Inspect resolves a boot session into a redacted operator-facing reference.
+func (s *Store) Inspect(ctx context.Context, ref string) (Reference, error) {
+	snapshot, err := s.Get(ctx, ref)
+	if err != nil {
+		return Reference{}, err
+	}
+	return referenceFromSnapshot(snapshot), nil
+}
+
 // DeleteExpired removes references that expired before cutoff.
 func (s *Store) DeleteExpired(ctx context.Context, cutoff time.Time) (int64, error) {
 	return s.commands.DeleteBootSessionsBefore(ctx, cutoff)
@@ -174,6 +207,20 @@ func snapshotFromRecord(record persistence.BootSessionRecord) (Snapshot, error) 
 		return Snapshot{}, fmt.Errorf("unmarshal boot session provisioning: %w", err)
 	}
 	return snapshot, nil
+}
+
+func referenceFromSnapshot(snapshot Snapshot) Reference {
+	return Reference{
+		Ref:          snapshot.Ref,
+		Server:       snapshot.Server,
+		Target:       snapshot.Target,
+		Environment:  snapshot.Environment,
+		Params:       utils.RedactParams(snapshot.Params),
+		Users:        utils.RedactForLog(snapshot.Users),
+		Provisioning: utils.RedactForLog(snapshot.Provisioning),
+		CreatedAt:    snapshot.CreatedAt,
+		ExpiresAt:    snapshot.ExpiresAt,
+	}
 }
 
 func marshalJSON(value any, empty string) ([]byte, error) {

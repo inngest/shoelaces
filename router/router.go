@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,6 +43,10 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	r.Get("/ajax/servers", handlers.ServerListHandler)
 	// Event Log History JSON endpoint
 	r.Get("/ajax/events", handlers.ListEvents)
+	// Event Log single-record JSON endpoint
+	r.Get("/ajax/events/{id}", handlers.GetEvent)
+	// Redacted boot/config reference JSON endpoint
+	r.Get("/ajax/boot-sessions/{ref}", handlers.GetBootSessionReference)
 	// Provides the list of possible parameters for a given template
 	r.Handle("/ajax/script/params", handlers.TemplateParamsServer(env))
 
