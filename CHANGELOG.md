@@ -1,3 +1,9 @@
+## [1.7.1] - 2026-06-19
+
+### 🐛 Bug Fixes
+
+- *(preseed)* Default Debian storage mode to regular (#60)
+- *(preseed)* Harden Debian storage wipe behavior (#62)
 ## [1.7.0] - 2026-06-19
 
 ### 🚀 Features
@@ -24,6 +30,10 @@
 ### 📚 Documentation
 
 - Finalize runtime persistence operations (#53)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.7.0 (#47)
 ## [1.6.1] - 2026-06-18
 
 ### 🐛 Bug Fixes
