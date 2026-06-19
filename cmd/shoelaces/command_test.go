@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/inngest/shoelaces/environment"
@@ -107,4 +109,47 @@ func TestCommandVersionDoesNotRequireDataDir(t *testing.T) {
 	cmd.Writer = io.Discard
 
 	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--version"}))
+}
+
+func TestNewCommandInformationalInvocationsIgnoreMalformedDefaultConfig(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "shoelaces.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("data-dir: [\n"), 0o644))
+
+	originalDefaultConfigPaths := defaultConfigPaths
+	defaultConfigPaths = []string{configPath}
+	t.Cleanup(func() {
+		defaultConfigPaths = originalDefaultConfigPaths
+	})
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "top-level help",
+			args: []string{"shoelaces", "--help"},
+		},
+		{
+			name: "version",
+			args: []string{"shoelaces", "--version"},
+		},
+		{
+			name: "bare command help",
+			args: []string{"shoelaces"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := newCommand(tt.args, func(env *environment.Environment) error {
+				t.Fatal("server runner should not execute for informational command")
+				return nil
+			})
+			require.NoError(t, err)
+			cmd.Writer = io.Discard
+			cmd.ErrWriter = io.Discard
+
+			require.NoError(t, cmd.Run(context.Background(), tt.args))
+		})
+	}
 }

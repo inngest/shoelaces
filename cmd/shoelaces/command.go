@@ -26,12 +26,39 @@ import (
 func newCommand(args []string, run serverRunner) (*cli.Command, error) {
 	// The config file path must be known before the urfave command is built
 	// because config values are wired in as flag value sources.
-	configPath := configPathFromArgs(args, os.LookupEnv, defaultConfigPath)
+	configPath := configPathFromArgs(args, os.LookupEnv, func() string {
+		if isInformationalInvocation(args) {
+			return ""
+		}
+		return defaultConfigPath()
+	})
 	configValues, err := readConfig(configPath)
 	if err != nil {
 		return nil, err
 	}
 	return command(configPath, configValues, run), nil
+}
+
+func isInformationalInvocation(args []string) bool {
+	if len(args) <= 1 {
+		return true
+	}
+	if args[1] == "h" || args[1] == "help" {
+		return true
+	}
+
+	for _, arg := range args[1:] {
+		if arg == "--" {
+			return false
+		}
+
+		switch arg {
+		case "-h", "-help", "--help", "-version", "--version":
+			return true
+		}
+	}
+
+	return false
 }
 
 func command(configPath string, configValues map[any]any, run serverRunner) *cli.Command {
