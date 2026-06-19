@@ -1,10 +1,5 @@
-# Depot CI Migration
-# Source: .github/workflows/release-publish.yml
-#
-# Changes made:
-# - Changed GitHub runs-on labels to their Depot equivalents
-
 name: Publish Release
+
 on:
   push:
     tags:
@@ -15,18 +10,23 @@ on:
         description: Existing release tag to publish
         required: true
         type: string
+
 permissions:
   contents: write
   id-token: write
+
 env:
   RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
   RELEASE_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+
 concurrency:
   group: release-publish-${{ github.event.inputs.tag_name || github.ref_name || github.run_id }}
   cancel-in-progress: false
+
 jobs:
   publish:
-    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
+    runs-on: ubuntu-latest
+
     steps:
       - name: Validate release token
         run: |
@@ -34,12 +34,14 @@ jobs:
             echo "::error title=Missing RELEASE_TOKEN::Configure the release bot token as the RELEASE_TOKEN repository secret."
             exit 1
           fi
+
       - name: Validate release tag
         run: |
           if ! printf '%s\n' "${RELEASE_TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
             echo "Release tag is not valid: ${RELEASE_TAG}"
             exit 1
           fi
+
       - name: Validate manual publish ref
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -47,23 +49,28 @@ jobs:
             echo "Manual release publishes must run from master so GitHub OIDC matches the IAM trust policy."
             exit 1
           fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
           token: ${{ env.RELEASE_TOKEN }}
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: ./go.mod
+
       - name: Export release notes
         run: scripts/export-release-notes.sh "${RELEASE_TAG}" RELEASE_NOTES.md
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::836356947314:role/ProdGHActionAccess
           aws-region: us-east-2
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
