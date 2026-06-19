@@ -46,9 +46,40 @@ d-i partman/early_command string \
 {{end}}
 
 {{define "preseed/debian/storage/regular" -}}
-# Regular recipe is split out first so Phase 3 can replace this legacy body
-# without changing the top-level Debian preseed flow.
-{{template "preseed/debian/storage/legacy-lvm-layout" .}}
+d-i anna/choose_modules string partman-ext4
+
+# Use selected storage method
+d-i partman-auto/method string regular
+
+# Make sure any md leftovers can be replaced without prompts
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
+
+# Expert recipe: ESP + /boot + swap + root on regular partitions
+d-i partman-auto/expert_recipe string \
+  uefi-regular ::                                                        \
+    512 512 512 fat32                                                    \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        mountpoint{ /boot/efi }                                          \
+    .                                                                    \
+    1024 1024 1024 ext4                                                  \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ ext4 }                             \
+        mountpoint{ /boot }                                              \
+    .                                                                    \
+    8192 8192 8192 linux-swap                                            \
+        method{ swap } format{ }                                         \
+    .                                                                    \
+    20000 100000000 -1 ext4                                              \
+        method{ format } format{ }                                       \
+        use_filesystem{ } filesystem{ ext4 }                             \
+        mountpoint{ / }                                                  \
+    .
+
+d-i partman-auto/choose_recipe select uefi-regular
 {{end}}
 
 {{define "preseed/debian/storage/lvm" -}}

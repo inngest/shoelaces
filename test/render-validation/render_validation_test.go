@@ -400,6 +400,22 @@ func TestRenderedDebianPreseedPreservesStorageFlow(t *testing.T) {
 	)
 }
 
+func TestRenderedDebianPreseedDefaultRegularRecipeIsNonLVM(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", defaultRenderParams)
+
+	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular")
+	assert.Contains(t, rendered, "mountpoint{ / }")
+	assert.Contains(t, rendered, "method{ swap }")
+	assert.NotContains(t, rendered, "partman-lvm")
+	assert.NotContains(t, rendered, "partman-auto-lvm")
+	assert.NotContains(t, rendered, "method{ lvm }")
+	assert.NotContains(t, rendered, "$lvmok{ }")
+	assert.NotContains(t, rendered, "in_vg{")
+	assert.NotContains(t, rendered, "vg_name{")
+	assert.NotContains(t, rendered, "lv_name{")
+}
+
 func TestRenderedDebianPreseedPreservesExplicitLVMRecipe(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_mode", "lvm"))
 
@@ -494,7 +510,8 @@ func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/vda")
 	assert.Contains(t, rendered, "for d in /dev/nvme*n* /dev/sd*; do \\")
 	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
-	assert.Contains(t, rendered, "vg_name{ vgtest }")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular")
+	assert.NotContains(t, rendered, "vg_name{ vgtest }")
 	assert.Contains(t, rendered, "d-i grub2/linux_cmdline string panic=30")
 	assert.Contains(t, rendered, "d-i clock-setup/ntp boolean false")
 	assert.Contains(t, rendered, "d-i pkgsel/update-policy select none")
