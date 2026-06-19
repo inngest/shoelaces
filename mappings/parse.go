@@ -29,6 +29,8 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
+const unsupportedDiskPathShellMetacharacters = ";&|`$(){}<>\"'\\"
+
 // Mappings contains the runtime provisioning target policy loaded from
 // mappings.yaml.
 type Mappings struct {
@@ -366,6 +368,9 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	if err := validateWipeDiskPatterns(path+".storage.wipeDiskPatterns", config.Storage.WipeDiskPatterns); err != nil {
 		return err
 	}
+	if err := validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, false); err != nil {
+		return err
+	}
 	if err := validateFilesystems(path+".storage.filesystems", config.Storage.Filesystems); err != nil {
 		return err
 	}
@@ -396,6 +401,10 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	return nil
 }
 
+func validateResolvedProvisioningConfig(path string, config ProvisioningConfig) error {
+	return validateRAIDConfig(path+".storage.raid", config.Storage.Mode, config.Storage.RAID, config.Boot.Firmware, true)
+}
+
 func validateFilesystems(path string, filesystems map[string]FilesystemConfig) error {
 	for name, filesystem := range filesystems {
 		if name == "" {
@@ -411,6 +420,63 @@ func validateFilesystems(path string, filesystems map[string]FilesystemConfig) e
 	return nil
 }
 
+func validateRAIDConfig(path string, storageMode string, raid RAIDConfig, bootFirmware string, requireComplete bool) error {
+	if raid.Level != 0 && raid.Level != 1 {
+		return fmt.Errorf("%s.level must be 1 for Debian RAID mode", path)
+	}
+	if raid.Devices != nil {
+		if storageMode == "raid" && len(raid.Devices) != 2 {
+			return fmt.Errorf("%s.devices must contain exactly 2 devices for Debian RAID mode", path)
+		}
+		if err := validateRAIDDevices(path+".devices", raid.Devices); err != nil {
+			return err
+		}
+	}
+	if storageMode != "raid" {
+		return nil
+	}
+	if bootFirmware != "" && bootFirmware != "uefi" {
+		return fmt.Errorf("%s.boot.firmware must be %q when storage.mode is raid", strings.TrimSuffix(path, ".storage.raid"), "uefi")
+	}
+	if !requireComplete {
+		return nil
+	}
+	if bootFirmware != "uefi" {
+		return fmt.Errorf("%s.boot.firmware must be %q when storage.mode is raid", strings.TrimSuffix(path, ".storage.raid"), "uefi")
+	}
+	if raid.Level != 1 {
+		return fmt.Errorf("%s.level must be 1 for Debian RAID mode", path)
+	}
+	if len(raid.Devices) != 2 {
+		return fmt.Errorf("%s.devices must contain exactly 2 devices for Debian RAID mode", path)
+	}
+	return validateRAIDDevices(path+".devices", raid.Devices)
+}
+
+func validateRAIDDevices(path string, devices []string) error {
+	for i, device := range devices {
+		if strings.TrimSpace(device) == "" {
+			return fmt.Errorf("%s[%d] must not be empty", path, i)
+		}
+		if device != strings.TrimSpace(device) || strings.ContainsAny(device, " \t\r\n") {
+			return fmt.Errorf("%s[%d] must not contain whitespace", path, i)
+		}
+		if !strings.HasPrefix(device, "/dev/") {
+			return fmt.Errorf("%s[%d] must start with /dev/", path, i)
+		}
+		if device == "/dev/" {
+			return fmt.Errorf("%s[%d] must be an explicit /dev path", path, i)
+		}
+		if strings.ContainsAny(device, "*?[") {
+			return fmt.Errorf("%s[%d] must be an explicit /dev path without glob patterns", path, i)
+		}
+		if strings.ContainsAny(device, unsupportedDiskPathShellMetacharacters) {
+			return fmt.Errorf("%s[%d] contains unsupported shell metacharacters", path, i)
+		}
+	}
+	return nil
+}
+
 func validateStringList(path string, values []string) error {
 	for i, value := range values {
 		if strings.TrimSpace(value) == "" {
@@ -421,8 +487,6 @@ func validateStringList(path string, values []string) error {
 }
 
 func validateWipeDiskPatterns(path string, patterns []string) error {
-	const unsupportedShellMetacharacters = ";&|`$(){}<>\"'\\"
-
 	for i, pattern := range patterns {
 		if strings.TrimSpace(pattern) == "" {
 			return fmt.Errorf("%s[%d] must not be empty", path, i)
@@ -436,7 +500,7 @@ func validateWipeDiskPatterns(path string, patterns []string) error {
 		if pattern == "/dev/*" {
 			return fmt.Errorf("%s[%d] must be narrower than /dev/*", path, i)
 		}
-		if strings.ContainsAny(pattern, unsupportedShellMetacharacters) {
+		if strings.ContainsAny(pattern, unsupportedDiskPathShellMetacharacters) {
 			return fmt.Errorf("%s[%d] contains unsupported shell metacharacters", path, i)
 		}
 	}

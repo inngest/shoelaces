@@ -749,6 +749,116 @@ func TestResolverProjectsInheritedSwapAbsentToRegularParams(t *testing.T) {
 	assert.Equal(t, "false", params["debian_regular_swap_enabled"])
 }
 
+func TestResolverMergesStructuredRAIDStorage(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Defaults: DefaultsMap{
+			Storage: StorageConfig{
+				Mode: "raid",
+				RAID: RAIDConfig{
+					Level:        1,
+					Devices:      []string{"/dev/disk/by-id/default-a", "/dev/disk/by-id/default-b"},
+					BootDegraded: boolPtr(false),
+				},
+			},
+			Boot: BootConfig{Firmware: "uefi"},
+		},
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					RAID: RAIDConfig{
+						Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+			Storage: StorageConfig{
+				RAID: RAIDConfig{
+					BootDegraded: boolPtr(true),
+				},
+			},
+		}},
+	})
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(ResolveRequest{Mac: "0c:42:a1:c3:52:96"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "raid", result.Provisioning.Storage.Mode)
+	assert.Equal(t, 1, result.Provisioning.Storage.RAID.Level)
+	assert.Equal(t, []string{"/dev/nvme0n1", "/dev/nvme1n1"}, result.Provisioning.Storage.RAID.Devices)
+	require.NotNil(t, result.Provisioning.Storage.RAID.BootDegraded)
+	assert.True(t, *result.Provisioning.Storage.RAID.BootDegraded)
+}
+
+func TestResolverRejectsIncompleteRAIDStorage(t *testing.T) {
+	tests := []struct {
+		name      string
+		storage   StorageConfig
+		boot      BootConfig
+		wantError string
+	}{
+		{
+			name: "missing level",
+			storage: StorageConfig{
+				Mode: "raid",
+				RAID: RAIDConfig{Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"}},
+			},
+			boot:      BootConfig{Firmware: "uefi"},
+			wantError: "resolved provisioning.storage.raid.level must be 1 for Debian RAID mode",
+		},
+		{
+			name: "missing devices",
+			storage: StorageConfig{
+				Mode: "raid",
+				RAID: RAIDConfig{Level: 1},
+			},
+			boot:      BootConfig{Firmware: "uefi"},
+			wantError: "resolved provisioning.storage.raid.devices must contain exactly 2 devices for Debian RAID mode",
+		},
+		{
+			name: "missing firmware",
+			storage: StorageConfig{
+				Mode: "raid",
+				RAID: RAIDConfig{
+					Level:   1,
+					Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+				},
+			},
+			wantError: `resolved provisioning.boot.firmware must be "uefi" when storage.mode is raid`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver, err := NewResolver(&Mappings{
+				Targets: map[string]Target{
+					"debian13": {
+						Script:  "debian.ipxe",
+						Storage: tt.storage,
+						Boot:    tt.boot,
+					},
+				},
+				MacMaps: []MacMapConfig{{
+					Mac:           "0c:42:a1:c3:52:96",
+					DefaultTarget: "debian13",
+					Targets:       []string{"debian13"},
+				}},
+			})
+			require.NoError(t, err)
+
+			_, err = resolver.Resolve(ResolveRequest{Mac: "0c:42:a1:c3:52:96"})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantError)
+		})
+	}
+}
+
 func TestResolverDoesNotLeakResolvedProvisioningBetweenBoots(t *testing.T) {
 	resolver, err := NewResolver(&Mappings{
 		Targets: map[string]Target{

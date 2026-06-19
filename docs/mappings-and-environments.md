@@ -132,6 +132,24 @@ Use broad patterns such as `/dev/sd*` only when every matching disk on the host
 is known to be disposable. Prefer stable, narrower selectors such as
 `/dev/disk/by-id/<fleet-prefix>*` when available.
 
+For Debian RAID mode, keep member disks as layout data under
+`storage.raid.devices`, not as wipe selectors. Initial RAID support is UEFI-only
+RAID1 with exactly two member disks. Prefer stable `/dev/disk/by-id/...` paths
+for production servers:
+
+```yaml
+boot:
+  firmware: uefi
+storage:
+  mode: raid
+  raid:
+    level: 1
+    devices:
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_a
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_b
+    bootDegraded: true
+```
+
 ## Environment Overrides
 
 Environment overrides let a target serve selected templates from `env_overrides/{environment}/` while falling back to the base `data-dir` for everything else.

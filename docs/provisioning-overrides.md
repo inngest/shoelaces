@@ -349,6 +349,30 @@ storage:
       sizeMiB: 20000
 ```
 
+For Debian `storage.mode: raid`, configure RAID member disks separately from
+`storage.disk` and `storage.wipeDiskPatterns`. Initial Debian support is
+UEFI-only RAID1 with exactly two member disks. Prefer stable
+`/dev/disk/by-id/...` paths in production; simple `/dev/nvme0n1` paths are
+acceptable for tests and lab hosts:
+
+```yaml
+boot:
+  firmware: uefi
+storage:
+  mode: raid
+  raid:
+    level: 1
+    devices:
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_a
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_b
+    bootDegraded: true
+```
+
+Debian RAID mode duplicates normal EFI System Partitions across the member
+disks rather than putting the ESP on mdraid. The installer mounts one ESP at
+`/boot/efi`, installs/copies bootloader files to both ESPs, and uses mdadm for
+Linux-managed filesystems such as `/boot`, `/`, and swap.
+
 For NVMe-only hosts:
 
 ```yaml

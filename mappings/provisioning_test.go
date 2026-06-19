@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing.T) {
@@ -153,6 +154,101 @@ func TestParamsWithProvisioningProjectsStructuredStorageMode(t *testing.T) {
 	})
 
 	assert.Equal(t, "lvm", params["storage_mode"])
+}
+
+func TestParamsWithProvisioningProjectsStructuredRAID(t *testing.T) {
+	bootDegraded := true
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Mode: "raid",
+			RAID: RAIDConfig{
+				Level: 1,
+				Devices: []string{
+					"/dev/disk/by-id/nvme-os-a",
+					"/dev/disk/by-id/nvme-os-b",
+				},
+				BootDegraded: &bootDegraded,
+			},
+		},
+	})
+
+	assert.Equal(t, "raid", params["storage_mode"])
+	assert.Equal(t, "1", params["storage_raid_level"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-a /dev/disk/by-id/nvme-os-b", params["storage_raid_devices"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-a /dev/disk/by-id/nvme-os-b", params["storage_wipe_disks"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-a", params["storage_raid_device_0"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-b", params["storage_raid_device_1"])
+	assert.Equal(t, "true", params["storage_raid_boot_degraded"])
+}
+
+func TestParamsWithProvisioningProjectsStructuredRAIDFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Mode: "raid",
+			Filesystems: map[string]FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+	})
+
+	assert.Equal(t, "mdadm-udeb partman-md partman-xfs", params["debian_raid_partman_modules"])
+	assert.Equal(t, "768", params["debian_raid_esp_min_size_mib"])
+	assert.Equal(t, "768", params["debian_raid_esp_priority"])
+	assert.Equal(t, "768", params["debian_raid_esp_max_size_mib"])
+	assert.Equal(t, "/efi", params["debian_raid_esp_mountpoint"])
+	assert.Equal(t, "2048", params["debian_raid_boot_min_size_mib"])
+	assert.Equal(t, "2048", params["debian_raid_boot_priority"])
+	assert.Equal(t, "2048", params["debian_raid_boot_max_size_mib"])
+	assert.Equal(t, "xfs", params["debian_raid_boot_fstype"])
+	assert.Equal(t, "4096", params["debian_raid_swap_min_size_mib"])
+	assert.Equal(t, "4096", params["debian_raid_swap_priority"])
+	assert.Equal(t, "4096", params["debian_raid_swap_max_size_mib"])
+	assert.Equal(t, "65536", params["debian_raid_root_min_size_mib"])
+	assert.Equal(t, "100000000", params["debian_raid_root_priority"])
+	assert.Equal(t, "-1", params["debian_raid_root_max_size_mib"])
+	assert.Equal(t, "xfs", params["debian_raid_root_fstype"])
+}
+
+func TestCopyProvisioningConfigCopiesRAID(t *testing.T) {
+	bootDegraded := true
+	original := ProvisioningConfig{
+		Storage: StorageConfig{
+			RAID: RAIDConfig{
+				Level:        1,
+				Devices:      []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+				BootDegraded: &bootDegraded,
+			},
+		},
+	}
+
+	copied := copyProvisioningConfig(original)
+	copied.Storage.RAID.Devices[0] = "/dev/mutated"
+	*copied.Storage.RAID.BootDegraded = false
+
+	assert.Equal(t, []string{"/dev/nvme0n1", "/dev/nvme1n1"}, original.Storage.RAID.Devices)
+	require.NotNil(t, original.Storage.RAID.BootDegraded)
+	assert.True(t, *original.Storage.RAID.BootDegraded)
 }
 
 func TestParamsWithProvisioningProjectsStructuredRegularFilesystems(t *testing.T) {

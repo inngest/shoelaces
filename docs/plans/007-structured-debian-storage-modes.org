@@ -43,8 +43,8 @@ storage:
   raid:
     level: 1
     devices:
-      - /dev/nvme0n1
-      - /dev/nvme1n1
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_a
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_b
     bootDegraded: true
 #+end_src
 
@@ -284,55 +284,55 @@ With one failed disk, the expected impact should be:
 
 *** Phase 7: RAID Schema And Validation
 
-- [ ] Add a narrow structured RAID block to =StorageConfig= with fields such as
+- [X] Add a narrow structured RAID block to =StorageConfig= with fields such as
   =raid.level=, =raid.devices=, and =raid.bootDegraded=.
-- [ ] Validate initial Debian RAID support as RAID level =1= with exactly two
+- [X] Validate initial Debian RAID support as RAID level =1= with exactly two
   member disks.
-- [ ] Validate Debian RAID mode requires =boot.firmware: uefi=.
-- [ ] Validate RAID member disks as explicit =/dev/...= paths and keep them
+- [X] Validate Debian RAID mode requires =boot.firmware: uefi=.
+- [X] Validate RAID member disks as explicit =/dev/...= paths and keep them
   separate from =wipeDiskPatterns=.
-- [ ] Recommend =/dev/disk/by-id/...= RAID member paths in docs and examples,
+- [X] Recommend =/dev/disk/by-id/...= RAID member paths in docs and examples,
   while allowing simpler device names in tests.
-- [ ] Project RAID fields into template params such as =storage_raid_level=,
+- [X] Project RAID fields into template params such as =storage_raid_level=,
   =storage_raid_devices=, and =storage_raid_boot_degraded=.
-- [ ] Add parser, resolver, merge, copy, and projection tests for the RAID
+- [X] Add parser, resolver, merge, copy, and projection tests for the RAID
   block.
-- [ ] Ensure =storage.mode: raid= fails clearly when required RAID fields are
+- [X] Ensure =storage.mode: raid= fails clearly when required RAID fields are
   missing or invalid.
-- [ ] Add tests for valid =raid= values.
-- [ ] Add validation tests proving Debian RAID mode rejects BIOS firmware.
+- [X] Add tests for valid =raid= values.
+- [X] Add validation tests proving Debian RAID mode rejects BIOS firmware.
 
 *** Phase 8: RAID1 Storage Recipe
 
-- [ ] Add =preseed/debian/storage/raid= to the Debian storage template split.
-- [ ] Populate =partman-auto/disk= from the RAID member-disk list in Debian
+- [X] Add =preseed/debian/storage/raid= to the Debian storage template split.
+- [X] Populate =partman-auto/disk= from the RAID member-disk list in Debian
   RAID mode.
-- [ ] Render =d-i partman-auto/method string raid= for RAID mode.
-- [ ] Load the Debian installer modules needed for mdadm RAID, such as
+- [X] Render =d-i partman-auto/method string raid= for RAID mode.
+- [X] Load the Debian installer modules needed for mdadm RAID, such as
   =mdadm-udeb= and =partman-md=.
-- [ ] Render =partman-auto/disk= with both configured RAID member disks.
-- [ ] Partition both member disks consistently using GPT/UEFI layout.
-- [ ] Create a normal EFI System Partition on each member disk, not an mdraid
+- [X] Render =partman-auto/disk= with both configured RAID member disks.
+- [X] Partition both member disks consistently using GPT/UEFI layout.
+- [X] Create a normal EFI System Partition on each member disk, not an mdraid
   ESP.
-- [ ] Mount one ESP at =/boot/efi= during install and ensure bootloader files
+- [X] Mount one ESP at =/boot/efi= during install and ensure bootloader files
   are installed or copied to the second ESP before reboot.
-- [ ] Create a RAID1 md device for =/boot= and format it as ext4.
-- [ ] Create a RAID1 md device for root and format it as ext4 mounted at =/=.
-- [ ] Create a RAID1 md device for swap when swap is configured.
-- [ ] Do not render LVM PV, VG, or LV recipe directives in RAID mode.
-- [ ] Do not render =partman-auto-lvm/new_vg_name= in RAID mode.
-- [ ] Render =mdadm/boot_degraded= from =storage.raid.bootDegraded=.
-- [ ] Confirm md cleanup prompts so reinstalling over stale arrays is
+- [X] Create a RAID1 md device for =/boot= and format it as ext4.
+- [X] Create a RAID1 md device for root and format it as ext4 mounted at =/=.
+- [X] Create a RAID1 md device for swap when swap is configured.
+- [X] Do not render LVM PV, VG, or LV recipe directives in RAID mode.
+- [X] Do not render =partman-auto-lvm/new_vg_name= in RAID mode.
+- [X] Render =mdadm/boot_degraded= from =storage.raid.bootDegraded=.
+- [X] Confirm md cleanup prompts so reinstalling over stale arrays is
   unattended when wiping is enabled.
-- [ ] Install GRUB EFI files to both ESPs.
-- [ ] Place a fallback bootloader at =EFI/BOOT/BOOTX64.EFI= on both ESPs.
-- [ ] Write installed-system mdadm config to =/target/etc/mdadm/mdadm.conf=.
-- [ ] Run =in-target update-initramfs -u= after writing mdadm config.
-- [ ] Add a compatibility note for UEFI boot redundancy: ESPs are duplicated
+- [X] Install GRUB EFI files to both ESPs.
+- [X] Place a fallback bootloader at =EFI/BOOT/BOOTX64.EFI= on both ESPs.
+- [X] Write installed-system mdadm config to =/target/etc/mdadm/mdadm.conf=.
+- [X] Run =in-target update-initramfs -u= after writing mdadm config.
+- [X] Add a compatibility note for UEFI boot redundancy: ESPs are duplicated
   rather than mdraid-managed.
-- [ ] Keep initial RAID filesystem sizing conservative: 512 MiB ESPs, 1 GiB
+- [X] Keep initial RAID filesystem sizing conservative: 512 MiB ESPs, 1 GiB
   RAID1 =/boot=, optional RAID1 swap, and RAID1 root with grow behavior.
-- [ ] Add a RAID-mode Debian preseed render test that asserts:
+- [X] Add a RAID-mode Debian preseed render test that asserts:
   - =partman-auto/method string raid= is present
   - both configured M.2 disks appear in =partman-auto/disk=
   - mdadm/partman-md requirements are present
