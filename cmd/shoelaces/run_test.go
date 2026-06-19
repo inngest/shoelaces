@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,20 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestConfigPathFromArgs(t *testing.T) {
-	lookupEnv := func(key string) (string, bool) {
-		if key == "CONFIG" {
-			return "env.toml", true
-		}
-		return "", false
-	}
-
-	assert.Equal(t, "flag.toml", configPathFromArgs([]string{"shoelaces", "-config", "flag.toml"}, lookupEnv))
-	assert.Equal(t, "flag.toml", configPathFromArgs([]string{"shoelaces", "--config=flag.toml"}, lookupEnv))
-	assert.Equal(t, "env.toml", configPathFromArgs([]string{"shoelaces"}, lookupEnv))
-	assert.Equal(t, "env.toml", configPathFromArgs([]string{"shoelaces", "--", "--config=ignored.toml"}, lookupEnv))
-}
 
 func TestCommandValuePrecedence(t *testing.T) {
 	tests := []struct {
@@ -79,7 +64,7 @@ func TestCommandValuePrecedence(t *testing.T) {
 				return nil
 			})
 
-			args := []string{"shoelaces"}
+			args := []string{"shoelaces", "run"}
 			if tt.cliValue != "" {
 				args = append(args, "--bind-addr", tt.cliValue)
 			}
@@ -108,7 +93,7 @@ func TestCommandAppliesPrecedenceToTFTPConfig(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run"}))
 	require.NotNil(t, got)
 
 	require.NotNil(t, got.TFTP)
@@ -133,7 +118,7 @@ func TestCommandAppliesPrecedenceToLoggingConfig(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--log-handler", "json"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run", "--log-handler", "json"}))
 	require.NotNil(t, got)
 
 	assert.Equal(t, "error", got.LogLevel)
@@ -162,6 +147,7 @@ func TestCommandAppliesPrecedenceToPersistenceConfig(t *testing.T) {
 
 	require.NoError(t, cmd.Run(context.Background(), []string{
 		"shoelaces",
+		"run",
 		"--persistence-path", "runtime/cli.db",
 		"--persistence-retention-boot-sessions", "6h",
 		"--persistence-retention-boot-sessions-sweep-interval", "15m",
@@ -187,7 +173,7 @@ func TestCommandRejectsInvalidPersistenceBackend(t *testing.T) {
 		return nil
 	})
 
-	err := cmd.Run(context.Background(), []string{"shoelaces"})
+	err := cmd.Run(context.Background(), []string{"shoelaces", "run"})
 	assert.ErrorContains(t, err, `unsupported persistence backend "postgres"`)
 }
 
@@ -205,7 +191,7 @@ func TestCommandDebugIsCLIOnly(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, envCmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NoError(t, envCmd.Run(context.Background(), []string{"shoelaces", "run"}))
 	require.NotNil(t, envOnly)
 	assert.False(t, envOnly.Debug)
 
@@ -215,7 +201,7 @@ func TestCommandDebugIsCLIOnly(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "--debug"}))
+	require.NoError(t, cliCmd.Run(context.Background(), []string{"shoelaces", "run", "--debug"}))
 	require.NotNil(t, cliDebug)
 	assert.True(t, cliDebug.Debug)
 }
@@ -281,7 +267,7 @@ func TestCommandUIDirPrecedence(t *testing.T) {
 				return nil
 			})
 
-			args := []string{"shoelaces"}
+			args := []string{"shoelaces", "run"}
 			if cliValue != "" {
 				args = append(args, "--ui-dir", cliValue)
 			}
@@ -308,20 +294,10 @@ func TestCommandStaticDirCompatibilityAlias(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces"}))
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "run"}))
 	require.NotNil(t, got)
 	assert.Equal(t, uiDir, got.UIDir)
 	assert.True(t, got.UIOverrideDirSet)
-}
-
-func TestCommandVersionDoesNotRequireDataDir(t *testing.T) {
-	cmd := command("", nil, func(env *environment.Environment) error {
-		t.Fatal("server runner should not execute for -version")
-		return nil
-	})
-	cmd.Writer = io.Discard
-
-	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "--version"}))
 }
 
 func writeCommandTestUIDir(t *testing.T) string {

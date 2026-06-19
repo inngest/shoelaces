@@ -11,7 +11,7 @@ all:
 
 .PHONY: dev
 dev:
-	$(GO) run ./cmd/shoelaces --config dev/shoelaces.yaml
+	$(GO) run ./cmd/shoelaces --config dev/shoelaces.yaml run
 
 .PHONY: lint
 lint:

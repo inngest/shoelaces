@@ -564,7 +564,7 @@ backend = "%s"
 		t.Fatalf("write integration config: %v", err)
 	}
 
-	cmd := exec.Command(binary, "-config", configPath)
+	cmd := exec.Command(binary, "-config", configPath, "run")
 	cmd.Dir = testDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var stderr bytes.Buffer
