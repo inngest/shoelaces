@@ -230,6 +230,38 @@ networkMaps:
 	assert.Equal(t, "regular", parsed.Targets["debian12"].Storage.Mode)
 }
 
+func TestParseMappingsLoadsStructuredRAIDStorage(t *testing.T) {
+	mappingsPath := writeMappingsFile(t, `
+targets:
+  debian12:
+    script: debian.ipxe
+    boot:
+      firmware: uefi
+    storage:
+      mode: raid
+      raid:
+        level: 1
+        devices:
+          - /dev/nvme0n1
+          - /dev/nvme1n1
+        bootDegraded: true
+networkMaps:
+  - network: 192.0.2.0/24
+    defaultTarget: debian12
+    targets:
+      - debian12
+`)
+
+	parsed, err := ParseMappings(log.MakeLogger(io.Discard), mappingsPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, "raid", parsed.Targets["debian12"].Storage.Mode)
+	assert.Equal(t, 1, parsed.Targets["debian12"].Storage.RAID.Level)
+	assert.Equal(t, []string{"/dev/nvme0n1", "/dev/nvme1n1"}, parsed.Targets["debian12"].Storage.RAID.Devices)
+	require.NotNil(t, parsed.Targets["debian12"].Storage.RAID.BootDegraded)
+	assert.True(t, *parsed.Targets["debian12"].Storage.RAID.BootDegraded)
+}
+
 func TestParseMappingsReturnsErrors(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -378,6 +410,83 @@ targets:
     script: debian.ipxe
 `,
 			want: `defaults.storage.wipeDiskPatterns[0] must be narrower than /dev/*`,
+		},
+		{
+			name: "invalid raid level",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    storage:
+      mode: raid
+      raid:
+        level: 5
+        devices:
+          - /dev/nvme0n1
+          - /dev/nvme1n1
+`,
+			want: `targets["debian12"].storage.raid.level must be 1 for Debian RAID mode`,
+		},
+		{
+			name: "invalid raid device count",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    storage:
+      mode: raid
+      raid:
+        level: 1
+        devices:
+          - /dev/nvme0n1
+`,
+			want: `targets["debian12"].storage.raid.devices must contain exactly 2 devices for Debian RAID mode`,
+		},
+		{
+			name: "invalid raid device outside dev",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    storage:
+      raid:
+        devices:
+          - nvme0n1
+          - /dev/nvme1n1
+`,
+			want: `targets["debian12"].storage.raid.devices[0] must start with /dev/`,
+		},
+		{
+			name: "invalid raid device glob",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    storage:
+      raid:
+        devices:
+          - /dev/nvme*
+          - /dev/nvme1n1
+`,
+			want: `targets["debian12"].storage.raid.devices[0] must be an explicit /dev path without glob patterns`,
+		},
+		{
+			name: "raid rejects bios firmware",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    boot:
+      firmware: bios
+    storage:
+      mode: raid
+      raid:
+        level: 1
+        devices:
+          - /dev/nvme0n1
+          - /dev/nvme1n1
+`,
+			want: `targets["debian12"].boot.firmware must be "uefi" when storage.mode is raid`,
 		},
 		{
 			name: "invalid mirror url",

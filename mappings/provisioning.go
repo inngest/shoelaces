@@ -91,11 +91,23 @@ type StorageConfig struct {
 	Mode string `koanf:"mode"`
 	// VolumeGroup is the LVM volume group name when Mode is lvm.
 	VolumeGroup string `koanf:"volumeGroup"`
+	// RAID contains mdraid settings when Mode is raid.
+	RAID RAIDConfig `koanf:"raid"`
 	// Filesystems contains named filesystem definitions.
 	Filesystems map[string]FilesystemConfig `koanf:"filesystems"`
 
 	// absentFilesystems tracks inherited entries suppressed during merging.
 	absentFilesystems map[string]bool
+}
+
+// RAIDConfig describes the narrow mdraid shape supported by installers.
+type RAIDConfig struct {
+	// Level is the mdraid level. Debian support initially accepts only RAID1.
+	Level int `koanf:"level"`
+	// Devices contains explicit member disk paths.
+	Devices []string `koanf:"devices"`
+	// BootDegraded controls whether the installed system may boot degraded.
+	BootDegraded *bool `koanf:"bootDegraded"`
 }
 
 // FilesystemConfig describes one named filesystem entry.
@@ -203,6 +215,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "packages_update_policy", provisioning.Packages.UpdatePolicy)
 	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
 	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
+	projectRAIDParams(params, provisioning.Storage.RAID)
 	projectDebianRegularFilesystemParams(params, provisioning.Storage)
 	projectDebianLVMFilesystemParams(params, provisioning.Storage)
 	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
@@ -390,6 +403,18 @@ func setDefaultParam(params map[string]interface{}, key string, value string) {
 func setDefaultParamValue(params map[string]interface{}, key string, value any) {
 	if _, ok := params[key]; !ok {
 		params[key] = fmt.Sprint(value)
+	}
+}
+
+func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {
+	if raid.Level != 0 {
+		setDefaultParamValue(params, "storage_raid_level", raid.Level)
+	}
+	if len(raid.Devices) > 0 {
+		setDefaultParamValue(params, "storage_raid_devices", strings.Join(raid.Devices, " "))
+	}
+	if raid.BootDegraded != nil {
+		setDefaultParamValue(params, "storage_raid_boot_degraded", *raid.BootDegraded)
 	}
 }
 
@@ -742,8 +767,22 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 	if override.VolumeGroup != "" {
 		base.VolumeGroup = override.VolumeGroup
 	}
+	base.RAID = mergeRAIDConfig(base.RAID, override.RAID)
 	if override.Filesystems != nil {
 		base = mergeFilesystemConfigMapWithAbsent(base, override.Filesystems)
+	}
+	return base
+}
+
+func mergeRAIDConfig(base RAIDConfig, override RAIDConfig) RAIDConfig {
+	if override.Level != 0 {
+		base.Level = override.Level
+	}
+	if override.Devices != nil {
+		base.Devices = append([]string(nil), override.Devices...)
+	}
+	if override.BootDegraded != nil {
+		base.BootDegraded = copyBoolPtr(override.BootDegraded)
 	}
 	return base
 }
@@ -870,6 +909,7 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Packages.Groups = append([]string(nil), config.Packages.Groups...)
 	config.Storage.Wipe = copyBoolPtr(config.Storage.Wipe)
 	config.Storage.WipeDiskPatterns = append([]string(nil), config.Storage.WipeDiskPatterns...)
+	config.Storage.RAID = copyRAIDConfig(config.Storage.RAID)
 	config.Storage.Filesystems = copyFilesystemConfigMap(config.Storage.Filesystems)
 	config.Storage.absentFilesystems = copyBoolMap(config.Storage.absentFilesystems)
 	config.Boot.Netboot.KernelArgs = append([]string(nil), config.Boot.Netboot.KernelArgs...)
@@ -883,6 +923,12 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Repos.NonFree = copyBoolPtr(config.Repos.NonFree)
 	config.Installer.ConfigParams = copyParamMap(config.Installer.ConfigParams)
 	return config
+}
+
+func copyRAIDConfig(raid RAIDConfig) RAIDConfig {
+	raid.Devices = append([]string(nil), raid.Devices...)
+	raid.BootDegraded = copyBoolPtr(raid.BootDegraded)
+	return raid
 }
 
 func copyFilesystemConfigMap(filesystems map[string]FilesystemConfig) map[string]FilesystemConfig {

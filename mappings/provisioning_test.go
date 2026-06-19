@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing.T) {
@@ -153,6 +154,49 @@ func TestParamsWithProvisioningProjectsStructuredStorageMode(t *testing.T) {
 	})
 
 	assert.Equal(t, "lvm", params["storage_mode"])
+}
+
+func TestParamsWithProvisioningProjectsStructuredRAID(t *testing.T) {
+	bootDegraded := true
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Mode: "raid",
+			RAID: RAIDConfig{
+				Level: 1,
+				Devices: []string{
+					"/dev/disk/by-id/nvme-os-a",
+					"/dev/disk/by-id/nvme-os-b",
+				},
+				BootDegraded: &bootDegraded,
+			},
+		},
+	})
+
+	assert.Equal(t, "raid", params["storage_mode"])
+	assert.Equal(t, "1", params["storage_raid_level"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-a /dev/disk/by-id/nvme-os-b", params["storage_raid_devices"])
+	assert.Equal(t, "true", params["storage_raid_boot_degraded"])
+}
+
+func TestCopyProvisioningConfigCopiesRAID(t *testing.T) {
+	bootDegraded := true
+	original := ProvisioningConfig{
+		Storage: StorageConfig{
+			RAID: RAIDConfig{
+				Level:        1,
+				Devices:      []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+				BootDegraded: &bootDegraded,
+			},
+		},
+	}
+
+	copied := copyProvisioningConfig(original)
+	copied.Storage.RAID.Devices[0] = "/dev/mutated"
+	*copied.Storage.RAID.BootDegraded = false
+
+	assert.Equal(t, []string{"/dev/nvme0n1", "/dev/nvme1n1"}, original.Storage.RAID.Devices)
+	require.NotNil(t, original.Storage.RAID.BootDegraded)
+	assert.True(t, *original.Storage.RAID.BootDegraded)
 }
 
 func TestParamsWithProvisioningProjectsStructuredRegularFilesystems(t *testing.T) {

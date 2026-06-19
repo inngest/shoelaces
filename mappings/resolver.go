@@ -519,6 +519,9 @@ func (r *Resolver) resolveProvisioning(target ProvisioningConfig, mapping Provis
 		}
 		merged.Installer.ConfigParams[key] = resolved
 	}
+	if err := validateResolvedProvisioningConfig("resolved provisioning", merged); err != nil {
+		return ProvisioningConfig{}, err
+	}
 	return merged, nil
 }
 
