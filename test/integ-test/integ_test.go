@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ type shoelacesProcess struct {
 	fixtureDir string
 	client     *http.Client
 	cmd        *exec.Cmd
+	stopped    bool
 }
 
 type serverInfo struct {
@@ -249,16 +251,23 @@ networkMaps:
 	proc := startShoelacesWithDataDir(t, dataDir)
 	defer proc.stop(t)
 
-	proc.assertGETContains(t, "/poll/1/06-66-de-ad-be-ef", nil, []string{
+	bootScript := proc.getString(t, "/poll/1/06-66-de-ad-be-ef", nil)
+	assertContainsAll(t, bootScript, []string{
 		"Debian bookworm netboot",
 		"set mirror https://deb.example/debian/dists/bookworm/",
 		"preseed/url=http://localhost:18888/configs/preseed/debian?",
 		"encrypt_home=false",
-		"site=integ",
-		"provisioning=",
+		"ref=",
 		"console=ttyS1",
 	})
-	proc.assertGETContains(t, "/configs/preseed/debian", url.Values{"encrypt_home": {"false"}}, []string{
+	assertNotContains(t, bootScript, "provisioning=")
+	assertNotContains(t, bootScript, "users=")
+
+	preseedURL := renderedPreseedURL(t, bootScript)
+	if ref := preseedURL.Query().Get("ref"); ref == "" {
+		t.Fatalf("expected boot script config URL to include ref, got %s", preseedURL.String())
+	}
+	proc.assertGETContains(t, preseedURL.RequestURI(), nil, []string{
 		"d-i user-setup/encrypt-home boolean false",
 		"d-i finish-install/reboot_in_progress note",
 	})
@@ -286,6 +295,80 @@ networkMaps:
 	}
 }
 
+func TestShoelacesPersistsBootReferencesAcrossRestarts(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "provisioning"), 0o755); err != nil {
+		t.Fatalf("create provisioning dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "provisioning", "extra.slc"), []byte(`{{define "provisioning/extra" -}}
+d-i preseed/late_command string echo persisted {{.hostname}} {{.storage_disk}} {{.site}}
+{{end}}
+`), 0o644); err != nil {
+		t.Fatalf("write extra template: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
+defaults:
+  packages:
+    install:
+      - openssh-server
+      - curl
+  storage:
+    disk: /dev/vda
+    wipeDiskPatterns:
+      - /dev/vd*
+  installer:
+    configTemplate: preseed/debian
+    extraTemplate: provisioning/extra
+    configParams:
+      encrypt_home: false
+      site: persisted
+  users:
+    infra:
+      primary: true
+      fullName: Integration User
+      locked: false
+      passwordCrypted: "$6$integration"
+targets:
+  debian12:
+    script: debian.ipxe
+    repos:
+      release: bookworm
+    boot:
+      netboot:
+        kernelArgs:
+          - console=ttyS1
+networkMaps:
+  - network: 127.0.0.1/32
+    defaultTarget: debian12
+    targets:
+      - debian12
+`), 0o644); err != nil {
+		t.Fatalf("write mappings: %v", err)
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "shoelaces-boot-refs.db")
+	proc := startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
+	bootScript := proc.getString(t, "/poll/1/06-66-de-ad-be-ef", nil)
+	preseedURL := renderedPreseedURL(t, bootScript)
+	if ref := preseedURL.Query().Get("ref"); ref == "" {
+		proc.stop(t)
+		t.Fatalf("expected boot script config URL to include ref, got %s", preseedURL.String())
+	}
+	proc.stop(t)
+
+	proc = startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
+	defer proc.stop(t)
+	proc.assertGETContains(t, preseedURL.RequestURI(), nil, []string{
+		"d-i partman-auto/disk string /dev/vda",
+		"for d in /dev/vd*; do",
+		"d-i pkgsel/include string openssh-server curl",
+		"d-i passwd/user-fullname string Integration User",
+		"d-i passwd/username string infra",
+		"d-i preseed/late_command string echo persisted 06-66-de-ad-be-ef /dev/vda persisted",
+		"d-i user-setup/encrypt-home boolean false",
+	})
+}
+
 func TestShoelacesPersistsEventsAcrossRestarts(t *testing.T) {
 	dataDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dataDir, "mappings.yaml"), []byte(`
@@ -305,7 +388,8 @@ networkMaps:
 	}
 
 	const mac = "06:66:de:ad:be:ef"
-	proc := startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	dbPath := filepath.Join(t.TempDir(), "shoelaces-events.db")
+	proc := startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
 	proc.assertGETStatus(t, "/poll/1/06-66-de-ad-be-ef", http.StatusOK)
 	var firstEvents map[string][]eventInfo
 	proc.getJSON(t, "/ajax/events", &firstEvents)
@@ -316,7 +400,7 @@ networkMaps:
 	firstEventID := firstEvents[mac][0].ID
 	proc.stop(t)
 
-	proc = startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	proc = startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
 	defer proc.stop(t)
 	var restartedEvents map[string][]eventInfo
 	proc.getJSON(t, "/ajax/events", &restartedEvents)
@@ -357,7 +441,8 @@ boot
 	}
 
 	const pollPath = "/poll/1/06-66-de-ad-be-ef"
-	proc := startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	dbPath := filepath.Join(t.TempDir(), "shoelaces-manual.db")
+	proc := startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
 	proc.assertGETContains(t, pollPath, nil, []string{"/poll/1/06-66-de-ad-be-ef"})
 
 	var waiting []waitingServerInfo
@@ -377,7 +462,7 @@ boot
 	})
 	proc.stop(t)
 
-	proc = startShoelacesWithDataDirAndPersistence(t, dataDir, "sqlite")
+	proc = startShoelacesWithDataDirAndPersistencePath(t, dataDir, "sqlite", dbPath)
 	defer proc.stop(t)
 
 	waiting = nil
@@ -401,6 +486,11 @@ func startShoelacesWithDataDir(t *testing.T, dataDir string) *shoelacesProcess {
 }
 
 func startShoelacesWithDataDirAndPersistence(t *testing.T, dataDir string, persistenceBackend string) *shoelacesProcess {
+	t.Helper()
+	return startShoelacesWithDataDirAndPersistencePath(t, dataDir, persistenceBackend, "")
+}
+
+func startShoelacesWithDataDirAndPersistencePath(t *testing.T, dataDir string, persistenceBackend string, persistencePath string) *shoelacesProcess {
 	t.Helper()
 
 	testDir, err := os.Getwd()
@@ -438,6 +528,9 @@ level = "debug"
 [persistence]
 backend = "%s"
 `, apiAddr, dataDir, persistenceBackend)
+	if persistencePath != "" {
+		config += fmt.Sprintf("path = %q\n", persistencePath)
+	}
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("write integration config: %v", err)
 	}
@@ -458,12 +551,17 @@ backend = "%s"
 		client:     &http.Client{Timeout: 5 * time.Second},
 		cmd:        cmd,
 	}
+	t.Cleanup(func() { proc.stop(t) })
 	proc.waitForStartup(t, &stderr)
 	return proc
 }
 
 func (p *shoelacesProcess) stop(t *testing.T) {
 	t.Helper()
+	if p.stopped {
+		return
+	}
+	p.stopped = true
 
 	if p.cmd.Process != nil {
 		_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
@@ -559,6 +657,13 @@ func (p *shoelacesProcess) assertGETFixtureWithQuery(t *testing.T, path string, 
 func (p *shoelacesProcess) assertGETContains(t *testing.T, path string, query url.Values, expected []string) {
 	t.Helper()
 
+	got := p.getString(t, path, query)
+	assertContainsAll(t, got, expected)
+}
+
+func (p *shoelacesProcess) getString(t *testing.T, path string, query url.Values) string {
+	t.Helper()
+
 	resp := p.get(t, path, query)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -569,11 +674,7 @@ func (p *shoelacesProcess) assertGETContains(t *testing.T, path string, query ur
 	if err != nil {
 		t.Fatalf("read GET %s response: %v", path, err)
 	}
-	for _, want := range expected {
-		if !bytes.Contains(got, []byte(want)) {
-			t.Fatalf("GET %s response missing %q\nresponse:\n%s", path, want, got)
-		}
-	}
+	return string(got)
 }
 
 func (p *shoelacesProcess) getJSON(t *testing.T, path string, out any) {
@@ -603,6 +704,39 @@ func assertStringInSlice(t *testing.T, got []string, expected string) {
 		}
 	}
 	t.Fatalf("expected %q in %#v", expected, got)
+}
+
+func assertContainsAll(t *testing.T, got string, expected []string) {
+	t.Helper()
+	for _, want := range expected {
+		if !strings.Contains(got, want) {
+			t.Fatalf("response missing %q\nresponse:\n%s", want, got)
+		}
+	}
+}
+
+func assertNotContains(t *testing.T, got string, unexpected string) {
+	t.Helper()
+	if strings.Contains(got, unexpected) {
+		t.Fatalf("response unexpectedly contained %q\nresponse:\n%s", unexpected, got)
+	}
+}
+
+func renderedPreseedURL(t *testing.T, bootScript string) *url.URL {
+	t.Helper()
+	for _, field := range strings.Fields(bootScript) {
+		raw, ok := strings.CutPrefix(field, "preseed/url=")
+		if !ok {
+			continue
+		}
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse preseed URL %q: %v", raw, err)
+		}
+		return parsed
+	}
+	t.Fatalf("boot script does not contain preseed/url field:\n%s", bootScript)
+	return nil
 }
 
 func (p *shoelacesProcess) get(t *testing.T, path string, query url.Values) *http.Response {
