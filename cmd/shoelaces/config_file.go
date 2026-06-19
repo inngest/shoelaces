@@ -16,13 +16,20 @@
 package main
 
 import (
+	"os"
 	"strings"
 
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
 
-func configPathFromArgs(args []string, lookupEnv func(string) (string, bool)) string {
+var defaultConfigPaths = []string{
+	"/etc/shoelaces/shoelaces.yaml",
+	"/etc/shoelaces/shoelaces.json",
+	"/etc/shoelaces/shoelaces.toml",
+}
+
+func configPathFromArgs(args []string, lookupEnv func(string) (string, bool), lookupDefault func() string) string {
 	// Only discover -config/--config here. Full argument validation happens
 	// later in urfave/cli after config values have been loaded.
 	for i := 1; i < len(args); i++ {
@@ -43,10 +50,28 @@ func configPathFromArgs(args []string, lookupEnv func(string) (string, bool)) st
 			return value
 		}
 	}
-	if value, ok := lookupEnv("CONFIG"); ok {
+	if value, ok := lookupEnv("CONFIG"); ok && value != "" {
 		return value
 	}
+	return lookupDefault()
+}
+
+func defaultConfigPath() string {
+	return discoverDefaultConfigPath(defaultConfigPaths, fileExists)
+}
+
+func discoverDefaultConfigPath(paths []string, exists func(string) bool) string {
+	for _, path := range paths {
+		if exists(path) {
+			return path
+		}
+	}
 	return ""
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func readConfig(path string) (map[any]any, error) {

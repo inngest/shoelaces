@@ -34,6 +34,27 @@ The supported backends are:
 The local development profile in `dev/shoelaces.yaml` uses SQLite at
 `dev/data-dir/runtime/shoelaces.db` and can be started with `make dev`.
 
+## CLI Inspection
+
+Runtime inspection commands open the configured SQLite store read-only from the
+local filesystem. They do not call the HTTP API or construct a full server
+environment, which makes them useful for server-local debugging when Shoelaces
+is stopped or when the web UI is unavailable.
+
+```sh
+shoelaces events list --limit 20
+shoelaces events list --mac 00:11:22:33:44:55 --output json
+shoelaces servers list --waiting
+shoelaces servers get 00:11:22:33:44:55
+shoelaces boot-sessions get 01J...
+```
+
+The inspection commands require `persistence.backend: sqlite`. The `memory`
+backend is process-local and intentionally returns a clear error for
+inspection because a separate CLI process cannot read another process'
+in-memory state. `persistence.path` follows the same resolution rules as the
+server: relative paths are resolved under `data.dir`.
+
 ## Stored Records
 
 | Record        | Retention                            | Purpose                                                             |
