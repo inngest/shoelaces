@@ -8,6 +8,7 @@ defaults:
     osMirror: http://ftp.debian.org/debian
     release: bookworm
   storage:
+    mode: regular
     disk: /dev/nvme0n1
     wipe: true
     wipeDiskPatterns:

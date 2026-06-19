@@ -322,12 +322,19 @@ explicit disk paths or `/dev` glob patterns that installer templates may clear
 before partitioning. This lets a host install to one disk while also removing
 old partition, mdraid, or LVM metadata from a known disposable disk set.
 
+Structured `storage.mode` rendering currently applies to Debian preseed
+targets. Kickstart, Ubuntu-specific installers, CoreOS/Ignition, and cloud-init
+storage semantics should be handled as future OS-specific work.
+
 For Debian `storage.mode: regular` and `storage.mode: lvm`,
 `storage.filesystems` entries named `esp`, `boot`, `swap`, and `root` override
 the default partition sizes, filesystem types, and mountpoints. Root with
 `size: grow` uses `sizeMiB` as the minimum and continues to consume remaining
-disk space. In LVM mode, `root` and `swap` are rendered as logical volumes in
-the configured `storage.volumeGroup`:
+disk space. `regular` is the default and renders a plain GPT/UEFI layout. It
+keeps `/boot` as a separate ext4 partition for consistency with LVM and future
+encryption-sensitive layouts. In LVM mode, `root` and `swap` are rendered as
+logical volumes in the configured `storage.volumeGroup`, so LVM installs should
+opt in explicitly:
 
 ```yaml
 storage:
@@ -348,6 +355,17 @@ storage:
       size: grow
       sizeMiB: 20000
 ```
+
+```yaml
+storage:
+  mode: lvm
+  disk: /dev/nvme0n1
+  volumeGroup: vg0
+```
+
+The legacy `plain` value remains parseable in mappings for compatibility with
+older generic config, but Debian preseed rejects it clearly. Use `regular` for
+new Debian plain-disk installs.
 
 For Debian `storage.mode: raid`, configure RAID member disks separately from
 `storage.disk` and `storage.wipeDiskPatterns`. Initial Debian support is
@@ -371,7 +389,15 @@ storage:
 Debian RAID mode duplicates normal EFI System Partitions across the member
 disks rather than putting the ESP on mdraid. The installer mounts one ESP at
 `/boot/efi`, installs/copies bootloader files to both ESPs, and uses mdadm for
-Linux-managed filesystems such as `/boot`, `/`, and swap.
+Linux-managed filesystems such as `/boot`, `/`, and swap. It remains compatible
+with Shoelaces/iPXE installer startup when the host network boots a UEFI iPXE
+binary; the UEFI-only constraint applies to installed-system disk boot and ESP
+layout.
+
+The default Debian RAID sizing is conservative: 512 MiB ESPs on both member
+disks, 1 GiB RAID1 ext4 `/boot`, optional RAID1 swap, and a growable RAID1 ext4
+root filesystem. The same named `storage.filesystems` entries can override
+these defaults across regular, LVM, and RAID modes.
 
 For NVMe-only hosts:
 
