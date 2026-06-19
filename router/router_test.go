@@ -451,6 +451,50 @@ release={{.release}}
 	assert.Contains(t, rr.Body.String(), "user=infra")
 }
 
+func TestConfigTemplateRouteUsesBootReferenceEnvironmentWithoutEnvPath(t *testing.T) {
+	dataDir := t.TempDir()
+	envDir := filepath.Join(dataDir, "env_overrides", "staging")
+	require.NoError(t, os.MkdirAll(envDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.cfg.slc"), []byte(`{{define "install.cfg" -}}
+variant=default
+baseURL={{.baseURL}}
+hostname={{.hostname}}
+{{end}}
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(envDir, "install.cfg.slc"), []byte(`{{define "install.cfg" -}}
+variant=staging
+baseURL={{.baseURL}}
+hostname={{.hostname}}
+{{end}}
+`), 0o644))
+
+	var ref string
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Environments = []string{"staging"}
+		env.Templates = templates.New(env.Logger)
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		var err error
+		ref, err = env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server:      server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target:      "install.cfg",
+			Environment: "staging",
+			Params: map[string]any{
+				"hostname": "boot-host",
+			},
+		})
+		require.NoError(t, err)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/install.cfg?ref="+url.QueryEscape(ref), nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "variant=staging")
+	assert.Contains(t, rr.Body.String(), "baseURL=localhost:8081/env/staging")
+	assert.Contains(t, rr.Body.String(), "hostname=boot-host")
+}
+
 func TestConfigTemplateRouteMissingBootReferenceReturnsNotFound(t *testing.T) {
 	handler := newTestRouter(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/configs/preseed/debian?ref=missing-ref", nil)
