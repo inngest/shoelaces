@@ -43,8 +43,8 @@ storage:
   raid:
     level: 1
     devices:
-      - /dev/nvme0n1
-      - /dev/nvme1n1
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_a
+      - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_b
     bootDegraded: true
 #+end_src
 
@@ -284,23 +284,23 @@ With one failed disk, the expected impact should be:
 
 *** Phase 7: RAID Schema And Validation
 
-- [ ] Add a narrow structured RAID block to =StorageConfig= with fields such as
+- [X] Add a narrow structured RAID block to =StorageConfig= with fields such as
   =raid.level=, =raid.devices=, and =raid.bootDegraded=.
-- [ ] Validate initial Debian RAID support as RAID level =1= with exactly two
+- [X] Validate initial Debian RAID support as RAID level =1= with exactly two
   member disks.
-- [ ] Validate Debian RAID mode requires =boot.firmware: uefi=.
-- [ ] Validate RAID member disks as explicit =/dev/...= paths and keep them
+- [X] Validate Debian RAID mode requires =boot.firmware: uefi=.
+- [X] Validate RAID member disks as explicit =/dev/...= paths and keep them
   separate from =wipeDiskPatterns=.
-- [ ] Recommend =/dev/disk/by-id/...= RAID member paths in docs and examples,
+- [X] Recommend =/dev/disk/by-id/...= RAID member paths in docs and examples,
   while allowing simpler device names in tests.
-- [ ] Project RAID fields into template params such as =storage_raid_level=,
+- [X] Project RAID fields into template params such as =storage_raid_level=,
   =storage_raid_devices=, and =storage_raid_boot_degraded=.
-- [ ] Add parser, resolver, merge, copy, and projection tests for the RAID
+- [X] Add parser, resolver, merge, copy, and projection tests for the RAID
   block.
-- [ ] Ensure =storage.mode: raid= fails clearly when required RAID fields are
+- [X] Ensure =storage.mode: raid= fails clearly when required RAID fields are
   missing or invalid.
-- [ ] Add tests for valid =raid= values.
-- [ ] Add validation tests proving Debian RAID mode rejects BIOS firmware.
+- [X] Add tests for valid =raid= values.
+- [X] Add validation tests proving Debian RAID mode rejects BIOS firmware.
 
 *** Phase 8: RAID1 Storage Recipe
 
