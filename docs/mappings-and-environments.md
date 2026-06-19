@@ -132,10 +132,40 @@ Use broad patterns such as `/dev/sd*` only when every matching disk on the host
 is known to be disposable. Prefer stable, narrower selectors such as
 `/dev/disk/by-id/<fleet-prefix>*` when available.
 
-For Debian RAID mode, keep member disks as layout data under
+## Debian Storage Modes
+
+Structured `storage.mode` rendering currently applies to Debian preseed
+targets. Kickstart, Ubuntu-specific installers, CoreOS/Ignition, and cloud-init
+storage semantics should be handled as OS-specific work rather than inheriting
+the Debian preseed layout.
+
+Debian `storage.mode: regular` is the default. It renders a plain GPT/UEFI
+layout on `storage.disk` with an EFI System Partition mounted at `/boot/efi`, a
+separate ext4 `/boot`, optional swap, and root mounted at `/`. `/boot` remains
+separate for consistency with LVM mode and to keep future encryption-sensitive
+layouts straightforward.
+
+Debian `storage.mode: lvm` preserves the explicit LVM layout. It renders the
+same ESP and `/boot` partitions, then creates root and swap logical volumes in
+`storage.volumeGroup`. LVM installs should opt in explicitly:
+
+```yaml
+storage:
+  mode: lvm
+  disk: /dev/nvme0n1
+  volumeGroup: vg0
+```
+
+The legacy `plain` value remains parseable in mappings for compatibility with
+older generic config, but Debian preseed rejects it clearly. Use `regular` for
+new Debian plain-disk installs.
+
+For Debian `storage.mode: raid`, keep member disks as layout data under
 `storage.raid.devices`, not as wipe selectors. Initial RAID support is UEFI-only
-RAID1 with exactly two member disks. Prefer stable `/dev/disk/by-id/...` paths
-for production servers:
+RAID1 with exactly two member disks. It remains compatible with Shoelaces/iPXE
+installer startup when the host network boots a UEFI iPXE binary; the UEFI-only
+constraint applies to installed-system disk boot and ESP layout. Prefer stable
+`/dev/disk/by-id/...` paths for production servers:
 
 ```yaml
 boot:
@@ -149,6 +179,35 @@ storage:
       - /dev/disk/by-id/nvme-Samsung_SSD_990_PRO_os_b
     bootDegraded: true
 ```
+
+Debian RAID mode creates a normal 512 MiB ESP on each disk, a 1 GiB RAID1
+ext4 `/boot`, optional RAID1 swap, and a growable RAID1 ext4 root filesystem.
+`storage.filesystems` can override the same named entries used by regular and
+LVM modes (`esp`, `boot`, `swap`, and `root`), but the initial documented
+defaults remain intentionally conservative. The ESPs are duplicated normal FAT
+partitions rather than mdraid members because UEFI firmware does not assemble
+Linux md arrays.
+
+### RAID1 OS Disk Recovery
+
+When replacing a failed Debian RAID1 OS disk:
+
+1. Identify the failed disk and surviving disk with `lsblk`, `cat /proc/mdstat`,
+   and `mdadm --detail /dev/md*`.
+2. Replace the failed disk and confirm the new disk path is the expected
+   `storage.raid.devices` member, preferably under `/dev/disk/by-id/...`.
+3. Recreate the replacement disk partition table to match the surviving disk.
+   For matching devices, `sgdisk --replicate` followed by `sgdisk --randomize-guids`
+   is usually the least error-prone approach.
+4. Format or restore the replacement ESP, copy the surviving ESP contents to
+   it, and reinstall or refresh the EFI fallback bootloader on that ESP.
+5. Add the replacement RAID member partitions back to the md arrays with
+   `mdadm --add`.
+6. Monitor resync with `cat /proc/mdstat` until all arrays are clean.
+7. Refresh mdadm config and initramfs with `mdadm --detail --scan` and
+   `update-initramfs -u`.
+8. Verify firmware boot entries or fallback paths can boot from either disk
+   before considering the repair complete.
 
 ## Environment Overrides
 

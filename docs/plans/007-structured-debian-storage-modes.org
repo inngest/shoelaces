@@ -347,40 +347,46 @@ With one failed disk, the expected impact should be:
 
 *** Phase 9: Documentation And Examples
 
-- [ ] Update =docs/mappings-and-environments.md= to describe =regular= and
+- [X] Update =docs/mappings-and-environments.md= to describe =regular= and
   =lvm= Debian storage behavior.
-- [ ] Document Debian RAID1 storage behavior and provide a two-M.2-disk
+- [X] Document Debian RAID1 storage behavior and provide a two-M.2-disk
   example using =storage.mode: raid= and =storage.raid.devices=.
-- [ ] Use =/dev/disk/by-id/...= paths in production-oriented RAID examples.
-- [ ] Document that Debian RAID mode is UEFI-only in this plan.
-- [ ] Document that UEFI RAID mode still works with iPXE installer startup
+- [X] Use =/dev/disk/by-id/...= paths in production-oriented RAID examples.
+- [X] Document that Debian RAID mode is UEFI-only in this plan.
+- [X] Document that UEFI RAID mode still works with iPXE installer startup
   when the host network boots a UEFI iPXE binary.
-- [ ] Document the fixed initial RAID sizing behavior and note future work to
+- [X] Document the fixed initial RAID sizing behavior and note future work to
   map =storage.filesystems= sizes consistently across all modes.
-- [ ] Document that this plan covers Debian preseed only; kickstart,
+- [X] Document that this plan covers Debian preseed only; kickstart,
   Ubuntu-specific installers, CoreOS/Ignition, and cloud-init storage semantics
   should be handled by future OS-specific work.
-- [ ] Update examples so new/default Debian installs show =regular= behavior
+- [X] Update examples so new/default Debian installs show =regular= behavior
   and LVM examples opt in explicitly with =storage.mode: lvm=.
-- [ ] Document whether =plain= is still accepted, deprecated, or rejected.
-- [ ] Note that =/boot= remains separate in =regular= mode for consistency with
+- [X] Document whether =plain= is still accepted, deprecated, or rejected.
+- [X] Note that =/boot= remains separate in =regular= mode for consistency with
   LVM and future encryption-sensitive layouts.
-- [ ] Add an operator recovery runbook for replacing a failed RAID1 OS disk:
+- [X] Add an operator recovery runbook for replacing a failed RAID1 OS disk:
   identify the failed disk, replace it, recreate partitions, restore/copy the
   ESP, add new members back to md arrays, monitor resync, and verify both ESPs
   remain bootable.
 
 *** Phase 10: Verification
 
-- [ ] Run focused tests after later-phase work:
+- [X] Run focused tests after later-phase work:
   =go test ./test/render-validation ./templates ./mappings ./router ./polling=
-- [ ] Run the full Go test suite:
+- [X] Run the full Go test suite:
   =go test ./...=
 - [ ] Manually validate a Debian RAID install in a VM before considering RAID
   mode done.
 - [ ] Validate degraded reboot with disk A missing and disk B present.
 - [ ] Validate degraded reboot with disk B missing and disk A present.
-- [ ] Run =./scripts/check-plan-status.sh= after updating this plan.
+- [X] Run =./scripts/check-plan-status.sh= after updating this plan.
+
+Phase 10 manual RAID validation remains open because this workspace does not
+provide a VM validation harness or local =qemu-system-x86_64=,
+=virt-install=, =packer=, or =limactl= tooling. Do not treat RAID mode as
+production-validated until the install and degraded reboot checks above are run
+in a Debian VM or on equivalent lab hardware.
 
 ** Acceptance Criteria
 
