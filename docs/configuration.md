@@ -9,7 +9,33 @@ Configuration files can be TOML, YAML, or JSON.
 The parser is selected from the config file extension: `.toml`, `.yaml`, `.yml`, or `.json`.
 Config files use nested keys for hyphenated CLI flags. For example, `network.bindAddr` maps to `--bind-addr`, `network.baseURL` maps to `--base-url`, `data.dir` maps to `--data-dir`, `log.level` maps to `--log-level`, and `tftp.enabled` maps to `--tftp-enabled`.
 
+## Commands
+
+`shoelaces` with no command prints help and exits successfully. Start the
+server explicitly with `shoelaces run`.
+
+Runtime inspection commands read the configured SQLite persistence store
+directly, so they can be run on the Shoelaces host even when the HTTP server is
+stopped:
+
+```sh
+shoelaces --config /etc/shoelaces.toml events list
+shoelaces --config /etc/shoelaces.toml events get 01J...
+shoelaces --config /etc/shoelaces.toml servers list --waiting
+shoelaces --config /etc/shoelaces.toml servers get 00:11:22:33:44:55
+shoelaces --config /etc/shoelaces.toml boot-sessions get 01J...
+```
+
+Inspection commands support `--output table` and `--output json`; table output
+is the default. Inspection requires `persistence.backend = "sqlite"` because a
+separate CLI process cannot inspect another process' in-memory state.
+
 ## Flags
+
+`--config` and `--version` are root options. Server startup options belong to
+the `run` command, for example `shoelaces --config /etc/shoelaces.toml run
+--data-dir /var/lib/shoelaces`. Config-file and environment-variable forms are
+shared by `run` and the runtime inspection commands where applicable.
 
 | CLI flag                                | Config key                           | Environment                           | Default                | Notes                                                                                                       |
 |-----------------------------------------|--------------------------------------|---------------------------------------|------------------------|-------------------------------------------------------------------------------------------------------------|

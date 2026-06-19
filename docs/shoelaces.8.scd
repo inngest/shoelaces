@@ -6,9 +6,40 @@ shoelaces - automated server bootstrapping
 
 # SYNOPSIS
 
-*shoelaces* [options...]
+*shoelaces* [options...] <command>
+
+*shoelaces* [options...] *run* [run options...]
+
+*shoelaces* [options...] *events list* [options...]
+
+*shoelaces* [options...] *events get* [options...] <event-id>
+
+*shoelaces* [options...] *servers list* [options...]
+
+*shoelaces* [options...] *servers get* [options...] <mac>
+
+*shoelaces* [options...] *boot-sessions get* [options...] <ref>
 
 # OPTIONS
+
+## Global Options
+
+*--config* <config>
+	Specifies a config file. Most options can be specified in the config;
+	*--debug* is CLI-only.
+
+*--version*
+	Prints version information and exits.
+
+Running *shoelaces* with no command prints command help and exits successfully.
+
+## Run Options
+
+Server startup options belong to the *run* command. For example:
+
+```
+shoelaces --config /etc/shoelaces.toml run --data-dir /var/lib/shoelaces
+```
 
 *--base-url* <string>
 	Optional parameter. Specifies the base address that will be used when
@@ -18,10 +49,6 @@ shoelaces - automated server bootstrapping
 *--bind-addr* <host:port>
 	The address where Shoelaces will listen for requests. Defaults to
 	"localhost:8081".
-
-*--config* <config>
-	Specifies a config file. Most options can be specified in the config;
-	*--debug* is CLI-only.
 
 *--data-dir* <directory>
 	Specifies a directory with mappings, configs, templates, etc.
@@ -65,9 +92,6 @@ shoelaces - automated server bootstrapping
 
 *--tftp-timeout* <duration>
 	Per-request embedded TFTP timeout. Defaults to "5s".
-
-*--version*
-	Prints version information and exits.
 
 # DESCRIPTION
 
@@ -128,6 +152,49 @@ late_command, kickstart %post, or cloud-init runcmd.
 See "docs/persistence.md" for database location, retention behavior,
 backup/recovery expectations, boot reference resolution, and the sqlc/Goose
 workflow.
+
+# COMMANDS
+
+*run*
+	Start the Shoelaces HTTP server and optional embedded TFTP server.
+
+*events list*
+	List persisted events in chronological order. Options:
+	*--mac* <mac> filters by MAC address, *--type* <type> filters by event type,
+	*--since* <RFC3339 timestamp> filters by timestamp, *--limit* <n> limits the
+	result count, and *--output* <table|json> selects the output format.
+
+*events get* <event-id>
+	Show one persisted event by ULID. Supports *--output* <table|json>.
+
+*servers list*
+	List persisted waiting and selected server state. Options: *--mac* <mac>
+	filters by MAC address, *--waiting* shows only hosts waiting for manual
+	selection, and *--output* <table|json> selects the output format.
+
+*servers get* <mac>
+	Show persisted server state for one MAC address. Supports
+	*--output* <table|json>.
+
+*boot-sessions get* <ref>
+	Show the redacted metadata for one boot/config reference. Supports
+	*--output* <table|json>.
+
+Runtime inspection commands open the configured SQLite persistence database
+read-only from the local filesystem. They do not call the HTTP API, so they can
+be used when the server is stopped or the web UI is unavailable. Inspection
+requires *persistence.backend = "sqlite"*; the *memory* backend is process-local
+and cannot be inspected by a separate CLI process.
+
+Common server-local debugging examples:
+
+```
+shoelaces --config /etc/shoelaces.toml events list --limit 20
+shoelaces --config /etc/shoelaces.toml events list --mac 00:11:22:33:44:55 --output json
+shoelaces --config /etc/shoelaces.toml servers list --waiting
+shoelaces --config /etc/shoelaces.toml servers get 00:11:22:33:44:55
+shoelaces --config /etc/shoelaces.toml boot-sessions get 01J...
+```
 
 Here is an example TOML config file:
 

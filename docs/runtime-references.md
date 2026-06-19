@@ -7,9 +7,9 @@ without carrying full structured config in URLs.
 
 | Record | Lookup | User-facing API | Notes |
 |--------|--------|-----------------|-------|
-| Boot sessions | `ref` | `GET /ajax/boot-sessions/{ref}` | Opaque boot/config references used by `/configs/*?ref=...`. The API returns redacted metadata only. |
-| Event history | event ULID | `GET /ajax/events/{id}` and `GET /ajax/events` | Events are persisted with redacted params before storage. |
-| Waiting/manual server state | MAC address | `GET /ajax/servers` | Shows only hosts currently waiting for manual selection. Selected state is reused internally on the next poll. |
+| Boot sessions | `ref` | `GET /ajax/boot-sessions/{ref}` or `shoelaces boot-sessions get <ref>` | Opaque boot/config references used by `/configs/*?ref=...`. Operator lookups return redacted metadata only. |
+| Event history | event ULID | `GET /ajax/events/{id}`, `GET /ajax/events`, `shoelaces events list`, or `shoelaces events get <event-id>` | Events are persisted with redacted params before storage. |
+| Waiting/manual server state | MAC address | `GET /ajax/servers`, `shoelaces servers list`, or `shoelaces servers get <mac>` | Shows persisted waiting and selected state. Selected state is reused internally on the next poll. |
 | Host observations | MAC/IP/hostname in events and state | Existing event/server APIs | No separate host inventory API exists yet. |
 
 ## Redaction

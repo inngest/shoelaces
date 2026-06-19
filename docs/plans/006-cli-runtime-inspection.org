@@ -1,6 +1,6 @@
 #+title: CLI Runtime Inspection
 #+author: Darwin D. Wu
-#+status: Draft
+#+status: Done
 #+date: <2026-06-19 Fri>
 
 * CLI Runtime Inspection
@@ -185,25 +185,25 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 7: Documentation And Verification
 
-- [ ] Document the new command structure in the manpage and configuration docs.
-- [ ] Document that runtime inspection requires SQLite persistence.
-- [ ] Include examples for common server-local debugging flows.
-- [ ] Run =go fmt=.
-- [ ] Run =go test ./...=.
-- [ ] Run =make test= if the change touches integration-sensitive CLI behavior.
-- [ ] Run =./scripts/check-plan-status.sh=.
+- [X] Document the new command structure in the manpage and configuration docs.
+- [X] Document that runtime inspection requires SQLite persistence.
+- [X] Include examples for common server-local debugging flows.
+- [X] Run =go fmt=.
+- [X] Run =go test ./...=.
+- [X] Run =make test= if the change touches integration-sensitive CLI behavior.
+- [X] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 
-- [ ] Bare =shoelaces= prints help and exits successfully without starting the
+- [X] Bare =shoelaces= prints help and exits successfully without starting the
   server.
-- [ ] The explicit server command starts the server through the existing startup
+- [X] The explicit server command starts the server through the existing startup
   path.
-- [ ] Operators can list and fetch persisted events from the CLI.
-- [ ] Operators can list and fetch persisted server states from the CLI.
-- [ ] Operators can fetch a persisted boot-session reference from the CLI.
-- [ ] CLI inspection fails clearly when configured with memory persistence.
-- [ ] Human-readable output is available without adding a new table dependency.
-- [ ] JSON output is stable enough for scripts.
-- [ ] Tests cover command routing, persistence opening, output formatting, and
+- [X] Operators can list and fetch persisted events from the CLI.
+- [X] Operators can list and fetch persisted server states from the CLI.
+- [X] Operators can fetch a persisted boot-session reference from the CLI.
+- [X] CLI inspection fails clearly when configured with memory persistence.
+- [X] Human-readable output is available without adding a new table dependency.
+- [X] JSON output is stable enough for scripts.
+- [X] Tests cover command routing, persistence opening, output formatting, and
   representative inspection flows.
