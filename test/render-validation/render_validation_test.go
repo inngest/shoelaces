@@ -650,10 +650,31 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
 	assert.Contains(t, rendered, "in-target update-initramfs -u")
 	assert.Contains(t, rendered, "for d in /dev/nvme0n1 /dev/nvme1n1; do")
-	assert.Contains(t, rendered, `case "$d" in /dev/disk/by-id/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
+	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
 	assert.Contains(t, rendered, "EFI/BOOT/BOOTX64.EFI")
 	assert.Contains(t, rendered, "/target/boot/efi-secondary")
+}
+
+func TestRenderedDebianPreseedRAIDLateCommandHandlesStableDiskSymlinks(t *testing.T) {
+	params := mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level: 1,
+				Devices: []string{
+					"/dev/disk/by-path/pci-0000:00:17.0-ata-1",
+					"/dev/disk/by-path/pci-0000:00:17.0-ata-2",
+				},
+			},
+		},
+		Boot: mappings.BootConfig{Firmware: "uefi"},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "for d in /dev/disk/by-path/pci-0000:00:17.0-ata-1 /dev/disk/by-path/pci-0000:00:17.0-ata-2; do")
+	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
 }
 
 func TestRenderedDebianPreseedRAIDRecipeAppliesStructuredFilesystems(t *testing.T) {

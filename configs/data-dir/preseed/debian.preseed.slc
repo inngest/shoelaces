@@ -228,7 +228,7 @@ d-i preseed/late_command string \
     first=1; \
     for d in {{.storage_raid_devices}}; do \
       p="${d}1"; \
-      case "$d" in /dev/disk/by-id/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
+      case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
       [ -b "$p" ] || continue; \
       if [ "$first" = 1 ]; then efi=/target/boot/efi; first=0; else efi=/target/boot/efi-secondary; mount "$p" "$efi" || continue; fi; \
       chroot /target grub-install --target=x86_64-efi --efi-directory="${efi#/target}" --bootloader-id=debian --recheck --no-nvram || true; \
