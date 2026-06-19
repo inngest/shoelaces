@@ -268,13 +268,13 @@ func TestRenderTemplateRedactsSensitiveParamsInLogs(t *testing.T) {
 	rendered, err := renderer.RenderTemplate("boot.ipxe", map[string]interface{}{
 		"hostname":              "secure-host",
 		"baseURL":               "127.0.0.1:8081",
-		"root_password_crypted": "hash",
+		"root_password_crypted": "root-password-value",
 		"bootstrap_token":       "token-value",
 	}, "")
 
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "secure-host")
-	assert.NotContains(t, logOutput.String(), "hash")
+	assert.NotContains(t, logOutput.String(), "root-password-value")
 	assert.NotContains(t, logOutput.String(), "token-value")
 	logParams := loggedTemplateParams(t, logOutput.String())
 	assert.Equal(t, "[REDACTED]", logParams["root_password_crypted"])
