@@ -405,6 +405,10 @@ func TestRenderedDebianPreseedDefaultRegularRecipeIsNonLVM(t *testing.T) {
 
 	assert.Contains(t, rendered, "d-i partman-auto/method string regular")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular")
+	assert.Contains(t, rendered, "512 512 512 fat32")
+	assert.Contains(t, rendered, "1024 1024 1024 ext4")
+	assert.Contains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.Contains(t, rendered, "20000 100000000 -1 ext4")
 	assert.Contains(t, rendered, "mountpoint{ / }")
 	assert.Contains(t, rendered, "method{ swap }")
 	assert.NotContains(t, rendered, "partman-lvm")
@@ -414,6 +418,50 @@ func TestRenderedDebianPreseedDefaultRegularRecipeIsNonLVM(t *testing.T) {
 	assert.NotContains(t, rendered, "in_vg{")
 	assert.NotContains(t, rendered, "vg_name{")
 	assert.NotContains(t, rendered, "lv_name{")
+}
+
+func TestRenderedDebianPreseedRegularRecipeAppliesStructuredFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Filesystems: map[string]mappings.FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i anna/choose_modules string partman-xfs")
+	assert.Contains(t, rendered, "768 768 768 fat32")
+	assert.Contains(t, rendered, "mountpoint{ /efi }")
+	assert.Contains(t, rendered, "2048 2048 2048 xfs")
+	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ xfs }")
+	assert.Contains(t, rendered, "4096 4096 4096 linux-swap")
+	assert.Contains(t, rendered, "65536 100000000 -1 xfs")
+	assert.NotContains(t, rendered, "1024 1024 1024 ext4")
+	assert.NotContains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.NotContains(t, rendered, "20000 100000000 -1 ext4")
 }
 
 func TestRenderedDebianPreseedPreservesExplicitLVMRecipe(t *testing.T) {

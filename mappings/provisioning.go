@@ -191,6 +191,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "packages_update_policy", provisioning.Packages.UpdatePolicy)
 	setDefaultParam(params, "storage_disk", provisioning.Storage.Disk)
 	setDefaultParam(params, "storage_mode", provisioning.Storage.Mode)
+	projectDebianRegularFilesystemParams(params, provisioning.Storage.Filesystems)
 	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_ubuntu_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_centos_mirror", provisioning.Repos.OSMirror)
@@ -297,6 +298,26 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "storage_wipe", "true")
 	setDefaultParamValue(params, "storage_mode", "regular")
 	setDefaultParamValue(params, "ubuntu_minimal_storage_mode", "regular")
+	setDefaultParamValue(params, "debian_regular_partman_modules", "partman-ext4")
+	setDefaultParamValue(params, "debian_regular_esp_min_size_mib", "512")
+	setDefaultParamValue(params, "debian_regular_esp_priority", "512")
+	setDefaultParamValue(params, "debian_regular_esp_max_size_mib", "512")
+	setDefaultParamValue(params, "debian_regular_esp_fstype", "fat32")
+	setDefaultParamValue(params, "debian_regular_esp_mountpoint", "/boot/efi")
+	setDefaultParamValue(params, "debian_regular_boot_min_size_mib", "1024")
+	setDefaultParamValue(params, "debian_regular_boot_priority", "1024")
+	setDefaultParamValue(params, "debian_regular_boot_max_size_mib", "1024")
+	setDefaultParamValue(params, "debian_regular_boot_fstype", "ext4")
+	setDefaultParamValue(params, "debian_regular_boot_mountpoint", "/boot")
+	setDefaultParamValue(params, "debian_regular_swap_enabled", "true")
+	setDefaultParamValue(params, "debian_regular_swap_min_size_mib", "8192")
+	setDefaultParamValue(params, "debian_regular_swap_priority", "8192")
+	setDefaultParamValue(params, "debian_regular_swap_max_size_mib", "8192")
+	setDefaultParamValue(params, "debian_regular_root_min_size_mib", "20000")
+	setDefaultParamValue(params, "debian_regular_root_priority", "100000000")
+	setDefaultParamValue(params, "debian_regular_root_max_size_mib", "-1")
+	setDefaultParamValue(params, "debian_regular_root_fstype", "ext4")
+	setDefaultParamValue(params, "debian_regular_root_mountpoint", "/")
 	setDefaultParamValue(params, "repo_firmware", "true")
 	setDefaultParamValue(params, "repo_contrib", "true")
 	setDefaultParamValue(params, "repo_non_free", "true")
@@ -332,6 +353,84 @@ func setDefaultParam(params map[string]interface{}, key string, value string) {
 func setDefaultParamValue(params map[string]interface{}, key string, value any) {
 	if _, ok := params[key]; !ok {
 		params[key] = fmt.Sprint(value)
+	}
+}
+
+func projectDebianRegularFilesystemParams(params map[string]interface{}, filesystems map[string]FilesystemConfig) {
+	if len(filesystems) == 0 {
+		return
+	}
+
+	projectDebianRegularPartitionParams(params, "esp", "debian_regular_esp", filesystems["esp"])
+	projectDebianRegularPartitionParams(params, "boot", "debian_regular_boot", filesystems["boot"])
+	projectDebianRegularPartitionParams(params, "swap", "debian_regular_swap", filesystems["swap"])
+	projectDebianRegularPartitionParams(params, "root", "debian_regular_root", filesystems["root"])
+
+	if modules := debianRegularPartmanModules(filesystems); modules != "" {
+		setDefaultParamValue(params, "debian_regular_partman_modules", modules)
+	}
+}
+
+func projectDebianRegularPartitionParams(params map[string]interface{}, name, prefix string, filesystem FilesystemConfig) {
+	if boolValue(filesystem.Absent) {
+		if name == "swap" {
+			setDefaultParamValue(params, prefix+"_enabled", "false")
+		}
+		return
+	}
+	if filesystem.Mountpoint != "" && name != "swap" {
+		setDefaultParamValue(params, prefix+"_mountpoint", filesystem.Mountpoint)
+	}
+	if filesystem.FSType != "" && name != "swap" {
+		setDefaultParamValue(params, prefix+"_fstype", filesystem.FSType)
+	}
+	if filesystem.SizeMiB != nil {
+		setDefaultParamValue(params, prefix+"_min_size_mib", *filesystem.SizeMiB)
+		if name == "root" && strings.EqualFold(filesystem.Size, "grow") {
+			setDefaultParamValue(params, prefix+"_max_size_mib", "-1")
+		} else {
+			setDefaultParamValue(params, prefix+"_priority", *filesystem.SizeMiB)
+			setDefaultParamValue(params, prefix+"_max_size_mib", *filesystem.SizeMiB)
+		}
+		return
+	}
+	if name == "root" && strings.EqualFold(filesystem.Size, "grow") {
+		setDefaultParamValue(params, prefix+"_max_size_mib", "-1")
+	}
+}
+
+func debianRegularPartmanModules(filesystems map[string]FilesystemConfig) string {
+	modules := make([]string, 0, 3)
+	seen := map[string]bool{}
+	for _, name := range []string{"boot", "root"} {
+		filesystem := filesystems[name]
+		if boolValue(filesystem.Absent) {
+			continue
+		}
+		fstype := filesystem.FSType
+		if fstype == "" {
+			fstype = "ext4"
+		}
+		module := debianPartmanModule(fstype)
+		if module == "" || seen[module] {
+			continue
+		}
+		modules = append(modules, module)
+		seen[module] = true
+	}
+	return strings.Join(modules, " ")
+}
+
+func debianPartmanModule(fstype string) string {
+	switch strings.ToLower(strings.TrimSpace(fstype)) {
+	case "ext2", "ext3", "ext4":
+		return "partman-ext4"
+	case "xfs":
+		return "partman-xfs"
+	case "btrfs":
+		return "partman-btrfs"
+	default:
+		return ""
 	}
 }
 

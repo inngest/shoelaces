@@ -46,7 +46,7 @@ d-i partman/early_command string \
 {{end}}
 
 {{define "preseed/debian/storage/regular" -}}
-d-i anna/choose_modules string partman-ext4
+d-i anna/choose_modules string {{.debian_regular_partman_modules}}
 
 # Use selected storage method
 d-i partman-auto/method string regular
@@ -59,24 +59,26 @@ d-i partman-md/confirm_nooverwrite boolean true
 # Expert recipe: ESP + /boot + swap + root on regular partitions
 d-i partman-auto/expert_recipe string \
   uefi-regular ::                                                        \
-    512 512 512 fat32                                                    \
+    {{.debian_regular_esp_min_size_mib}} {{.debian_regular_esp_priority}} {{.debian_regular_esp_max_size_mib}} {{.debian_regular_esp_fstype}} \
         $primary{ } $iflabel{ gpt }                                      \
         method{ efi } format{ }                                          \
-        mountpoint{ /boot/efi }                                          \
+        mountpoint{ {{.debian_regular_esp_mountpoint}} }                 \
     .                                                                    \
-    1024 1024 1024 ext4                                                  \
+    {{.debian_regular_boot_min_size_mib}} {{.debian_regular_boot_priority}} {{.debian_regular_boot_max_size_mib}} {{.debian_regular_boot_fstype}} \
         $primary{ } $iflabel{ gpt }                                      \
         method{ format } format{ }                                       \
-        use_filesystem{ } filesystem{ ext4 }                             \
-        mountpoint{ /boot }                                              \
+        use_filesystem{ } filesystem{ {{.debian_regular_boot_fstype}} }  \
+        mountpoint{ {{.debian_regular_boot_mountpoint}} }                \
     .                                                                    \
-    8192 8192 8192 linux-swap                                            \
+{{if eq .debian_regular_swap_enabled "true" -}}
+    {{.debian_regular_swap_min_size_mib}} {{.debian_regular_swap_priority}} {{.debian_regular_swap_max_size_mib}} linux-swap \
         method{ swap } format{ }                                         \
     .                                                                    \
-    20000 100000000 -1 ext4                                              \
+{{end -}}
+    {{.debian_regular_root_min_size_mib}} {{.debian_regular_root_priority}} {{.debian_regular_root_max_size_mib}} {{.debian_regular_root_fstype}} \
         method{ format } format{ }                                       \
-        use_filesystem{ } filesystem{ ext4 }                             \
-        mountpoint{ / }                                                  \
+        use_filesystem{ } filesystem{ {{.debian_regular_root_fstype}} }  \
+        mountpoint{ {{.debian_regular_root_mountpoint}} }                \
     .
 
 d-i partman-auto/choose_recipe select uefi-regular
