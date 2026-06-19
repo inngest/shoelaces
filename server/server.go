@@ -16,6 +16,7 @@
 package server
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
@@ -27,6 +28,10 @@ import (
 const (
 	// InitTarget is an initial dummy target assigned to the servers
 	InitTarget = "NOTARGET"
+
+	// StateExpireAfter is how long a host can wait between polling requests
+	// before Shoelaces drops its manual-selection state.
+	StateExpireAfter = 3 * time.Minute
 
 	stateCleanerComponent = "state_cleaner"
 )
@@ -92,6 +97,24 @@ type States struct {
 	Servers map[string]*State
 }
 
+// StateStore is the boot-state boundary used by polling and the UI. It lets
+// Shoelaces use either the legacy in-memory state map or a persistent backend
+// without coupling polling code to SQL or persistence row types.
+type StateStore interface {
+	// QueueServer records a host that is waiting for manual target selection.
+	QueueServer(ctx context.Context, server Server, allowedTargets []TargetOption) error
+	// GetState returns the current waiting/manual state for one host MAC.
+	GetState(ctx context.Context, mac string) (*State, error)
+	// SaveState persists a complete state snapshot for one host MAC.
+	SaveState(ctx context.Context, state *State) error
+	// DeleteState removes the state for one host MAC.
+	DeleteState(ctx context.Context, mac string) error
+	// ListWaiting returns hosts whose target has not been selected yet.
+	ListWaiting(ctx context.Context) (Servers, error)
+	// DeleteStatesBefore removes states with LastAccess older than cutoff.
+	DeleteStatesBefore(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
 // New returns a Server with is values initialized
 func New(mac string, ip string, hostname string) Server {
 	return Server{
@@ -117,6 +140,76 @@ func (m *States) AddServerWithTargets(server Server, allowedTargets []TargetOpti
 	}
 }
 
+// QueueServer records a waiting host in the legacy in-memory state map.
+func (m *States) QueueServer(_ context.Context, server Server, allowedTargets []TargetOption) error {
+	m.Lock()
+	defer m.Unlock()
+
+	m.AddServerWithTargets(server, allowedTargets)
+	return nil
+}
+
+// GetState returns one host state from the legacy in-memory state map.
+func (m *States) GetState(_ context.Context, mac string) (*State, error) {
+	m.RLock()
+	defer m.RUnlock()
+
+	state := m.Servers[mac]
+	if state == nil {
+		return nil, ErrStateNotFound
+	}
+	return copyState(state), nil
+}
+
+// SaveState replaces one host state in the legacy in-memory state map.
+func (m *States) SaveState(_ context.Context, state *State) error {
+	m.Lock()
+	defer m.Unlock()
+
+	m.Servers[state.Mac] = copyState(state)
+	return nil
+}
+
+// DeleteState removes one host state from the legacy in-memory state map.
+func (m *States) DeleteState(_ context.Context, mac string) error {
+	m.Lock()
+	defer m.Unlock()
+
+	m.DeleteServer(mac)
+	return nil
+}
+
+// ListWaiting returns waiting hosts from the legacy in-memory state map.
+func (m *States) ListWaiting(_ context.Context) (Servers, error) {
+	ret := make([]Server, 0)
+
+	m.RLock()
+	defer m.RUnlock()
+	for _, state := range m.Servers {
+		if state.Target == InitTarget {
+			ret = append(ret, state.Server)
+		}
+	}
+	sortServers(ret)
+	return ret, nil
+}
+
+// DeleteStatesBefore removes inactive host states from the legacy in-memory map.
+func (m *States) DeleteStatesBefore(_ context.Context, cutoff time.Time) (int64, error) {
+	m.Lock()
+	defer m.Unlock()
+
+	expireBefore := int(cutoff.UTC().Unix())
+	var removed int64
+	for mac, state := range m.Servers {
+		if state.LastAccess <= expireBefore {
+			delete(m.Servers, mac)
+			removed++
+		}
+	}
+	return removed, nil
+}
+
 func copyTargetOptions(options []TargetOption) []TargetOption {
 	if options == nil {
 		return nil
@@ -134,38 +227,49 @@ func (m *States) DeleteServer(mac string) {
 // StartStateCleaner spawns a goroutine that cleans MAC addresses that
 // have been inactive in Shoelaces for more than 3 minutes.
 func StartStateCleaner(logger log.Logger, serverStates *States) {
-	const (
-		expireAfterSec = 3 * 60
-		cleanInterval  = time.Minute
-	)
+	StartStateStoreCleaner(logger, serverStates)
+}
+
+// StartStateStoreCleaner spawns a goroutine that cleans MAC addresses that
+// have been inactive in Shoelaces for more than StateExpireAfter.
+func StartStateStoreCleaner(logger log.Logger, stateStore StateStore) {
+	const cleanInterval = time.Minute
 	if logger == nil {
 		logger = log.MakeLogger(io.Discard)
 	}
 	logger = logger.With("component", stateCleanerComponent)
 
-	logger.Debug("Starting server state cleaner", "expire_after", time.Duration(expireAfterSec)*time.Second, "interval", cleanInterval)
+	logger.Debug("Starting server state cleaner", "expire_after", StateExpireAfter, "interval", cleanInterval)
 	go func() {
 		for {
 			time.Sleep(cleanInterval)
-			expireBefore := int(time.Now().UTC().Unix()) - expireAfterSec
-			cleanExpiredStates(logger, serverStates, expireBefore)
+			if _, err := CleanExpiredStates(logger, stateStore, time.Now().UTC().Add(-StateExpireAfter)); err != nil {
+				logger.Error("Failed to clean expired server states", "err", err)
+			}
 		}
 	}()
 }
 
 func cleanExpiredStates(logger log.Logger, serverStates *States, expireBefore int) int {
-	serverStates.Lock()
-	defer serverStates.Unlock()
-
-	logger.Debug("Sweeping server states", "before", time.Unix(int64(expireBefore), 0), "states", len(serverStates.Servers))
-	removed := 0
-	for mac, state := range serverStates.Servers {
-		if state.LastAccess <= expireBefore {
-			delete(serverStates.Servers, mac)
-			removed++
-			logger.Debug("Expired server state", "mac", mac, "ip", state.IP, "hostname", state.Hostname, "target", state.Target, "retry", state.Retry, "last_access", time.Unix(int64(state.LastAccess), 0))
-		}
+	removed, err := CleanExpiredStates(logger, serverStates, time.Unix(int64(expireBefore), 0).UTC())
+	if err != nil {
+		logger.Error("Failed to clean expired server states", "err", err)
 	}
-	logger.Debug("Completed server state sweep", "removed", removed, "remaining", len(serverStates.Servers))
-	return removed
+	return int(removed)
+}
+
+// CleanExpiredStates removes stale states from any server state store.
+func CleanExpiredStates(logger log.Logger, stateStore StateStore, cutoff time.Time) (int64, error) {
+	states, err := stateStore.ListWaiting(context.Background())
+	if err != nil {
+		return 0, err
+	}
+
+	logger.Debug("Sweeping server states", "before", cutoff, "states", len(states))
+	removed, err := stateStore.DeleteStatesBefore(context.Background(), cutoff)
+	if err != nil {
+		return 0, err
+	}
+	logger.Debug("Completed server state sweep", "removed", removed)
+	return removed, nil
 }

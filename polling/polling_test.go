@@ -17,15 +17,18 @@ package polling
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/persistence/memory"
+	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/inngest/shoelaces/server"
 	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
@@ -73,6 +76,23 @@ func TestPollUnknownServerRetriesThenTimesOut(t *testing.T) {
 
 	assert.Equal(t, timeoutScript, script)
 	assert.Nil(t, states.Servers[srv.Mac])
+}
+
+func TestPollReturnsStateStoreErrors(t *testing.T) {
+	stateErr := errors.New("state store unavailable")
+	service := NewService(
+		log.MakeLogger(testLogWriter{}),
+		failingStateStore{err: stateErr},
+		nil,
+		newEventLog(),
+		templates.New(log.MakeLogger(testLogWriter{})),
+		"127.0.0.1:8081",
+	)
+
+	script, err := service.Poll(server.New("06:66:de:ad:be:ef", "192.0.2.10", ""))
+
+	require.ErrorIs(t, err, stateErr)
+	assert.Empty(t, script)
 }
 
 func TestPollBootsAutomaticMatches(t *testing.T) {
@@ -200,6 +220,34 @@ func TestPollBootsAutomaticMatches(t *testing.T) {
 			assert.Equal(t, tt.wantParams, got.Params)
 		})
 	}
+}
+
+type failingStateStore struct {
+	err error
+}
+
+func (s failingStateStore) QueueServer(context.Context, server.Server, []server.TargetOption) error {
+	return s.err
+}
+
+func (s failingStateStore) GetState(context.Context, string) (*server.State, error) {
+	return nil, s.err
+}
+
+func (s failingStateStore) SaveState(context.Context, *server.State) error {
+	return s.err
+}
+
+func (s failingStateStore) DeleteState(context.Context, string) error {
+	return s.err
+}
+
+func (s failingStateStore) ListWaiting(context.Context) (server.Servers, error) {
+	return nil, s.err
+}
+
+func (s failingStateStore) DeleteStatesBefore(context.Context, time.Time) (int64, error) {
+	return 0, s.err
 }
 
 func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
@@ -383,6 +431,78 @@ func TestUpdateTargetStoresManualSelection(t *testing.T) {
 	require.Len(t, hostEvents, 1)
 	assert.Equal(t, event.UserSelection, hostEvents[0].Type)
 	assert.Equal(t, "test.ipxe", hostEvents[0].Script)
+}
+
+func TestManualTargetSelectionSurvivesSQLiteRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+
+	events := newEventLog()
+	templateRenderer := newTestTemplates(t)
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"manual": {
+				Script: "test.ipxe",
+				Params: map[string]any{"role": "selected"},
+			},
+		},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+	service := NewService(log.MakeLogger(testLogWriter{}), server.NewPersistentStateStore(store, store), resolver, events, templateRenderer, "127.0.0.1:8081")
+
+	retryScript, err := service.Poll(srv)
+	require.NoError(t, err)
+	assert.Contains(t, retryScript, "/poll/1/06-66-de-ad-be-ef")
+	waiting, err := service.ListServers()
+	require.NoError(t, err)
+	require.Len(t, waiting, 1)
+	assert.Equal(t, []string{"manual"}, targetOptionNames(waiting[0].AllowedTargets))
+
+	inputErr, err := service.UpdateTarget(srv, "manual", "", map[string]any{})
+	require.NoError(t, err)
+	assert.False(t, inputErr)
+	require.NoError(t, store.Close())
+
+	restartedStore, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, restartedStore.Close()) })
+	restartedService := NewService(log.MakeLogger(testLogWriter{}), server.NewPersistentStateStore(restartedStore, restartedStore), resolver, events, templateRenderer, "127.0.0.1:8081")
+
+	rendered, err := restartedService.Poll(srv)
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "boot 06-66-de-ad-be-ef")
+	assert.Contains(t, rendered, "role selected")
+	waiting, err = restartedService.ListServers()
+	require.NoError(t, err)
+	assert.Empty(t, waiting)
+}
+
+func TestManualRetryCountSurvivesSQLiteRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"manual": {Script: "test.ipxe"},
+		},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+	service := NewService(log.MakeLogger(testLogWriter{}), server.NewPersistentStateStore(store, store), resolver, newEventLog(), newTestTemplates(t), "127.0.0.1:8081")
+
+	_, err = service.Poll(srv)
+	require.NoError(t, err)
+	_, err = service.Poll(srv)
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	restartedStore, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, restartedStore.Close()) })
+	state, err := server.NewPersistentStateStore(restartedStore, restartedStore).GetState(context.Background(), srv.Mac)
+	require.NoError(t, err)
+	assert.Equal(t, 2, state.Retry)
 }
 
 func TestPollQueuesRestrictedManualTargets(t *testing.T) {

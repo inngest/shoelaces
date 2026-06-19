@@ -18,9 +18,9 @@ package polling
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
 	"text/template"
 	"time"
 
@@ -76,16 +76,16 @@ const (
 // every polling call.
 type Service struct {
 	logger           log.Logger
-	serverStates     *server.States
+	serverStates     server.StateStore
 	resolver         *mappings.Resolver
 	eventLog         *event.Log
 	templateRenderer *templates.ShoelacesTemplates
 	baseURL          string
 }
 
-func NewService(logger log.Logger, serverStates *server.States, resolver *mappings.Resolver, eventLog *event.Log, templateRenderer *templates.ShoelacesTemplates, baseURL string) *Service {
+func NewService(logger log.Logger, serverStates server.StateStore, resolver *mappings.Resolver, eventLog *event.Log, templateRenderer *templates.ShoelacesTemplates, baseURL string) *Service {
 	return &Service{
-		logger:           logger,
+		logger:           logger.With("component", "polling"),
 		serverStates:     serverStates,
 		resolver:         resolver,
 		eventLog:         eventLog,
@@ -95,8 +95,8 @@ func NewService(logger log.Logger, serverStates *server.States, resolver *mappin
 }
 
 // ListServers returns the hosts currently waiting for manual target selection.
-func (s *Service) ListServers() server.Servers {
-	return ListServers(s.serverStates)
+func (s *Service) ListServers() (server.Servers, error) {
+	return s.serverStates.ListWaiting(context.Background())
 }
 
 // StartScript renders the initial iPXE polling script.
@@ -106,6 +106,7 @@ func (s *Service) StartScript() string {
 
 // UpdateTarget stores a manually selected target for a polling host.
 func (s *Service) UpdateTarget(srv server.Server, targetName string, environment string, params map[string]any) (inputErr bool, err error) {
+	logger := s.logger.With("mac", srv.Mac)
 	if !utils.IsValidMAC(srv.Mac) {
 		return true, errors.New("invalid MAC")
 	}
@@ -117,14 +118,18 @@ func (s *Service) UpdateTarget(srv server.Server, targetName string, environment
 		s.resolver.WithLogger(s.logger)
 	}
 
-	s.serverStates.Lock()
-	defer s.serverStates.Unlock()
-	servers := s.serverStates.Servers
-	if servers[srv.Mac] == nil {
+	state, err := s.serverStates.GetState(context.Background(), srv.Mac)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return true, errors.New("MAC is not in the booting state")
+		}
+		return false, err
+	}
+	if state == nil {
 		return true, errors.New("MAC is not in the booting state")
 	}
 
-	bootServer := servers[srv.Mac].Server
+	bootServer := state.Server
 	result, resolvedServer, err := resolveBootTarget(s.resolver, mappings.ResolveRequest{
 		Mac:          bootServer.Mac,
 		IP:           bootServer.IP,
@@ -144,21 +149,26 @@ func (s *Service) UpdateTarget(srv server.Server, targetName string, environment
 		return true, err
 	}
 
-	s.logger.Debug("Setting server override", "component", "polling", "server", srv.Mac, "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
+	logger.Debug("Setting server override", "target", targetName, "script", result.Target.Script, "environment", result.Target.Environment, "hostname", resolvedServer.Hostname, "params", utils.RedactParams(result.Params))
 	if err := s.eventLog.AppendEvent(context.Background(), event.UserSelection, resolvedServer, "", result.Target.Script, nil); err != nil {
 		return false, err
 	}
-	servers[srv.Mac].Server = resolvedServer
-	servers[srv.Mac].Target = result.Target.Script
-	servers[srv.Mac].Environment = result.Target.Environment
-	servers[srv.Mac].Params = result.Params
-	servers[srv.Mac].Users = result.Users
-	servers[srv.Mac].Provisioning = result.Provisioning
+	state.Server = resolvedServer
+	state.Target = result.Target.Script
+	state.Environment = result.Target.Environment
+	state.Params = result.Params
+	state.Users = result.Users
+	state.Provisioning = result.Provisioning
+	state.LastAccess = int(time.Now().UTC().Unix())
+	if err := s.serverStates.SaveState(context.Background(), state); err != nil {
+		return false, err
+	}
 	return false, nil
 }
 
 // Poll resolves and renders the next script for a booting host.
 func (s *Service) Poll(srv server.Server) (scriptText string, err error) {
+	logger := s.logger.With("mac", srv.Mac)
 	if s.resolver == nil {
 		s.resolver, err = mappings.NewResolver(nil)
 		if err != nil {
@@ -176,32 +186,25 @@ func (s *Service) Poll(srv server.Server) (scriptText string, err error) {
 		return "", err
 	}
 	if result.HasTarget() {
-		s.logger.Debug("Host found", "component", "polling", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
+		logger.Debug("Host found", "where", result.MatchType, "host", srv.Hostname, "ip", srv.IP)
 		if err := s.eventLog.AppendEvent(context.Background(), event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params); err != nil {
 			return "", err
 		}
 		return s.genBootScript(result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning), nil
 	}
 
-	s.logger.Debug("Host needs manual target selection", "component", "polling", "where", result.MatchType, "mac", srv.Mac, "ip", srv.IP)
+	logger.Debug("Host needs manual target selection", "where", result.MatchType, "ip", srv.IP)
 	return s.manualAction(srv, targetOptions(result.AllowedTargets))
 }
 
 // ListServers provides a list of the servers that tried to boot
 // but did not match the hostname regex or network mappings.
 func ListServers(serverStates *server.States) server.Servers {
-	ret := make([]server.Server, 0)
-
-	serverStates.RLock()
-	for _, s := range serverStates.Servers {
-		if s.Target == server.InitTarget {
-			ret = append(ret, s.Server)
-		}
+	servers, err := serverStates.ListWaiting(context.Background())
+	if err != nil {
+		return nil
 	}
-	defer serverStates.RUnlock()
-	sort.Sort(server.Servers(ret))
-
-	return ret
+	return servers
 }
 
 // UpdateTarget receives parameters for booting manually. When a host
@@ -225,9 +228,13 @@ func Poll(logger log.Logger, serverStates *server.States,
 }
 
 func (s *Service) manualAction(srv server.Server, allowedTargets []server.TargetOption) (scriptText string, err error) {
+	logger := s.logger.With("mac", srv.Mac)
 
-	script, action := s.chooseManualAction(srv, allowedTargets)
-	s.logger.Debug("Manual action selected", "component", "polling", "target-script-name", script, "action", action)
+	script, action, err := s.chooseManualAction(srv, allowedTargets)
+	if err != nil {
+		return "", err
+	}
+	logger.Debug("Manual action selected", "target-script-name", script, "action", action)
 
 	switch action {
 	case BootAction:
@@ -245,45 +252,61 @@ func (s *Service) manualAction(srv server.Server, allowedTargets []server.Target
 		return timeoutScript, nil
 
 	default:
-		s.logger.Info("Unknown action", "component", "polling")
+		logger.Info("Unknown action")
 		return "", fmt.Errorf("%s", "Unknown action")
 	}
 }
 
-func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction) {
+func (s *Service) chooseManualAction(srv server.Server, allowedTargets []server.TargetOption) (*mappings.Script, ManualAction, error) {
+	logger := s.logger.With("mac", srv.Mac)
 
-	s.serverStates.Lock()
-	defer s.serverStates.Unlock()
-
-	if m := s.serverStates.Servers[srv.Mac]; m != nil {
+	m, err := s.serverStates.GetState(context.Background(), srv.Mac)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		logger.Error("Failed to load manual state", "err", err)
+		return nil, TimeoutAction, err
+	}
+	if m != nil {
 		if m.Target != server.InitTarget {
-			s.serverStates.DeleteServer(srv.Mac)
-			s.logger.Debug("Server boot", "component", "polling", "mac", srv.Mac)
+			if err := s.serverStates.DeleteState(context.Background(), srv.Mac); err != nil {
+				logger.Error("Failed to delete selected server state", "err", err)
+				return nil, TimeoutAction, err
+			}
+			logger.Debug("Server boot")
 			return &mappings.Script{
 				Name:         m.Target,
 				Environment:  m.Environment,
 				Params:       m.Params,
 				Users:        m.Users,
-				Provisioning: m.Provisioning}, BootAction
+				Provisioning: m.Provisioning}, BootAction, nil
 		} else if m.Retry <= maxRetry {
 			m.Retry++
 			m.LastAccess = int(time.Now().UTC().Unix())
-			s.logger.Debug("Retrying reboot", "component", "polling", "mac", srv.Mac)
-			return nil, RetryAction
+			if err := s.serverStates.SaveState(context.Background(), m); err != nil {
+				logger.Error("Failed to persist retry state", "err", err)
+				return nil, TimeoutAction, err
+			}
+			logger.Debug("Retrying reboot")
+			return nil, RetryAction, nil
 		} else {
-			s.serverStates.DeleteServer(srv.Mac)
-			s.logger.Debug("Timing out server", "component", "polling", "mac", srv.Mac)
-			return nil, TimeoutAction
+			if err := s.serverStates.DeleteState(context.Background(), srv.Mac); err != nil {
+				logger.Error("Failed to delete timed-out server state", "err", err)
+				return nil, TimeoutAction, err
+			}
+			logger.Debug("Timing out server")
+			return nil, TimeoutAction, nil
 		}
 	}
 
-	s.serverStates.AddServerWithTargets(srv, allowedTargets)
-	s.logger.Debug("New server", "component", "polling", "mac", srv.Mac)
+	if err := s.serverStates.QueueServer(context.Background(), srv, allowedTargets); err != nil {
+		logger.Error("Failed to persist new server state", "err", err)
+		return nil, TimeoutAction, err
+	}
+	logger.Debug("New server")
 	if err := s.eventLog.AppendEvent(context.Background(), event.HostPoll, srv, "", "", nil); err != nil {
-		s.logger.Error("Failed to record host poll event", "component", "polling", "mac", srv.Mac, "err", err)
+		logger.Error("Failed to record host poll event", "err", err)
 	}
 
-	return nil, RetryAction
+	return nil, RetryAction, nil
 }
 
 func resolveBootTarget(resolver *mappings.Resolver, request mappings.ResolveRequest,

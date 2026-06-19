@@ -139,21 +139,21 @@ persistence:
 
 *** Phase 3: Persistent Waiting Server State
 
-- [ ] Move waiting/manual boot server state behind a server-state repository.
-- [ ] Model state mutations through server-state commands and UI/polling reads
+- [X] Move waiting/manual boot server state behind a server-state repository.
+- [X] Model state mutations through server-state commands and UI/polling reads
   through server-state queries.
-- [ ] Persist waiting hosts, retry counts, last access time, allowed target
+- [X] Persist waiting hosts, retry counts, last access time, allowed target
   options, manual target selection, selected environment, resolved params,
   resolved users, and structured provisioning data needed to complete a boot.
-- [ ] Preserve the existing three-minute expiry behavior, but apply it to the
+- [X] Preserve the existing three-minute expiry behavior, but apply it to the
   persistent store.
-- [ ] Keep UI server listing behavior compatible with the current
+- [X] Keep UI server listing behavior compatible with the current
   =/ajax/servers= response.
-- [ ] Add unit tests for add, update, delete, list waiting servers, retry
+- [X] Add unit tests for add, update, delete, list waiting servers, retry
   increments, manual selection persistence, and expiry cleanup.
-- [ ] Add polling tests proving manual target selection survives a process
+- [X] Add polling tests proving manual target selection survives a process
   restart when the same database is reused.
-- [ ] Add integration tests covering =/poll/*=, =/ajax/servers=, restart, and
+- [X] Add integration tests covering =/poll/*=, =/ajax/servers=, restart, and
   continued manual boot flow.
 
 *** Phase 4: Boot Session And Config References
