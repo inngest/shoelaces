@@ -64,24 +64,7 @@ func command(configPath string, configValues map[any]any, run serverRunner) *cli
 			runCommand(configValues, run),
 			eventsCommand(configValues),
 			serversCommand(configValues),
-			inspectionCommand("boot-sessions", "Inspect persisted boot-session references"),
-		},
-	}
-}
-
-func inspectionCommand(name, usage string) *cli.Command {
-	return &cli.Command{
-		Name:      name,
-		Usage:     usage,
-		UsageText: fmt.Sprintf("shoelaces [options...] %s [inspection options...] <command>", name),
-		Flags: []cli.Flag{
-			inspectionOutputFlag(),
-		},
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			if _, err := outputFormatFromCommand(cmd); err != nil {
-				return err
-			}
-			return cli.ShowSubcommandHelp(cmd)
+			bootSessionsCommand(configValues),
 		},
 	}
 }

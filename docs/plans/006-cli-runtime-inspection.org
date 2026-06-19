@@ -171,16 +171,16 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 6: Boot Session Inspection
 
-- [ ] Add =shoelaces boot-sessions get <ref>= using the existing redacted
+- [X] Add =shoelaces boot-sessions get <ref>= using the existing redacted
   boot-session reference view.
-- [ ] Add tests for valid refs, expired refs, missing refs, table output, and
+- [X] Add tests for valid refs, expired refs, missing refs, table output, and
   JSON output.
-- [ ] Add a =ListBootSessions= persistence query only if list inspection is
+- [X] Add a =ListBootSessions= persistence query only if list inspection is
   still needed after =get <ref>= lands.
-- [ ] If listing is added, implement =shoelaces boot-sessions list= with
+- [X] If listing is added, implement =shoelaces boot-sessions list= with
   unexpired-only behavior by default and an explicit option for expired records
   if operators need retention debugging.
-- [ ] Add SQLite, memory, and persistence contract tests for boot-session list
+- [X] Add SQLite, memory, and persistence contract tests for boot-session list
   only when the list query is introduced.
 
 *** Phase 7: Documentation And Verification
