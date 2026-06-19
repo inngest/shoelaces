@@ -373,6 +373,20 @@ func TestRenderedDebianPreseedStorageModeSelection(t *testing.T) {
 			params: paramsWith(defaultRenderParams, "storage_mode", "lvm"),
 			want:   "d-i partman-auto/method string lvm",
 		},
+		{
+			name: "structured raid",
+			params: paramsWith(defaultRenderParams, "provisioning", mappings.ProvisioningConfig{
+				Storage: mappings.StorageConfig{
+					Mode: "raid",
+					RAID: mappings.RAIDConfig{
+						Level:   1,
+						Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+					},
+				},
+				Boot: mappings.BootConfig{Firmware: "uefi"},
+			}),
+			want: "d-i partman-auto/method string raid",
+		},
 	}
 
 	renderer := newRenderer(t)
@@ -583,6 +597,135 @@ func TestRenderedDebianPreseedLVMModulesFollowFinalFilesystemOverrides(t *testin
 	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ xfs }")
 }
 
+func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
+	bootDegraded := false
+	params := mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:        1,
+				Devices:      []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+				BootDegraded: &bootDegraded,
+			},
+		},
+		Boot: mappings.BootConfig{Firmware: "uefi"},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/nvme0n1 /dev/nvme1n1")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string mdadm-udeb partman-md partman-ext4")
+	assert.Contains(t, rendered, "d-i partman-auto/method string raid")
+	assert.Contains(t, rendered, "d-i partman-md/device_remove_md boolean true")
+	assert.Contains(t, rendered, "d-i partman-md/confirm boolean true")
+	assert.Contains(t, rendered, "d-i partman-md/confirm_nooverwrite boolean true")
+	assert.Contains(t, rendered, "d-i mdadm/boot_degraded boolean false")
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1")
+	assert.Contains(t, rendered, "d-i partman-auto-raid/recipe string")
+
+	assertInOrder(t, rendered,
+		"device{ /dev/nvme0n1 }",
+		"mountpoint{ /boot/efi }",
+		"device{ /dev/nvme1n1 }",
+		"1024 1024 1024 raid",
+		"method{ raid }",
+		"raidid{ 1 }",
+	)
+	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
+	assert.Contains(t, rendered, "raidid=1")
+	assert.Contains(t, rendered, "1 2 0 swap -")
+	assert.Contains(t, rendered, "raidid=2")
+	assert.Contains(t, rendered, "1 2 0 ext4 /")
+	assert.Contains(t, rendered, "raidid=3")
+
+	assert.NotContains(t, rendered, "partman-lvm")
+	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
+	assert.NotContains(t, rendered, "method{ lvm }")
+	assert.NotContains(t, rendered, "$lvmok{ }")
+	assert.NotContains(t, rendered, "in_vg{")
+	assert.NotContains(t, rendered, "lv_name{")
+	assert.NotContains(t, rendered, "vg_name{")
+
+	assert.Contains(t, rendered, "d-i preseed/late_command string")
+	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
+	assert.Contains(t, rendered, "in-target update-initramfs -u")
+	assert.Contains(t, rendered, "for d in /dev/nvme0n1 /dev/nvme1n1; do")
+	assert.Contains(t, rendered, `case "$d" in /dev/disk/by-id/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
+	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
+	assert.Contains(t, rendered, "EFI/BOOT/BOOTX64.EFI")
+	assert.Contains(t, rendered, "/target/boot/efi-secondary")
+}
+
+func TestRenderedDebianPreseedRAIDRecipeAppliesStructuredFilesystems(t *testing.T) {
+	espSize := 768
+	bootSize := 2048
+	swapSize := 4096
+	rootMinSize := 65536
+	params := mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+			Filesystems: map[string]mappings.FilesystemConfig{
+				"esp": {
+					Mountpoint: "/efi",
+					SizeMiB:    &espSize,
+				},
+				"boot": {
+					Mountpoint: "/boot",
+					FSType:     "xfs",
+					SizeMiB:    &bootSize,
+				},
+				"swap": {
+					SizeMiB: &swapSize,
+				},
+				"root": {
+					Mountpoint: "/",
+					FSType:     "xfs",
+					Size:       "grow",
+					SizeMiB:    &rootMinSize,
+				},
+			},
+		},
+		Boot: mappings.BootConfig{Firmware: "uefi"},
+	})
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i anna/choose_modules string mdadm-udeb partman-md partman-xfs")
+	assert.Contains(t, rendered, "768 768 768 fat32")
+	assert.Contains(t, rendered, "mountpoint{ /efi }")
+	assert.Contains(t, rendered, "2048 2048 2048 raid")
+	assert.Contains(t, rendered, "4096 4096 4096 raid")
+	assert.Contains(t, rendered, "65536 100000000 -1 raid")
+	assert.Contains(t, rendered, "1 2 0 xfs /boot")
+	assert.Contains(t, rendered, "1 2 0 xfs /")
+	assert.NotContains(t, rendered, "1024 1024 1024 raid")
+	assert.NotContains(t, rendered, "8192 8192 8192 raid")
+	assert.NotContains(t, rendered, "20000 100000000 -1 raid")
+}
+
+func TestRenderedDebianPreseedRAIDRecipeRejectsMissingDevices(t *testing.T) {
+	err := renderTemplateError(t, newRenderer(t), "preseed/debian", paramsWith(defaultRenderParams, "storage_mode", "raid"))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `preseed/debian storage_raid_devices must contain exactly 2 devices for storage_mode "raid", got 0`)
+}
+
+func TestRenderedDebianPreseedRAIDRecipeAcceptsExplicitDeviceList(t *testing.T) {
+	params := paramsWith(defaultRenderParams, "storage_mode", "raid")
+	params = paramsWith(params, "storage_raid_devices", "/dev/vda /dev/vdb")
+
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", params)
+
+	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/vda /dev/vdb")
+	assert.Contains(t, rendered, "device{ /dev/vda }")
+	assert.Contains(t, rendered, "device{ /dev/vdb }")
+	assert.Contains(t, rendered, "d-i mdadm/boot_degraded boolean true")
+}
+
 func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -592,7 +735,7 @@ func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 		{
 			name:   "explicit query style param",
 			params: paramsWith(defaultRenderParams, "storage_mode", "zfs"),
-			want:   `preseed/debian storage_mode must be "regular" or "lvm", got "zfs"`,
+			want:   `preseed/debian storage_mode must be "regular", "lvm", or "raid", got "zfs"`,
 		},
 		{
 			name: "structured provisioning",
@@ -601,12 +744,12 @@ func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 					Mode: "zfs",
 				},
 			}),
-			want: `preseed/debian storage_mode must be "regular" or "lvm", got "zfs"`,
+			want: `preseed/debian storage_mode must be "regular", "lvm", or "raid", got "zfs"`,
 		},
 		{
 			name:   "legacy plain mode",
 			params: paramsWith(defaultRenderParams, "storage_mode", "plain"),
-			want:   `preseed/debian storage_mode must be "regular" or "lvm", got "plain"`,
+			want:   `preseed/debian storage_mode must be "regular", "lvm", or "raid", got "plain"`,
 		},
 	}
 

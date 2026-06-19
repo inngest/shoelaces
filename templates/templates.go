@@ -356,9 +356,45 @@ func validateDebianPreseedParams(paramMap map[string]interface{}) error {
 	switch mode {
 	case "regular", "lvm":
 		return nil
+	case "raid":
+		return validateDebianRAIDPreseedParams(paramMap)
 	default:
-		return errors.New(`preseed/debian storage_mode must be "regular" or "lvm", got ` + strconv.Quote(mode))
+		return errors.New(`preseed/debian storage_mode must be "regular", "lvm", or "raid", got ` + strconv.Quote(mode))
 	}
+}
+
+func validateDebianRAIDPreseedParams(paramMap map[string]interface{}) error {
+	level := strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_level"]))
+	if level != "1" {
+		return errors.New(`preseed/debian storage_raid_level must be "1" for storage_mode "raid", got ` + strconv.Quote(level))
+	}
+	devicesRaw := ""
+	if value, ok := paramMap["storage_raid_devices"]; ok {
+		devicesRaw = fmt.Sprint(value)
+	}
+	devices := strings.Fields(devicesRaw)
+	if len(devices) != 2 {
+		return fmt.Errorf("preseed/debian storage_raid_devices must contain exactly 2 devices for storage_mode %q, got %d", "raid", len(devices))
+	}
+	for i, device := range devices {
+		if !strings.HasPrefix(device, "/dev/") {
+			return fmt.Errorf("preseed/debian storage_raid_devices[%d] must start with /dev/", i)
+		}
+		if strings.ContainsAny(device, "*?[") {
+			return fmt.Errorf("preseed/debian storage_raid_devices[%d] must be an explicit /dev path without glob patterns", i)
+		}
+	}
+	if _, ok := paramMap["storage_raid_device_0"]; !ok {
+		paramMap["storage_raid_device_0"] = devices[0]
+	}
+	if _, ok := paramMap["storage_raid_device_1"]; !ok {
+		paramMap["storage_raid_device_1"] = devices[1]
+	}
+	bootDegraded := strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_boot_degraded"]))
+	if bootDegraded != "true" && bootDegraded != "false" {
+		return errors.New(`preseed/debian storage_raid_boot_degraded must be "true" or "false", got ` + strconv.Quote(bootDegraded))
+	}
+	return nil
 }
 
 func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {

@@ -15,11 +15,17 @@ d-i apt-setup/contrib boolean {{.repo_contrib}}
 
 {{define "preseed/debian/storage" -}}
 # ---- Select installation disk
+{{if eq .storage_mode "raid" -}}
+d-i partman-auto/disk string {{.storage_raid_devices}}
+{{else -}}
 d-i partman-auto/disk string {{.storage_disk}}
+{{end}}
 
 {{template "preseed/debian/storage/wipe" .}}
 {{if eq .storage_mode "lvm" -}}
 {{template "preseed/debian/storage/lvm" .}}
+{{else if eq .storage_mode "raid" -}}
+{{template "preseed/debian/storage/raid" .}}
 {{else -}}
 {{template "preseed/debian/storage/regular" .}}
 {{end -}}
@@ -151,6 +157,85 @@ d-i partman-auto/expert_recipe string \
     .
 
 d-i partman-auto/choose_recipe select uefi-lvm
+{{end}}
+
+{{define "preseed/debian/storage/raid" -}}
+d-i anna/choose_modules string {{.debian_raid_partman_modules}}
+
+# Use mdadm RAID across the configured member disks.
+d-i partman-auto/method string raid
+
+# Make sure any md leftovers can be replaced without prompts.
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
+d-i mdadm/boot_degraded boolean {{.storage_raid_boot_degraded}}
+
+# Expert recipe: ESP on each disk, then RAID members for /boot, swap, and root.
+# The ESPs are normal FAT partitions because UEFI firmware does not assemble mdraid.
+d-i partman-auto/expert_recipe string \
+  uefi-raid1 ::                                                           \
+    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        device{ {{.storage_raid_device_0}} }                             \
+        mountpoint{ {{.debian_raid_esp_mountpoint}} }                    \
+    .                                                                    \
+    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        device{ {{.storage_raid_device_1}} }                             \
+    .                                                                    \
+    {{.debian_raid_boot_min_size_mib}} {{.debian_raid_boot_priority}} {{.debian_raid_boot_max_size_mib}} raid \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ raid }                                                   \
+        raidid{ 1 }                                                       \
+    .                                                                    \
+{{if eq .debian_raid_swap_enabled "true" -}}
+    {{.debian_raid_swap_min_size_mib}} {{.debian_raid_swap_priority}} {{.debian_raid_swap_max_size_mib}} raid \
+        method{ raid }                                                   \
+        raidid{ 2 }                                                       \
+    .                                                                    \
+{{end -}}
+    {{.debian_raid_root_min_size_mib}} {{.debian_raid_root_priority}} {{.debian_raid_root_max_size_mib}} raid \
+        method{ raid }                                                   \
+        raidid{ 3 }                                                       \
+    .
+
+d-i partman-auto/choose_recipe select uefi-raid1
+
+# Map RAID member partitions to installed filesystems.
+d-i partman-auto-raid/recipe string                                      \
+    1 2 0 {{.debian_raid_boot_fstype}} {{.debian_raid_boot_mountpoint}} \
+        raidid=1                                                        \
+    .                                                                   \
+{{if eq .debian_raid_swap_enabled "true" -}}
+    1 2 0 swap -                                                        \
+        raidid=2                                                        \
+    .                                                                   \
+{{end -}}
+    1 2 0 {{.debian_raid_root_fstype}} {{.debian_raid_root_mountpoint}} \
+        raidid=3                                                        \
+    .
+
+# Persist mdadm assembly and duplicate EFI boot files to both ESPs.
+d-i preseed/late_command string \
+  in-target mkdir -p /etc/mdadm; \
+  mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \
+  in-target update-initramfs -u; \
+  /bin/ash -c 'set -eux; \
+    mkdir -p /target/boot/efi /target/boot/efi-secondary; \
+    first=1; \
+    for d in {{.storage_raid_devices}}; do \
+      p="${d}1"; \
+      case "$d" in /dev/disk/by-id/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
+      [ -b "$p" ] || continue; \
+      if [ "$first" = 1 ]; then efi=/target/boot/efi; first=0; else efi=/target/boot/efi-secondary; mount "$p" "$efi" || continue; fi; \
+      chroot /target grub-install --target=x86_64-efi --efi-directory="${efi#/target}" --bootloader-id=debian --recheck --no-nvram || true; \
+      mkdir -p "$efi/EFI/BOOT"; \
+      cp -f "$efi/EFI/debian/grubx64.efi" "$efi/EFI/BOOT/BOOTX64.EFI" || true; \
+      [ "$efi" = /target/boot/efi ] || umount "$efi" || true; \
+    done'
 {{end}}
 
 {{define "preseed/debian/storage/commit" -}}

@@ -190,11 +190,15 @@ func ParamsWithProvisioning(params map[string]interface{}, users map[string]Reso
 func projectProvisioningParams(params map[string]interface{}, users map[string]ResolvedUser, provisioning ProvisioningConfig) {
 	_, explicitDebianRegularPartmanModules := params["debian_regular_partman_modules"]
 	_, explicitDebianLVMPartmanModules := params["debian_lvm_partman_modules"]
+	_, explicitDebianRAIDPartmanModules := params["debian_raid_partman_modules"]
 	if _, ok := provisioning.Installer.ConfigParams["debian_regular_partman_modules"]; ok {
 		explicitDebianRegularPartmanModules = true
 	}
 	if _, ok := provisioning.Installer.ConfigParams["debian_lvm_partman_modules"]; ok {
 		explicitDebianLVMPartmanModules = true
+	}
+	if _, ok := provisioning.Installer.ConfigParams["debian_raid_partman_modules"]; ok {
+		explicitDebianRAIDPartmanModules = true
 	}
 
 	// Preserve explicit caller/query parameters first, project structured
@@ -218,6 +222,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	projectRAIDParams(params, provisioning.Storage.RAID)
 	projectDebianRegularFilesystemParams(params, provisioning.Storage)
 	projectDebianLVMFilesystemParams(params, provisioning.Storage)
+	projectDebianRAIDFilesystemParams(params, provisioning.Storage)
 	setDefaultParam(params, "repo_debian_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_ubuntu_mirror", provisioning.Repos.OSMirror)
 	setDefaultParam(params, "repo_centos_mirror", provisioning.Repos.OSMirror)
@@ -295,7 +300,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 		setDefaultParamValue(params, "kickstart_centos_mirror", centosMirror)
 	}
 	setProvisioningDefaults(params)
-	deriveDebianPartmanModules(params, explicitDebianRegularPartmanModules, explicitDebianLVMPartmanModules)
+	deriveDebianPartmanModules(params, explicitDebianRegularPartmanModules, explicitDebianLVMPartmanModules, explicitDebianRAIDPartmanModules)
 }
 
 func setProvisioningDefaults(params map[string]interface{}) {
@@ -368,6 +373,28 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "debian_lvm_root_max_size_mib", "-1")
 	setDefaultParamValue(params, "debian_lvm_root_fstype", "ext4")
 	setDefaultParamValue(params, "debian_lvm_root_mountpoint", "/")
+	setDefaultParamValue(params, "debian_raid_partman_modules", "mdadm-udeb partman-md partman-ext4")
+	setDefaultParamValue(params, "debian_raid_esp_min_size_mib", "512")
+	setDefaultParamValue(params, "debian_raid_esp_priority", "512")
+	setDefaultParamValue(params, "debian_raid_esp_max_size_mib", "512")
+	setDefaultParamValue(params, "debian_raid_esp_fstype", "fat32")
+	setDefaultParamValue(params, "debian_raid_esp_mountpoint", "/boot/efi")
+	setDefaultParamValue(params, "debian_raid_boot_min_size_mib", "1024")
+	setDefaultParamValue(params, "debian_raid_boot_priority", "1024")
+	setDefaultParamValue(params, "debian_raid_boot_max_size_mib", "1024")
+	setDefaultParamValue(params, "debian_raid_boot_fstype", "ext4")
+	setDefaultParamValue(params, "debian_raid_boot_mountpoint", "/boot")
+	setDefaultParamValue(params, "debian_raid_swap_enabled", "true")
+	setDefaultParamValue(params, "debian_raid_swap_min_size_mib", "8192")
+	setDefaultParamValue(params, "debian_raid_swap_priority", "8192")
+	setDefaultParamValue(params, "debian_raid_swap_max_size_mib", "8192")
+	setDefaultParamValue(params, "debian_raid_root_min_size_mib", "20000")
+	setDefaultParamValue(params, "debian_raid_root_priority", "100000000")
+	setDefaultParamValue(params, "debian_raid_root_max_size_mib", "-1")
+	setDefaultParamValue(params, "debian_raid_root_fstype", "ext4")
+	setDefaultParamValue(params, "debian_raid_root_mountpoint", "/")
+	setDefaultParamValue(params, "storage_raid_level", "1")
+	setDefaultParamValue(params, "storage_raid_boot_degraded", "true")
 	setDefaultParamValue(params, "repo_firmware", "true")
 	setDefaultParamValue(params, "repo_contrib", "true")
 	setDefaultParamValue(params, "repo_non_free", "true")
@@ -412,6 +439,10 @@ func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {
 	}
 	if len(raid.Devices) > 0 {
 		setDefaultParamValue(params, "storage_raid_devices", strings.Join(raid.Devices, " "))
+		setDefaultParamValue(params, "storage_raid_device_0", raid.Devices[0])
+		if len(raid.Devices) > 1 {
+			setDefaultParamValue(params, "storage_raid_device_1", raid.Devices[1])
+		}
 	}
 	if raid.BootDegraded != nil {
 		setDefaultParamValue(params, "storage_raid_boot_degraded", *raid.BootDegraded)
@@ -459,6 +490,28 @@ func projectDebianLVMFilesystemParams(params map[string]interface{}, storage Sto
 	}
 	if storage.absentFilesystems["swap"] {
 		setDefaultParamValue(params, "debian_lvm_swap_enabled", "false")
+	}
+}
+
+func projectDebianRAIDFilesystemParams(params map[string]interface{}, storage StorageConfig) {
+	filesystems := storage.Filesystems
+	if len(filesystems) == 0 {
+		if storage.absentFilesystems["swap"] {
+			setDefaultParamValue(params, "debian_raid_swap_enabled", "false")
+		}
+		return
+	}
+
+	projectDebianRegularPartitionParams(params, "esp", "debian_raid_esp", filesystems["esp"])
+	projectDebianRegularPartitionParams(params, "boot", "debian_raid_boot", filesystems["boot"])
+	projectDebianRegularPartitionParams(params, "swap", "debian_raid_swap", filesystems["swap"])
+	projectDebianRegularPartitionParams(params, "root", "debian_raid_root", filesystems["root"])
+
+	if modules := debianRAIDPartmanModules(filesystems); modules != "" {
+		setDefaultParamValue(params, "debian_raid_partman_modules", modules)
+	}
+	if storage.absentFilesystems["swap"] {
+		setDefaultParamValue(params, "debian_raid_swap_enabled", "false")
 	}
 }
 
@@ -537,12 +590,40 @@ func debianLVMPartmanModules(filesystems map[string]FilesystemConfig) string {
 	return strings.Join(modules, " ")
 }
 
-func deriveDebianPartmanModules(params map[string]interface{}, explicitRegularModules, explicitLVMModules bool) {
+func debianRAIDPartmanModules(filesystems map[string]FilesystemConfig) string {
+	modules := []string{"mdadm-udeb", "partman-md"}
+	seen := map[string]bool{
+		"mdadm-udeb": true,
+		"partman-md": true,
+	}
+	for _, name := range []string{"boot", "root"} {
+		filesystem := filesystems[name]
+		if boolValue(filesystem.Absent) {
+			continue
+		}
+		fstype := filesystem.FSType
+		if fstype == "" {
+			fstype = "ext4"
+		}
+		module := debianPartmanModule(fstype)
+		if module == "" || seen[module] {
+			continue
+		}
+		modules = append(modules, module)
+		seen[module] = true
+	}
+	return strings.Join(modules, " ")
+}
+
+func deriveDebianPartmanModules(params map[string]interface{}, explicitRegularModules, explicitLVMModules, explicitRAIDModules bool) {
 	if !explicitRegularModules {
 		params["debian_regular_partman_modules"] = debianPartmanModulesForFinalParams(params, "debian_regular", false)
 	}
 	if !explicitLVMModules {
 		params["debian_lvm_partman_modules"] = debianPartmanModulesForFinalParams(params, "debian_lvm", true)
+	}
+	if !explicitRAIDModules {
+		params["debian_raid_partman_modules"] = debianRAIDPartmanModulesForFinalParams(params)
 	}
 }
 
@@ -556,6 +637,24 @@ func debianPartmanModulesForFinalParams(params map[string]interface{}, prefix st
 	}
 	for _, name := range []string{"boot", "root"} {
 		fstype := strings.TrimSpace(fmt.Sprint(params[prefix+"_"+name+"_fstype"]))
+		module := debianPartmanModule(fstype)
+		if module == "" || seen[module] {
+			continue
+		}
+		modules = append(modules, module)
+		seen[module] = true
+	}
+	return strings.Join(modules, " ")
+}
+
+func debianRAIDPartmanModulesForFinalParams(params map[string]interface{}) string {
+	modules := []string{"mdadm-udeb", "partman-md"}
+	seen := map[string]bool{
+		"mdadm-udeb": true,
+		"partman-md": true,
+	}
+	for _, name := range []string{"boot", "root"} {
+		fstype := strings.TrimSpace(fmt.Sprint(params["debian_raid_"+name+"_fstype"]))
 		module := debianPartmanModule(fstype)
 		if module == "" || seen[module] {
 			continue
