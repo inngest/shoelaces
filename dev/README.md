@@ -12,6 +12,9 @@ uses SQLite persistence under `dev/data-dir/runtime/shoelaces.db`, and uses
 the embedded provisioning defaults unless you add `.slc` files under
 `dev/data-dir`.
 
+See [`docs/persistence.md`](../docs/persistence.md) for the runtime database
+layout, retention behavior, and sqlc/Goose workflow.
+
 Useful URLs:
 
 - <http://localhost:18081/>
