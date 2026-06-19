@@ -1,6 +1,6 @@
 #+title: Runtime Persistent Storage
 #+author: Darwin D. Wu
-#+status: Draft
+#+status: Done
 #+date: <2026-06-18 Thu>
 
 * Runtime Persistent Storage
@@ -203,45 +203,45 @@ persistence:
 
 *** Phase 6: Operational Tooling And Documentation
 
-- [ ] Document the persistence config schema and defaults.
-- [ ] Document the CQRS persistence interfaces and which package layers are
+- [X] Document the persistence config schema and defaults.
+- [X] Document the CQRS persistence interfaces and which package layers are
   allowed to depend on command or query interfaces.
-- [ ] Document the sqlc workflow for editing schema/query files and regenerating
+- [X] Document the sqlc workflow for editing schema/query files and regenerating
   typed Go accessors.
-- [ ] Document that contributors should run =make gen= after changing sqlc
+- [X] Document that contributors should run =make gen= after changing sqlc
   schema or query files.
-- [ ] Document database location, retention behavior, backup expectations, and
+- [X] Document database location, retention behavior, backup expectations, and
   safe deletion/recovery behavior.
-- [ ] Document how references work in the network boot flow.
-- [ ] Add a development example that uses a local SQLite database under =dev/=.
-- [ ] Add metrics/logging around migration, reference creation, reference
+- [X] Document how references work in the network boot flow.
+- [X] Add a development example that uses a local SQLite database under =dev/=.
+- [X] Add metrics/logging around migration, reference creation, reference
   lookup failures, and retention cleanup.
-- [ ] Add tests for the documented examples where practical.
-- [ ] Run =make test=.
-- [ ] Run =make integration=.
-- [ ] Run render validation.
-- [ ] Run =make lint=.
-- [ ] Run =./scripts/check-plan-status.sh=.
+- [X] Add tests for the documented examples where practical.
+- [X] Run =make test=.
+- [X] Run =make integration=.
+- [X] Run render validation.
+- [X] Run =make lint=.
+- [X] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 
-- [ ] Shoelaces starts with default SQLite persistence under =data-dir=.
-- [ ] Events survive Shoelaces process restarts and host reboots when the same
+- [X] Shoelaces starts with default SQLite persistence under =data-dir=.
+- [X] Events survive Shoelaces process restarts and host reboots when the same
   =data-dir= is reused.
-- [ ] Waiting/manual boot state can survive a restart until its retention window
+- [X] Waiting/manual boot state can survive a restart until its retention window
   expires.
-- [ ] Boot/config rendering can use opaque references to retrieve previously
+- [X] Boot/config rendering can use opaque references to retrieve previously
   resolved data.
-- [ ] Existing UI routes and JSON response shapes remain compatible unless a
+- [X] Existing UI routes and JSON response shapes remain compatible unless a
   documented versioned change is introduced.
-- [ ] Existing direct query-param rendering still works where it is currently
+- [X] Existing direct query-param rendering still works where it is currently
   supported.
-- [ ] Secret-bearing or sensitive values are redacted in persisted events and
+- [X] Secret-bearing or sensitive values are redacted in persisted events and
   UI/API responses.
-- [ ] Retention cleanup bounds persistent database growth.
-- [ ] =make gen= regenerates checked-in sqlc files for the persistence backend.
-- [ ] CI fails when sqlc generated files are stale.
-- [ ] =make test=, =make integration=, render validation, =make lint=, and the
+- [X] Retention cleanup bounds persistent database growth.
+- [X] =make gen= regenerates checked-in sqlc files for the persistence backend.
+- [X] CI fails when sqlc generated files are stale.
+- [X] =make test=, =make integration=, render validation, =make lint=, and the
   plan status checker pass.
 
 ** Notes And Risks
