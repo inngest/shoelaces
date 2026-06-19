@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	shoelaceslog "github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/persistence"
 	sqlitedb "github.com/inngest/shoelaces/persistence/sqlite/db"
 	"github.com/oklog/ulid/v2"
@@ -46,7 +46,7 @@ func Open(ctx context.Context, path string) (persistence.Store, error) {
 
 // OpenWithLogger is Open plus operational logging for database startup and
 // migration activity. The logger may be nil for tests and non-server callers.
-func OpenWithLogger(ctx context.Context, path string, logger shoelaceslog.Logger) (persistence.Store, error) {
+func OpenWithLogger(ctx context.Context, path string, logger log.Logger) (persistence.Store, error) {
 	if err := persistence.EnsureParentDir(path); err != nil {
 		return nil, fmt.Errorf("create sqlite parent directory: %w", err)
 	}
@@ -74,7 +74,7 @@ func (s *store) Close() error {
 	return s.db.Close()
 }
 
-func (s *store) migrate(ctx context.Context, logger shoelaceslog.Logger) error {
+func (s *store) migrate(ctx context.Context, logger log.Logger) error {
 	goose.SetBaseFS(migrationFS)
 	goose.SetLogger(goose.NopLogger())
 	if err := goose.SetDialect("sqlite3"); err != nil {
