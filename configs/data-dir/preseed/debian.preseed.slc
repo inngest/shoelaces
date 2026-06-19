@@ -28,10 +28,12 @@ d-i partman-auto/disk string {{.storage_disk}}
 {{end}}
 
 {{define "preseed/debian/storage/wipe" -}}
+{{if eq .storage_wipe "true" -}}
 # ---- HARD RESET OF SELECTED WIPE DISKS (kills old GPT/md/LVM) ----
 # Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
 # storage_wipe_disks may contain explicit /dev glob patterns; unmatched globs
-# are skipped by the block-device check below.
+# are skipped by the block-device check below. Matched partitions are skipped:
+# storage_wipe_disks selectors are disk selectors, not partition selectors.
 d-i partman/early_command string \
   /bin/ash -c 'set -eux; \
     mdadm --stop --scan || true; \
@@ -40,9 +42,19 @@ d-i partman/early_command string \
     pvs --noheadings -o pv_name 2>/dev/null | awk "NF{print \$1}" | while read -r pv; do pvremove -ff "$pv" || true; done; \
     for d in {{.storage_wipe_disks}}; do \
       [ -b "$d" ] || continue; \
+      d="$(readlink -f "$d" 2>/dev/null || echo "$d")"; \
+      b="${d##*/}"; \
+      [ ! -e "/sys/class/block/$b/partition" ] || continue; \
       sfdisk --delete "$d" 2>/dev/null || true; \
       dd if=/dev/zero of="$d" bs=1M count=10 conv=fsync || true; \
+      sectors="$(blockdev --getsz "$d" 2>/dev/null || echo 0)"; \
+      if [ "$sectors" -gt 20480 ]; then \
+        seek="$((sectors - 20480))"; \
+        dd if=/dev/zero of="$d" bs=512 seek="$seek" count=20480 conv=fsync || true; \
+      fi; \
+      blockdev --rereadpt "$d" 2>/dev/null || partprobe "$d" 2>/dev/null || true; \
     done'
+{{end -}}
 {{end}}
 
 {{define "preseed/debian/storage/regular" -}}

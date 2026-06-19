@@ -223,49 +223,49 @@ With one failed disk, the expected impact should be:
 
 *** Phase 3: Regular Storage Recipe
 
-- [ ] Render =d-i partman-auto/method string regular=.
-- [ ] Render a GPT/UEFI recipe with an EFI System Partition mounted at
+- [X] Render =d-i partman-auto/method string regular=.
+- [X] Render a GPT/UEFI recipe with an EFI System Partition mounted at
   =/boot/efi=.
-- [ ] Render a separate ext4 =/boot= partition.
-- [ ] Render an ext4 root filesystem mounted at =/=.
-- [ ] Render swap as a partition when swap is configured.
-- [ ] Do not render LVM PV, VG, or LV recipe directives.
-- [ ] Do not render =partman-auto-lvm/new_vg_name=.
-- [ ] Do not require =lvm2-udeb= or =partman-lvm= in this mode.
+- [X] Render a separate ext4 =/boot= partition.
+- [X] Render an ext4 root filesystem mounted at =/=.
+- [X] Render swap as a partition when swap is configured.
+- [X] Do not render LVM PV, VG, or LV recipe directives.
+- [X] Do not render =partman-auto-lvm/new_vg_name=.
+- [X] Do not require =lvm2-udeb= or =partman-lvm= in this mode.
 
 *** Phase 4: Disk Wipe Behavior
 
-- [ ] Gate destructive wipe commands on =storage_wipe=.
-- [ ] If =storage_wipe= is false, omit the destructive early command.
-- [ ] Treat =storage_wipe_disks= values as disk selectors, not partition
+- [X] Gate destructive wipe commands on =storage_wipe=.
+- [X] If =storage_wipe= is false, omit the destructive early command.
+- [X] Treat =storage_wipe_disks= values as disk selectors, not partition
   selectors.
-- [ ] Skip matched partition block devices by checking
+- [X] Skip matched partition block devices by checking
   =/sys/class/block/<name>/partition=.
-- [ ] Wipe both the beginning and end of each selected disk to clear primary
+- [X] Wipe both the beginning and end of each selected disk to clear primary
   and backup GPT, LVM, and MD signatures.
-- [ ] Reread the partition table after wiping where possible, for example with
+- [X] Reread the partition table after wiping where possible, for example with
   =blockdev --rereadpt= or =partprobe=.
-- [ ] Keep unmatched glob behavior non-fatal.
+- [X] Keep unmatched glob behavior non-fatal.
 
 *** Phase 5: Regular/Wipe Validation Milestone
 
-- [ ] Add a regular-mode Debian preseed render test that asserts:
+- [X] Add a regular-mode Debian preseed render test that asserts:
   - no LVM directives are present
   - no =partman-auto-lvm/new_vg_name= is present
   - no =lvm2-udeb= or =partman-lvm= requirement is present
   - EFI, =/boot=, root, and swap partition stanzas are present
   - the selected disk appears in =partman-auto/disk=
-- [ ] Add wipe rendering tests proving:
+- [X] Add wipe rendering tests proving:
   - =wipe=true= includes =partman/early_command=
   - =wipe=false= omits destructive wipe commands
   - broad globs skip partition devices
-- [ ] Update the existing structured Debian preseed test so
+- [X] Update the existing structured Debian preseed test so
   =Mode: "regular"= no longer expects =vg_name= output.
-- [ ] Keep boot ref and query behavior covered by existing router and polling
+- [X] Keep boot ref and query behavior covered by existing router and polling
   tests, adding assertions only if the ref path changes.
-- [ ] Run focused tests for the early milestone:
+- [X] Run focused tests for the early milestone:
   =go test ./test/render-validation ./templates ./mappings ./router ./polling=
-- [ ] Begin real install testing for the default regular path after this phase,
+- [X] Begin real install testing for the default regular path after this phase,
   while LVM cleanup and RAID support continue in later phases.
 
 *** Phase 6: LVM Storage Recipe
