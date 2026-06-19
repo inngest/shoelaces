@@ -448,6 +448,7 @@ func (s *Service) genBootScript(srv server.Server, scriptName, envName string, p
 		if err != nil {
 			return "", err
 		}
+		s.logger.Info("Created boot reference", "component", "polling", "ref", ref, "mac", srv.Mac, "target", scriptName, "environment", envName)
 		bootsession.ApplyReferenceParams(renderParams, ref)
 	}
 	text, err := s.templateRenderer.RenderTemplate(scriptName, mappings.ParamsWithProvisioning(renderParams, users, provisioning), envName)

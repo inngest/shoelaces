@@ -39,6 +39,7 @@ func GetBootSessionReference(w http.ResponseWriter, r *http.Request) {
 	reference, err := env.BootSessions.Inspect(r.Context(), ref)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			env.Logger.Warn("Boot reference not found", "component", "handler", "ref", ref)
 			http.Error(w, "boot reference not found", http.StatusNotFound)
 			return
 		}
