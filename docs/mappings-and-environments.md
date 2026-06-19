@@ -198,6 +198,12 @@ contains the LUKS passphrase when rendered. Use environment-backed passphrases,
 boot-session references, and trusted provisioning networks for encrypted
 targets.
 
+`storage.encryption` follows the normal structured provisioning merge order:
+defaults, selected target, then the matched mapping rule. Prefer per-host
+environment references on specific MAC, IP, or hostname mappings for production
+passphrases. Raw passphrase values are accepted only for disposable lab
+fixtures.
+
 Structured `storage.encryption` is supported only by the embedded
 `preseed/debian` installer template. Embedded Ubuntu minimal, CentOS kickstart,
 CoreOS/cloud-init, and other non-Debian installer templates reject it instead

@@ -1,6 +1,6 @@
 #+title: LUKS Install Profiles
 #+author: Darwin D. Wu
-#+status: Draft
+#+status: Done
 #+date: <2026-06-16 Tue>
 
 * LUKS Install Profiles
@@ -168,35 +168,35 @@ site-specific native installer behavior.
 
 *** Phase 6: Documentation And Verification
 
-- [ ] Document the structured =storage.encryption= schema and merge behavior.
-- [ ] Document LUKS security tradeoffs, especially serving installer config over
+- [X] Document the structured =storage.encryption= schema and merge behavior.
+- [X] Document LUKS security tradeoffs, especially serving installer config over
   HTTP and exposing unattended install secrets to machines on the provisioning
   network.
-- [ ] Document recommended use of per-host secrets, trusted networks, and TLS or
+- [X] Document recommended use of per-host secrets, trusted networks, and TLS or
   network isolation where available.
-- [ ] Document how =installer.extraTemplate= remains the escape hatch for
+- [X] Document how =installer.extraTemplate= remains the escape hatch for
   native installer behavior that is not covered by structured storage fields.
-- [ ] Run =make test=.
-- [ ] Run =make integration=.
-- [ ] Run the render validation target.
-- [ ] Run =make lint=.
-- [ ] Run =./scripts/check-plan-status.sh=.
+- [X] Run =make test=.
+- [X] Run =make integration=.
+- [X] Run the render validation target.
+- [X] Run =make lint=.
+- [X] Run =./scripts/check-plan-status.sh=.
 
 ** Acceptance Criteria
 
-- [ ] LUKS and non-LUKS install targets can coexist.
-- [ ] LUKS configuration is represented under structured =storage= fields.
-- [ ] Debian LUKS rendering supports =regular=, =lvm=, and =raid= storage modes.
-- [ ] Non-Debian encrypted targets fail clearly instead of rendering
+- [X] LUKS and non-LUKS install targets can coexist.
+- [X] LUKS configuration is represented under structured =storage= fields.
+- [X] Debian LUKS rendering supports =regular=, =lvm=, and =raid= storage modes.
+- [X] Non-Debian encrypted targets fail clearly instead of rendering
   unencrypted installer config.
-- [ ] LUKS secrets can come from explicit environment-backed values.
-- [ ] Raw LUKS secret values are supported only as documented lab-only inputs.
-- [ ] Existing non-LUKS =regular=, =lvm=, and =raid= Debian installs continue
+- [X] LUKS secrets can come from explicit environment-backed values.
+- [X] Raw LUKS secret values are supported only as documented lab-only inputs.
+- [X] Existing non-LUKS =regular=, =lvm=, and =raid= Debian installs continue
   to render.
-- [ ] Sensitive LUKS values are redacted from logs/events and do not appear in
+- [X] Sensitive LUKS values are redacted from logs/events and do not appear in
   rendered boot-script URLs.
-- [ ] Debian encrypted and unencrypted render-validation fixtures pass.
-- [ ] =make test=, =make integration=, render validation, =make lint=, and the
+- [X] Debian encrypted and unencrypted render-validation fixtures pass.
+- [X] =make test=, =make integration=, render validation, =make lint=, and the
   plan status checker pass.
 
 ** Notes And Risks
