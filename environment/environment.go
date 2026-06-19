@@ -27,6 +27,7 @@ import (
 	"time"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/bootsession"
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
@@ -54,6 +55,7 @@ type Environment struct {
 	Environments    []string                      // Valid config environments
 	Logger          log.Logger
 	RuntimeStore    persistence.Store
+	BootSessions    *bootsession.Store
 
 	BindAddr          string
 	BaseURL           string
@@ -93,7 +95,9 @@ func New(options Options) *Environment {
 	env.RuntimeStore = env.initPersistence()
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
 	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
+	env.BootSessions = bootsession.NewStore(env.RuntimeStore, env.RuntimeStore, env.PersistenceConfig.Retention.BootSessions)
 	env.cleanupEventRetention()
+	env.cleanupBootSessionRetention()
 
 	env.logStartupConfig()
 	env.Logger.Info("Discovered environment overrides", "component", "environment", "count", len(env.Environments), "environments", env.Environments)
@@ -147,6 +151,7 @@ func defaultEnvironment() *Environment {
 	env.RuntimeStore = memory.New()
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
 	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
+	env.BootSessions = bootsession.NewStore(env.RuntimeStore, env.RuntimeStore, env.PersistenceConfig.Retention.BootSessions)
 	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
 
 	return env
@@ -176,7 +181,7 @@ func (env *Environment) cleanupEventRetention() {
 	if retention <= 0 || env.EventLog == nil {
 		return
 	}
-	cutoff := time.Now().Add(-retention)
+	cutoff := time.Now()
 	deleted, err := env.EventLog.DeleteEventsBefore(context.Background(), cutoff)
 	if err != nil {
 		env.Logger.Error("Failed to clean up old events", "component", "environment", "err", err)
@@ -184,6 +189,22 @@ func (env *Environment) cleanupEventRetention() {
 	}
 	if deleted > 0 {
 		env.Logger.Info("Cleaned up old events", "component", "environment", "deleted", deleted, "retention", retention.String())
+	}
+}
+
+func (env *Environment) cleanupBootSessionRetention() {
+	retention := env.PersistenceConfig.Retention.BootSessions
+	if retention <= 0 || env.BootSessions == nil {
+		return
+	}
+	cutoff := time.Now().Add(-retention)
+	deleted, err := env.BootSessions.DeleteExpired(context.Background(), cutoff)
+	if err != nil {
+		env.Logger.Error("Failed to clean up old boot sessions", "component", "environment", "err", err)
+		return
+	}
+	if deleted > 0 {
+		env.Logger.Info("Cleaned up old boot sessions", "component", "environment", "deleted", deleted, "retention", retention.String())
 	}
 }
 

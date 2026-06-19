@@ -18,6 +18,7 @@ package environment
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"io"
 	"net"
 	"os"
@@ -32,6 +33,7 @@ import (
 	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
 )
 
 func TestDefaultEnvironment(t *testing.T) {
@@ -193,7 +195,7 @@ func TestNewCleansUpOldPersistentEvents(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.AppendEvent(context.Background(), persistence.EventRecord{
 		Type:       int(event.HostBoot),
-		OccurredAt: now.Add(-10 * time.Minute),
+		OccurredAt: now.Add(time.Hour),
 		MAC:        "06:66:de:ad:be:f0",
 		Message:    "new",
 	})
@@ -220,6 +222,58 @@ func TestNewCleansUpOldPersistentEvents(t *testing.T) {
 	assert.Empty(t, events["06:66:de:ad:be:ef"])
 	require.Len(t, events["06:66:de:ad:be:f0"], 1)
 	assert.Equal(t, "new", events["06:66:de:ad:be:f0"][0].Message)
+}
+
+func TestNewCleansUpExpiredBootSessions(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+	dbPath := filepath.Join(dataDir, "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	now := time.Now()
+	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
+		Ref:              "expired-ref",
+		MAC:              "06:66:de:ad:be:ef",
+		ParamsJSON:       []byte(`{}`),
+		UsersJSON:        []byte(`{}`),
+		ProvisioningJSON: []byte(`{}`),
+		CreatedAt:        now.Add(-2 * time.Hour),
+		ExpiresAt:        now.Add(-time.Hour),
+	}))
+	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
+		Ref:              "active-ref",
+		MAC:              "06:66:de:ad:be:f0",
+		ParamsJSON:       []byte(`{}`),
+		UsersJSON:        []byte(`{}`),
+		ProvisioningJSON: []byte(`{}`),
+		CreatedAt:        now,
+		ExpiresAt:        now.Add(time.Hour),
+	}))
+	require.NoError(t, store.Close())
+
+	env := New(Options{
+		BindAddr: "localhost:0",
+		DataDir:  dataDir,
+		Persistence: persistence.Config{
+			Backend: persistence.BackendSQLite,
+			Retention: persistence.RetentionConfig{
+				Events:       time.Hour,
+				BootSessions: time.Hour,
+			},
+		},
+	})
+	t.Cleanup(func() {
+		require.NoError(t, env.RuntimeStore.Close())
+	})
+
+	db, err := sql.Open("sqlite", dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	var refs int
+	require.NoError(t, db.QueryRow(`SELECT count(*) FROM boot_sessions`).Scan(&refs))
+	assert.Equal(t, 1, refs)
+	var ref string
+	require.NoError(t, db.QueryRow(`SELECT ref FROM boot_sessions`).Scan(&ref))
+	assert.Equal(t, "active-ref", ref)
 }
 
 func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {
