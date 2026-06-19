@@ -181,7 +181,7 @@ func (env *Environment) cleanupEventRetention() {
 	if retention <= 0 || env.EventLog == nil {
 		return
 	}
-	cutoff := time.Now()
+	cutoff := time.Now().Add(-retention)
 	deleted, err := env.EventLog.DeleteEventsBefore(context.Background(), cutoff)
 	if err != nil {
 		env.Logger.Error("Failed to clean up old events", "component", "environment", "err", err)
