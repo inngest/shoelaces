@@ -62,6 +62,7 @@ func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing
 
 	assert.Equal(t, "/dev/explicit", params["storage_disk"])
 	assert.Equal(t, "/dev/explicit", params["storage_wipe_disks"])
+	assert.Equal(t, "regular", params["storage_mode"])
 	assert.Equal(t, "vgstructured", params["vg_name"])
 	assert.Equal(t, "en_GB.UTF-8", params["locale_language"])
 	assert.Equal(t, "gb", params["locale_keyboard"])
@@ -141,4 +142,15 @@ func TestParamsWithProvisioningKeepsDefaultWipeDiskFallback(t *testing.T) {
 
 	assert.Equal(t, "/dev/nvme0n1", params["storage_disk"])
 	assert.Equal(t, "/dev/nvme0n1 /dev/nvme1n1", params["storage_wipe_disks"])
+	assert.Equal(t, "regular", params["storage_mode"])
+}
+
+func TestParamsWithProvisioningProjectsStructuredStorageMode(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{
+		Storage: StorageConfig{
+			Mode: "lvm",
+		},
+	})
+
+	assert.Equal(t, "lvm", params["storage_mode"])
 }

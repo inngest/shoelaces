@@ -360,7 +360,7 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	if err := validateStringList(path+".packages.groups", config.Packages.Groups); err != nil {
 		return err
 	}
-	if err := validateOneOf(path+".storage.mode", config.Storage.Mode, "", "plain", "lvm", "raid", "manual"); err != nil {
+	if err := validateOneOf(path+".storage.mode", config.Storage.Mode, "", "regular", "plain", "lvm", "raid", "manual"); err != nil {
 		return err
 	}
 	if err := validateWipeDiskPatterns(path+".storage.wipeDiskPatterns", config.Storage.WipeDiskPatterns); err != nil {

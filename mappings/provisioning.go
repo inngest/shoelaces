@@ -295,7 +295,7 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "storage_template_disk", "/dev/sda /dev/sdb")
 	setDefaultParamValue(params, "kickstart_storage_drive", "sda")
 	setDefaultParamValue(params, "storage_wipe", "true")
-	setDefaultParamValue(params, "storage_mode", "lvm")
+	setDefaultParamValue(params, "storage_mode", "regular")
 	setDefaultParamValue(params, "ubuntu_minimal_storage_mode", "regular")
 	setDefaultParamValue(params, "repo_firmware", "true")
 	setDefaultParamValue(params, "repo_contrib", "true")
