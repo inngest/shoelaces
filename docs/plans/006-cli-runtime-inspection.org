@@ -126,24 +126,24 @@ shoelaces boot-sessions get 01J... --output json
 
 *** Phase 2: Read-Only Store Opening
 
-- [ ] Add a helper that opens the configured SQLite persistence store for
+- [X] Add a helper that opens the configured SQLite persistence store for
   inspection without constructing a full =environment.Environment=.
-- [ ] Reject =memory= persistence for inspection commands with a clear error.
-- [ ] Ensure relative persistence paths still resolve under =data-dir=.
-- [ ] Ensure the store is closed on success and error paths.
-- [ ] Add tests for SQLite path resolution, memory backend rejection, invalid
+- [X] Reject =memory= persistence for inspection commands with a clear error.
+- [X] Ensure relative persistence paths still resolve under =data-dir=.
+- [X] Ensure the store is closed on success and error paths.
+- [X] Add tests for SQLite path resolution, memory backend rejection, invalid
   backend rejection, and close behavior.
 
 *** Phase 3: Shared Output Formatting
 
-- [ ] Add an =--output= flag for inspection commands with =table= and =json=
+- [X] Add an =--output= flag for inspection commands with =table= and =json=
   values.
-- [ ] Implement JSON output with =encoding/json= and deterministic indentation
+- [X] Implement JSON output with =encoding/json= and deterministic indentation
   only if needed for readability.
-- [ ] Implement table output with the standard library =text/tabwriter=.
-- [ ] Keep table formatting dependency-free unless wrapping, terminal width,
+- [X] Implement table output with the standard library =text/tabwriter=.
+- [X] Keep table formatting dependency-free unless wrapping, terminal width,
   borders, or colors become explicit requirements.
-- [ ] Add tests for invalid output formats, table headers, table row rendering,
+- [X] Add tests for invalid output formats, table headers, table row rendering,
   and JSON shape.
 
 *** Phase 4: Event Inspection

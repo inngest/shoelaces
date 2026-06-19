@@ -49,6 +49,32 @@ func TestRunCommandHelpShowsServerOptions(t *testing.T) {
 	assert.NotContains(t, output.String(), "--version")
 }
 
+func TestInspectionCommandHelpShowsOutputOption(t *testing.T) {
+	var output bytes.Buffer
+	cmd := command("", nil, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute for inspection help")
+		return nil
+	})
+	cmd.Writer = &output
+
+	require.NoError(t, cmd.Run(context.Background(), []string{"shoelaces", "events", "--help"}))
+	assert.Contains(t, output.String(), "--output")
+	assert.Contains(t, output.String(), "table")
+	assert.Contains(t, output.String(), "json")
+}
+
+func TestInspectionCommandRejectsInvalidOutputOption(t *testing.T) {
+	cmd := command("", nil, func(env *environment.Environment) error {
+		t.Fatal("server runner should not execute for invalid inspection output")
+		return nil
+	})
+	cmd.Writer = io.Discard
+	cmd.ErrWriter = io.Discard
+
+	err := cmd.Run(context.Background(), []string{"shoelaces", "events", "--output", "yaml"})
+	assert.ErrorContains(t, err, `unsupported output format "yaml"; use table or json`)
+}
+
 func TestServerOptionsAreRunLocal(t *testing.T) {
 	cmd := command("test.toml", map[any]any{
 		"data-dir":            "../../configs/data-dir",
