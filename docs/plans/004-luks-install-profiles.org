@@ -118,24 +118,24 @@ site-specific native installer behavior.
 
 *** Phase 3: Debian LUKS Rendering
 
-- [ ] Update the embedded Debian preseed template to render encrypted storage
+- [X] Update the embedded Debian preseed template to render encrypted storage
   when =storage.encryption.enabled= is true.
-- [ ] Keep the existing unencrypted =regular=, =lvm=, and =raid= rendering
+- [X] Keep the existing unencrypted =regular=, =lvm=, and =raid= rendering
   paths available.
-- [ ] Support encrypted Debian =regular=, =lvm=, and =raid= storage modes.
-- [ ] Define and document the encrypted device stack for each Debian storage
+- [X] Support encrypted Debian =regular=, =lvm=, and =raid= storage modes.
+- [X] Define and document the encrypted device stack for each Debian storage
   mode, including where LUKS sits relative to partitions, LVM, mdraid, =/boot=,
   swap, root, and duplicated ESPs.
-- [ ] Generate Debian preseed crypto directives from structured storage fields
+- [X] Generate Debian preseed crypto directives from structured storage fields
   instead of flat =luks_*= params.
-- [ ] Preserve =installer.extraTemplate= after structured sections so advanced
+- [X] Preserve =installer.extraTemplate= after structured sections so advanced
   sites can still add native Debian commands.
-- [ ] Add rendering tests for supported Debian encrypted layouts plus
+- [X] Add rendering tests for supported Debian encrypted layouts plus
   regression coverage proving unencrypted =regular=, =lvm=, and =raid= still
   render.
-- [ ] Add validation/rendering tests for every encrypted Debian storage mode so
+- [X] Add validation/rendering tests for every encrypted Debian storage mode so
   misconfigured encrypted targets fail clearly.
-- [ ] Run the Debian render validation target so the encrypted and unencrypted
+- [X] Run the Debian render validation target so the encrypted and unencrypted
   preseed outputs remain syntactically valid.
 
 *** Phase 4: Non-Debian Installer Guardrails
