@@ -140,15 +140,15 @@ site-specific native installer behavior.
 
 *** Phase 4: Non-Debian Installer Guardrails
 
-- [ ] Explicitly reject structured LUKS for Ubuntu minimal, CentOS kickstart,
+- [X] Explicitly reject structured LUKS for Ubuntu minimal, CentOS kickstart,
   CoreOS, and other non-Debian installer templates in this plan.
-- [ ] Document the Debian-only LUKS scope and recommend =installer.extraTemplate=
+- [X] Document the Debian-only LUKS scope and recommend =installer.extraTemplate=
   or full template override as the escape hatch for non-Debian encrypted
   installs.
-- [ ] Make unsupported encrypted installer combinations fail before rendering
+- [X] Make unsupported encrypted installer combinations fail before rendering
   where Shoelaces can identify the selected installer template, instead of
   silently producing unencrypted install config.
-- [ ] Add validation/rendering tests proving non-Debian encrypted targets fail
+- [X] Add validation/rendering tests proving non-Debian encrypted targets fail
   clearly instead of rendering unencrypted install config.
 
 *** Phase 5: Target Examples And Development Config

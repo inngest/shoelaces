@@ -391,6 +391,13 @@ The rendered Debian preseed must contain the passphrase so the install can run
 unattended. Keep encrypted targets behind boot-session references and use a
 trusted provisioning network.
 
+Structured `storage.encryption` is Debian-only in the embedded templates.
+Ubuntu minimal, CentOS kickstart, CoreOS/cloud-init, and other non-Debian
+installer templates fail clearly when it is enabled so they do not silently
+render an unencrypted install. For non-Debian encrypted installs, keep using
+native installer syntax through `installer.extraTemplate` or a full template
+override.
+
 The legacy `plain` value remains parseable in mappings for compatibility with
 older generic config, but Debian preseed rejects it clearly. Use `regular` for
 new Debian plain-disk installs.

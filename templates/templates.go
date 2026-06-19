@@ -347,8 +347,32 @@ func validateRenderParams(configName string, paramMap map[string]interface{}) er
 	case "preseed/debian":
 		return validateDebianPreseedParams(paramMap)
 	default:
+		if isStorageEncryptionEnabled(paramMap) && isUnsupportedEncryptedInstallerTemplate(configName) {
+			return fmt.Errorf("%s does not support structured storage encryption; storage.encryption is supported only by preseed/debian in the embedded templates. Use installer.extraTemplate or a full template override for non-Debian encrypted installs", configName)
+		}
 		return nil
 	}
+}
+
+func isUnsupportedEncryptedInstallerTemplate(configName string) bool {
+	switch configName {
+	case "centos.ipxe", "centos.ks", "coreos.ipxe", "cloudconfig-coreos", "preseed/storage", "preseed/ubuntu-minimal", "ubuntu-minimal.ipxe":
+		return true
+	}
+	if strings.HasPrefix(configName, "preseed/") && configName != "preseed/debian" {
+		return true
+	}
+	if strings.HasSuffix(configName, ".ks") {
+		return true
+	}
+	if strings.HasPrefix(configName, "cloudconfig") || strings.HasPrefix(configName, "cloud-config/") {
+		return true
+	}
+	return false
+}
+
+func isStorageEncryptionEnabled(paramMap map[string]interface{}) bool {
+	return strings.EqualFold(strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_enabled"])), "true")
 }
 
 func validateDebianPreseedParams(paramMap map[string]interface{}) error {

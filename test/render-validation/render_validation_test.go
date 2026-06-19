@@ -939,6 +939,50 @@ func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
 	}
 }
 
+func TestRenderedTemplatesRejectUnsupportedStructuredEncryption(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		params   map[string]interface{}
+	}{
+		{name: "ubuntu preseed", template: "preseed/ubuntu-minimal", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "legacy storage preseed", template: "preseed/storage", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "centos kickstart", template: "centos.ks", params: encryptedUnsupportedParams(kickstartRenderParams)},
+		{name: "coreos cloud config", template: "cloudconfig-coreos", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "ubuntu ipxe", template: "ubuntu-minimal.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
+		{name: "centos ipxe", template: "centos.ipxe", params: encryptedUnsupportedParams(kickstartRenderParams)},
+		{name: "coreos ipxe", template: "coreos.ipxe", params: encryptedUnsupportedParams(defaultRenderParams)},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := renderTemplateError(t, renderer, tt.template, tt.params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.template+" does not support structured storage encryption")
+			assert.Contains(t, err.Error(), "storage.encryption is supported only by preseed/debian")
+		})
+	}
+}
+
+func TestCustomNonDebianInstallerTemplatesRejectStructuredEncryption(t *testing.T) {
+	dataDir := t.TempDir()
+	writeRenderTemplate(t, dataDir, "preseed/custom.slc", `{{define "preseed/custom" -}}custom preseed{{end}}`)
+	writeRenderTemplate(t, dataDir, "kickstart/custom.ks.slc", `{{define "kickstart/custom.ks" -}}custom kickstart{{end}}`)
+	writeRenderTemplate(t, dataDir, "cloud-config/custom.slc", `{{define "cloud-config/custom" -}}#cloud-config{{end}}`)
+	renderer := newRendererWithDataDir(t, dataDir)
+
+	for _, templateName := range []string{"preseed/custom", "kickstart/custom.ks", "cloud-config/custom"} {
+		t.Run(templateName, func(t *testing.T) {
+			err := renderTemplateError(t, renderer, templateName, encryptedUnsupportedParams(defaultRenderParams))
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), templateName+" does not support structured storage encryption")
+		})
+	}
+}
+
 func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	utc := false
 	ntp := false
@@ -1121,9 +1165,23 @@ func validatorPath(t *testing.T, name string) string {
 func newRenderer(t *testing.T) *templates.ShoelacesTemplates {
 	t.Helper()
 
+	return newRendererWithDataDir(t, t.TempDir())
+}
+
+func newRendererWithDataDir(t *testing.T, dataDir string) *templates.ShoelacesTemplates {
+	t.Helper()
+
 	renderer := templates.New(log.MakeLogger(io.Discard))
-	renderer.ParseTemplates(t.TempDir(), "env_overrides", nil, ".slc")
+	renderer.ParseTemplates(dataDir, "env_overrides", nil, ".slc")
 	return renderer
+}
+
+func writeRenderTemplate(t *testing.T, dataDir, relativePath, content string) {
+	t.Helper()
+
+	path := filepath.Join(dataDir, relativePath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name string, params map[string]interface{}) string {
@@ -1274,5 +1332,17 @@ func encryptedDebianParams(storage mappings.StorageConfig) map[string]interface{
 	return mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
 		Storage: storage,
 		Boot:    mappings.BootConfig{Firmware: "uefi"},
+	})
+}
+
+func encryptedUnsupportedParams(base map[string]interface{}) map[string]interface{} {
+	enabled := true
+	return mappings.ParamsWithProvisioning(base, nil, mappings.ProvisioningConfig{
+		Storage: mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    &enabled,
+				Passphrase: "luks-passphrase",
+			},
+		},
 	})
 }

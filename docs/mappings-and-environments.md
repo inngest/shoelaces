@@ -186,6 +186,13 @@ contains the LUKS passphrase when rendered. Use environment-backed passphrases,
 boot-session references, and trusted provisioning networks for encrypted
 targets.
 
+Structured `storage.encryption` is supported only by the embedded
+`preseed/debian` installer template. Embedded Ubuntu minimal, CentOS kickstart,
+CoreOS/cloud-init, and other non-Debian installer templates reject it instead
+of rendering an unencrypted install by accident. For non-Debian encrypted
+installs, use `installer.extraTemplate` or a full template override with native
+installer syntax.
+
 The legacy `plain` value remains parseable in mappings for compatibility with
 older generic config, but Debian preseed rejects it clearly. Use `regular` for
 new Debian plain-disk installs.
