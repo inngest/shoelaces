@@ -106,6 +106,9 @@ not currently describe the desired behavior.
 - Treat =plain= as a compatibility question during implementation:
   either alias it to =regular= with documentation, or reject it for Debian with
   a clear migration note.
+- Decision for Phase 1: keep =plain= parseable in global mappings for
+  compatibility, but reject it when rendering =preseed/debian=. Debian preseed
+  supports only =regular= and =lvm= until later phases add =raid=.
 - Keep =/boot= as a separate ext4 partition in both =regular= and =lvm= modes.
   This keeps bootloader behavior consistent across the two recipes and avoids
   coupling the first =regular= implementation to assumptions about firmware,
@@ -186,19 +189,19 @@ With one failed disk, the expected impact should be:
 
 *** Phase 1: Regular Defaults And Render Guardrails
 
-- [ ] Update mapping validation for =storage.mode= to include =regular=.
-- [ ] Change the built-in provisioning default =storage_mode= from =lvm= to
+- [X] Update mapping validation for =storage.mode= to include =regular=.
+- [X] Change the built-in provisioning default =storage_mode= from =lvm= to
   =regular=.
-- [ ] Add or update tests proving default Debian preseed rendering uses the
+- [X] Add or update tests proving default Debian preseed rendering uses the
   regular recipe unless a mapping or query explicitly selects =lvm=.
-- [ ] Decide and document whether legacy =plain= is a compatibility alias for
+- [X] Decide and document whether legacy =plain= is a compatibility alias for
   =regular= or an unsupported value for Debian preseed rendering.
-- [ ] Add renderer support for explicit template failures, or add an
+- [X] Add renderer support for explicit template failures, or add an
   equivalent pre-render validation path for =preseed/debian=.
-- [ ] Ensure unknown =storage_mode= values fail clearly for both structured
+- [X] Ensure unknown =storage_mode= values fail clearly for both structured
   mapping values and query-param overrides.
-- [ ] Add tests for valid =regular= and =lvm= values.
-- [ ] Add tests for unsupported values such as =zfs=.
+- [X] Add tests for valid =regular= and =lvm= values.
+- [X] Add tests for unsupported values such as =zfs=.
 
 *** Phase 2: Debian Template Refactor For Regular And Wipe
 
