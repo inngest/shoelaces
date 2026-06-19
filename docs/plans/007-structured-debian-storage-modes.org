@@ -223,15 +223,15 @@ With one failed disk, the expected impact should be:
 
 *** Phase 3: Regular Storage Recipe
 
-- [ ] Render =d-i partman-auto/method string regular=.
-- [ ] Render a GPT/UEFI recipe with an EFI System Partition mounted at
+- [X] Render =d-i partman-auto/method string regular=.
+- [X] Render a GPT/UEFI recipe with an EFI System Partition mounted at
   =/boot/efi=.
-- [ ] Render a separate ext4 =/boot= partition.
-- [ ] Render an ext4 root filesystem mounted at =/=.
-- [ ] Render swap as a partition when swap is configured.
-- [ ] Do not render LVM PV, VG, or LV recipe directives.
-- [ ] Do not render =partman-auto-lvm/new_vg_name=.
-- [ ] Do not require =lvm2-udeb= or =partman-lvm= in this mode.
+- [X] Render a separate ext4 =/boot= partition.
+- [X] Render an ext4 root filesystem mounted at =/=.
+- [X] Render swap as a partition when swap is configured.
+- [X] Do not render LVM PV, VG, or LV recipe directives.
+- [X] Do not render =partman-auto-lvm/new_vg_name=.
+- [X] Do not require =lvm2-udeb= or =partman-lvm= in this mode.
 
 *** Phase 4: Disk Wipe Behavior
 
