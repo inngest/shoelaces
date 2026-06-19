@@ -1,0 +1,189 @@
+#+title: Structured Debian Storage Modes
+#+author: Darwin D. Wu
+#+status: Draft
+#+date: <2026-06-19 Fri>
+
+* Structured Debian Storage Modes
+
+** Goal
+
+Implement structured =storage.mode= support in Shoelaces Debian preseed
+rendering so Debian installs can render either a plain GPT/UEFI partition
+layout or the existing LVM layout from the same structured provisioning model.
+
+At minimum, Debian preseed rendering must support:
+
+- =regular=
+- =lvm=
+
+Unknown storage modes must fail rendering or validation with a clear error
+instead of silently falling back to another layout.
+
+** Context
+
+Shoelaces mappings now expose structured storage config, including:
+
+- =provisioning.Storage.Mode=, with expected values such as =regular= or =lvm=
+- =provisioning.Storage.Disk=, for example =/dev/nvme0n1=
+- =provisioning.Storage.VolumeGroup=, for example =vg0=
+- =provisioning.Storage.Wipe=
+- =provisioning.Storage.WipeDiskPatterns=
+- =provisioning.Storage.Filesystems=, currently root and swap entries
+
+Today the embedded Debian preseed template accepts =storage_mode= but still
+renders an LVM-oriented recipe regardless of mode. A render-validation test also
+sets =Mode: "regular"= while asserting an LVM =vg_name= stanza, so the tests do
+not currently describe the desired behavior.
+
+** Boundaries
+
+- Preserve the public template name =preseed/debian= and existing config URLs.
+- Preserve =boot_ref= and =ref= query behavior for server-side boot session
+  rendering.
+- Do not redesign the full structured storage schema in this plan. Use the
+  existing fields where possible.
+- Keep =preseed/storage= RAID behavior separate unless an implementation change
+  is required to avoid regressions.
+- Keep existing Debian 12 and Debian 13 target rendering working.
+- Keep existing =mappings.yaml= examples valid. If =regular= becomes the
+  recommended default, update examples and docs explicitly.
+
+** Current State
+
+- =mappings.ParamsWithProvisioning= projects =Storage.Mode= to
+  =storage_mode= and =Storage.VolumeGroup= to =vg_name=.
+- Built-in provisioning defaults still set =storage_mode= to =lvm=.
+- Mapping validation currently accepts =plain=, =lvm=, =raid=, and =manual=.
+- The embedded Debian preseed template always renders LVM module loading,
+  LVM cleanup prompts, a PV, and root/swap LVs.
+- The existing wipe early command always renders, even when =storage.wipe= is
+  false, and only wipes the beginning of matched devices.
+
+** Design Direction
+
+- Split Debian storage rendering into named templates so the top-level preseed
+  remains readable.
+- Dispatch the storage recipe by =storage_mode=.
+- Add a small template failure helper or equivalent render validation so query
+  overrides such as =/configs/preseed/debian?storage_mode=zfs= fail clearly.
+- Treat =plain= as a compatibility question during implementation:
+  either alias it to =regular= with documentation, or reject it for Debian with
+  a clear migration note.
+- Keep =/boot= as a separate ext4 partition in both =regular= and =lvm= modes.
+  This keeps bootloader behavior consistent across the two recipes and avoids
+  coupling the first =regular= implementation to assumptions about firmware,
+  filesystem, or future encryption support.
+
+** Phased Implementation Plan
+
+*** Phase 1: Validation And Render Errors
+
+- [ ] Update mapping validation for =storage.mode= to include =regular=.
+- [ ] Decide and document whether legacy =plain= is a compatibility alias for
+  =regular= or an unsupported value for Debian preseed rendering.
+- [ ] Add renderer support for explicit template failures, or add an
+  equivalent pre-render validation path for =preseed/debian=.
+- [ ] Ensure unknown =storage_mode= values fail clearly for both structured
+  mapping values and query-param overrides.
+- [ ] Add tests for valid =regular= and =lvm= values.
+- [ ] Add tests for unsupported values such as =zfs=.
+
+*** Phase 2: Debian Template Refactor
+
+- [ ] Split =configs/data-dir/preseed/debian.preseed.slc= storage rendering
+  into named templates such as:
+  - =preseed/debian/storage=
+  - =preseed/debian/storage/wipe=
+  - =preseed/debian/storage/regular=
+  - =preseed/debian/storage/lvm=
+  - shared commit and GRUB sections, if useful
+- [ ] Preserve the top-level =preseed/debian= template name.
+- [ ] Preserve the order of common, repository, storage, package,
+  =installerExtra=, and finish sections unless a test proves a change is
+  required.
+- [ ] Keep =partman-auto/disk= populated from =storage_disk= in every Debian
+  storage mode.
+
+*** Phase 3: Regular Storage Recipe
+
+- [ ] Render =d-i partman-auto/method string regular=.
+- [ ] Render a GPT/UEFI recipe with an EFI System Partition mounted at
+  =/boot/efi=.
+- [ ] Render a separate ext4 =/boot= partition.
+- [ ] Render an ext4 root filesystem mounted at =/=.
+- [ ] Render swap as a partition when swap is configured.
+- [ ] Do not render LVM PV, VG, or LV recipe directives.
+- [ ] Do not render =partman-auto-lvm/new_vg_name=.
+- [ ] Do not require =lvm2-udeb= or =partman-lvm= in this mode.
+
+*** Phase 4: LVM Storage Recipe
+
+- [ ] Preserve the current LVM layout behavior: EFI, =/boot=, LVM PV, swap LV,
+  and root LV.
+- [ ] Render =partman-auto/method string lvm= for LVM mode.
+- [ ] Render =partman-auto-lvm/new_vg_name= using =storage.volumeGroup= via
+  =vg_name=.
+- [ ] Load =lvm2-udeb= and =partman-lvm= only for LVM mode.
+- [ ] Render root and swap as LVs in the configured VG.
+
+*** Phase 5: Disk Wipe Behavior
+
+- [ ] Gate destructive wipe commands on =storage_wipe=.
+- [ ] If =storage_wipe= is false, omit the destructive early command.
+- [ ] Treat =storage_wipe_disks= values as disk selectors, not partition
+  selectors.
+- [ ] Skip matched partition block devices by checking
+  =/sys/class/block/<name>/partition=.
+- [ ] Wipe both the beginning and end of each selected disk to clear primary
+  and backup GPT, LVM, and MD signatures.
+- [ ] Reread the partition table after wiping where possible, for example with
+  =blockdev --rereadpt= or =partprobe=.
+- [ ] Keep unmatched glob behavior non-fatal.
+
+*** Phase 6: Render-Validation Coverage
+
+- [ ] Add a regular-mode Debian preseed render test that asserts:
+  - no LVM directives are present
+  - no =partman-auto-lvm/new_vg_name= is present
+  - no =lvm2-udeb= or =partman-lvm= requirement is present
+  - EFI, =/boot=, root, and swap partition stanzas are present
+  - the selected disk appears in =partman-auto/disk=
+- [ ] Add an LVM-mode Debian preseed render test that asserts:
+  - LVM directives are present
+  - =partman-auto-lvm/new_vg_name= uses the configured VG name
+  - root and swap are rendered as LVs in the configured VG
+- [ ] Add wipe rendering tests proving:
+  - =wipe=true= includes =partman/early_command=
+  - =wipe=false= omits destructive wipe commands
+  - broad globs skip partition devices
+- [ ] Update the existing structured Debian preseed test so
+  =Mode: "regular"= no longer expects =vg_name= output.
+- [ ] Keep boot ref and query behavior covered by existing router and polling
+  tests, adding assertions only if the ref path changes.
+
+*** Phase 7: Documentation And Examples
+
+- [ ] Update =docs/mappings-and-environments.md= to describe =regular= and
+  =lvm= Debian storage behavior.
+- [ ] Update examples only if the recommended default changes.
+- [ ] Document whether =plain= is still accepted, deprecated, or rejected.
+- [ ] Note that =/boot= remains separate in =regular= mode for consistency with
+  LVM and future encryption-sensitive layouts.
+
+*** Phase 8: Verification
+
+- [ ] Run focused tests:
+  =go test ./test/render-validation ./templates ./mappings ./router ./polling=
+- [ ] Run the full Go test suite:
+  =go test ./...=
+- [ ] Run =./scripts/check-plan-status.sh= after updating this plan.
+
+** Acceptance Criteria
+
+- Debian =storage.mode= =regular= renders a non-LVM GPT/UEFI layout.
+- Debian =storage.mode= =lvm= preserves the current LVM layout behavior.
+- Unsupported Debian storage modes fail clearly.
+- Disk wiping is opt-in via =storage.wipe= and skips partition devices.
+- Existing template names and config URLs continue to work.
+- Render-validation tests cover regular mode, LVM mode, wipe true, wipe false,
+  and partition-skip wipe logic.
