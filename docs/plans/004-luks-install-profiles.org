@@ -73,9 +73,8 @@ site-specific native installer behavior.
 
   #+begin_src yaml
   storage:
-    mode: lvm
+    mode: regular
     disk: /dev/sda
-    volumeGroup: vg0
     encryption:
       enabled: true
       passphrase:
@@ -153,19 +152,19 @@ site-specific native installer behavior.
 
 *** Phase 5: Target Examples And Development Config
 
-- [ ] Make Debian 13 =trixie= the default Debian example/recommended target.
-- [ ] Add sample targets for Debian 13 unencrypted and Debian 13 LUKS.
-- [ ] Keep Debian 12 =bookworm= available as an explicit oldstable target, but
+- [X] Make Debian 13 =trixie= the default Debian example/recommended target.
+- [X] Add sample targets for Debian 13 unencrypted and Debian 13 LUKS.
+- [X] Keep Debian 12 =bookworm= available as an explicit oldstable target, but
   do not make it the default.
-- [ ] Leave existing Ubuntu 24.04 and Ubuntu 26.04 examples unencrypted and make
+- [X] Leave existing Ubuntu 24.04 and Ubuntu 26.04 examples unencrypted and make
   the docs clear that structured LUKS is Debian-only in this plan.
-- [ ] Add an example showing a per-host or per-target LUKS passphrase loaded via
+- [X] Add an example showing a per-host or per-target LUKS passphrase loaded via
   ={ env: ENV_VAR }= from the systemd service environment.
-- [ ] Add a raw-value example only if it is clearly marked as lab-only and not
+- [X] Do not add a raw-value example; raw values remain lab-only and not
   suitable for production.
-- [ ] Update =dev/= config so local development can exercise both encrypted and
+- [X] Update =dev/= config so local development can exercise both encrypted and
   unencrypted targets without real secrets.
-- [ ] Add tests or render-validation fixtures that load the example mappings.
+- [X] Add tests or render-validation fixtures that load the example mappings.
 
 *** Phase 6: Documentation And Verification
 

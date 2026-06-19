@@ -12,6 +12,11 @@ uses SQLite persistence under `dev/data-dir/runtime/shoelaces.db`, and uses
 the embedded provisioning defaults unless you add `.slc` files under
 `dev/data-dir`.
 
+The local mapping defaults to the Debian 13 `debian13` target. It also includes
+`debian13-luks`, which uses regular Debian storage plus a LUKS passphrase read
+from `SHOELACES_DEV_LUKS_PASSPHRASE`. Use a throwaway value only; the dev
+profile is for rendering and workflow checks, not real secrets.
+
 See [`docs/persistence.md`](../docs/persistence.md) for the runtime database
 layout, retention behavior, and sqlc/Goose workflow.
 

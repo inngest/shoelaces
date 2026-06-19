@@ -30,12 +30,12 @@ defaults:
       kernelArgs: []
   repos:
     osMirror: http://ftp.debian.org/debian
-    release: bookworm
+    release: trixie
 
 targets:
   debian12:
     script: debian.ipxe
-    label: Debian 12 Bookworm
+    label: Debian 12 Bookworm (oldstable)
     repos:
       release: bookworm
 
@@ -45,12 +45,25 @@ targets:
     repos:
       release: trixie
 
+  debian13-luks:
+    script: debian.ipxe
+    label: Debian 13 Trixie LUKS
+    repos:
+      release: trixie
+    storage:
+      mode: regular
+      encryption:
+        enabled: true
+        passphrase:
+          env: SHOELACES_LUKS_PASSPHRASE
+
 networkMaps:
   - network: 104.225.9.96/27
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
       - debian12
       - debian13
+      - debian13-luks
     params:
       hostnamePrefix: iad-
 
@@ -163,9 +176,8 @@ passphrase is required when encryption is enabled. `cipher`, `keySize`, and
 
 ```yaml
 storage:
-  mode: lvm
+  mode: regular
   disk: /dev/nvme0n1
-  volumeGroup: vg0
   encryption:
     enabled: true
     passphrase:

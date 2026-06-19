@@ -4,40 +4,55 @@ defaults:
     encrypt_home: "false"
     # Serial console output is useful when exercising generated boot configs.
     linuxargs: "console=ttyS0"
+  repos:
+    release: trixie
 
 targets:
   # These targets use the embedded generic provisioning templates unless a local
   # .slc override is added under dev/data-dir.
   debian12:
     script: debian.ipxe
-    label: Debian 12 Bookworm
-    params:
+    label: Debian 12 Bookworm (oldstable)
+    repos:
       release: bookworm
 
   debian13:
     script: debian.ipxe
     label: Debian 13 Trixie
-    params:
+    repos:
       release: trixie
+
+  debian13-luks:
+    script: debian.ipxe
+    label: Debian 13 Trixie LUKS
+    repos:
+      release: trixie
+    storage:
+      mode: regular
+      encryption:
+        enabled: true
+        passphrase:
+          env: SHOELACES_DEV_LUKS_PASSPHRASE
 
   ubuntu2404:
     script: ubuntu-minimal.ipxe
     label: Ubuntu 24.04 LTS
-    params:
+    repos:
       release: noble
 
   centos8:
     script: centos.ipxe
     label: CentOS 8
-    params:
+    repos:
       release: "8"
 
 networkMaps:
   - network: 127.0.0.1/32
-    defaultTarget: debian12
+    defaultTarget: debian13
     targets:
       - debian12
       - debian13
+      - debian13-luks
       - ubuntu2404
       - centos8
     params:
@@ -47,6 +62,7 @@ networkMaps:
     targets:
       - debian12
       - debian13
+      - debian13-luks
       - ubuntu2404
       - centos8
 
@@ -55,6 +71,11 @@ hostnameMaps:
     defaultTarget: debian13
     targets:
       - debian13
+
+  - hostname: '^debian13-luks-dev$'
+    defaultTarget: debian13-luks
+    targets:
+      - debian13-luks
 
   - hostname: '^ubuntu24-dev$'
     defaultTarget: ubuntu2404

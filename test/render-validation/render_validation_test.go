@@ -324,6 +324,52 @@ func TestRenderedEncryptedDebianPreseedsPassDebconfSetSelectionsWhenAvailable(t 
 	}
 }
 
+func TestExampleMappingsRenderDebian13Targets(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		path       string
+		luksEnv    string
+		passphrase string
+	}{
+		{
+			name:       "repository",
+			path:       filepath.Join("..", "..", "configs", "data-dir", "mappings.yaml"),
+			luksEnv:    "SHOELACES_LUKS_PASSPHRASE",
+			passphrase: "repo-luks-passphrase",
+		},
+		{
+			name:       "development",
+			path:       filepath.Join("..", "..", "dev", "data-dir", "mappings.yaml"),
+			luksEnv:    "SHOELACES_DEV_LUKS_PASSPHRASE",
+			passphrase: "dev-luks-passphrase",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			parsed, err := mappings.ParseMappings(log.MakeLogger(io.Discard), tt.path)
+			require.NoError(t, err)
+			resolver, err := mappings.NewResolver(parsed)
+			require.NoError(t, err)
+			renderer := newRenderer(t)
+
+			plain := resolveExampleTarget(t, resolver, "debian13", tt.luksEnv, tt.passphrase)
+			plainIPXE := renderTemplate(t, renderer, plain.Target.Script, paramsForResolvedTarget(plain))
+			plainPreseed := renderTemplate(t, renderer, "preseed/debian", paramsForResolvedTarget(plain))
+			assert.Contains(t, plainIPXE, "Debian trixie netboot")
+			assert.Contains(t, plainPreseed, "d-i partman-auto/choose_recipe select uefi-regular")
+			assert.NotContains(t, plainPreseed, "d-i partman-crypto/passphrase")
+
+			luks := resolveExampleTarget(t, resolver, "debian13-luks", tt.luksEnv, tt.passphrase)
+			luksIPXE := renderTemplate(t, renderer, luks.Target.Script, paramsForResolvedTarget(luks))
+			luksPreseed := renderTemplate(t, renderer, "preseed/debian", paramsForResolvedTarget(luks))
+			assert.Contains(t, luksIPXE, "Debian trixie netboot")
+			assert.NotContains(t, luksIPXE, tt.passphrase)
+			assert.Contains(t, luksPreseed, "d-i partman-auto/method string crypto")
+			assert.Contains(t, luksPreseed, "d-i partman-auto/choose_recipe select uefi-regular-luks")
+			assert.Contains(t, luksPreseed, "d-i partman-crypto/passphrase password "+tt.passphrase)
+		})
+	}
+}
+
 func TestRenderedPreseedsApplyInstallUserParams(t *testing.T) {
 	renderer := newRenderer(t)
 	params := paramsWith(defaultRenderParams, "install_username", "alice")
@@ -1345,4 +1391,28 @@ func encryptedUnsupportedParams(base map[string]interface{}) map[string]interfac
 			},
 		},
 	})
+}
+
+func resolveExampleTarget(t *testing.T, resolver *mappings.Resolver, targetName, envName, envValue string) mappings.ResolveResult {
+	t.Helper()
+
+	result, err := resolver.Resolve(mappings.ResolveRequest{
+		ManualTarget: targetName,
+		GeneratedParams: map[string]any{
+			"baseURL":  "shoelaces.example.test:8081",
+			"hostname": targetName + "-example",
+		},
+		EnvLookup: func(name string) (string, bool) {
+			if name == envName {
+				return envValue, true
+			}
+			return "", false
+		},
+	})
+	require.NoError(t, err)
+	return result
+}
+
+func paramsForResolvedTarget(result mappings.ResolveResult) map[string]interface{} {
+	return mappings.ParamsWithProvisioning(result.Params, result.Users, result.Provisioning)
 }
