@@ -66,8 +66,17 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to resolve boot reference", http.StatusInternalServerError)
 			return
 		}
-		variablesMap = mappings.ParamsWithProvisioning(snapshot.Params, snapshot.Users, snapshot.Provisioning)
 		delete(queryParams, bootsession.QueryParam)
+
+		params := make(map[string]any, len(snapshot.Params)+len(queryParams))
+		for key, val := range snapshot.Params {
+			params[key] = val
+		}
+		for key, val := range queryParams {
+			params[key] = val
+		}
+		variablesMap = mappings.ParamsWithProvisioning(params, snapshot.Users, snapshot.Provisioning)
+		queryParams = nil
 	}
 
 	for key, val := range queryParams {

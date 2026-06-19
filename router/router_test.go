@@ -297,6 +297,9 @@ func TestConfigTemplateRouteResolvesBootReferenceAndPreservesQueryOverrides(t *t
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.cfg.slc"), []byte(`{{define "install.cfg" -}}
 hostname={{.hostname}}
 disk={{.storage_disk}}
+wipe={{.storage_wipe_disks}}
+template_disk={{.storage_template_disk}}
+kickstart_drive={{.kickstart_storage_drive}}
 release={{.release}}
 {{with $users := index . "users"}}{{with $users.Primary}}user={{.Name}}
 {{end}}{{end}}
@@ -334,6 +337,9 @@ release={{.release}}
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "hostname=boot-host")
 	assert.Contains(t, rr.Body.String(), "disk=/dev/query")
+	assert.Contains(t, rr.Body.String(), "wipe=/dev/query")
+	assert.Contains(t, rr.Body.String(), "template_disk=/dev/query")
+	assert.Contains(t, rr.Body.String(), "kickstart_drive=query")
 	assert.Contains(t, rr.Body.String(), "release=trixie")
 	assert.Contains(t, rr.Body.String(), "user=infra")
 }
