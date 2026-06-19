@@ -50,7 +50,7 @@ func New(addr, root string, readonly bool, timeout time.Duration) *Server {
 
 		n, err := rf.ReadFrom(f)
 		if err != nil {
-			s.logger.Error("TFTP read transfer failed", "filename", filename, "path", path, "bytes", n, "err", err)
+			s.logger.Debug("TFTP read transfer returned error", "filename", filename, "path", path, "bytes", n, "err", err)
 			return err
 		}
 		s.logger.Debug("TFTP read transfer completed", "filename", filename, "path", path, "bytes", n)
@@ -73,7 +73,7 @@ func New(addr, root string, readonly bool, timeout time.Duration) *Server {
 			defer func() { _ = f.Close() }()
 			n, err := wt.WriteTo(f)
 			if err != nil {
-				s.logger.Error("TFTP write transfer failed", "filename", filename, "path", path, "bytes", n, "err", err)
+				s.logger.Debug("TFTP write transfer returned error", "filename", filename, "path", path, "bytes", n, "err", err)
 				return err
 			}
 			s.logger.Debug("TFTP write transfer completed", "filename", filename, "path", path, "bytes", n)
@@ -129,11 +129,15 @@ func (h tftpHook) OnSuccess(stats tftp.TransferStats) {
 
 func (h tftpHook) OnFailure(stats tftp.TransferStats, err error) {
 	args := append(tftpTransferAttrs(stats), "err", err)
+	if isTFTPOptionNegotiationAbort(err) {
+		h.logger.Debug("TFTP transfer aborted by client during option negotiation", args...)
+		return
+	}
 	h.logger.Warn("TFTP transfer failed", args...)
 }
 
 func tftpTransferAttrs(stats tftp.TransferStats) []any {
-	return []any{
+	args := []any{
 		"remote_addr", stats.RemoteAddr.String(),
 		"filename", stats.Filename,
 		"mode", stats.Mode,
@@ -141,4 +145,18 @@ func tftpTransferAttrs(stats tftp.TransferStats) []any {
 		"datagrams_sent", stats.DatagramsSent,
 		"datagrams_acked", stats.DatagramsAcked,
 	}
+	if len(stats.Opts) > 0 {
+		args = append(args, "options", stats.Opts)
+	}
+	return args
+}
+
+func isTFTPOptionNegotiationAbort(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "sending block 0:") &&
+		strings.Contains(msg, "code=8") &&
+		strings.Contains(strings.ToLower(msg), "user aborted")
 }
