@@ -27,13 +27,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/bootsession"
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/handlers"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
+	"github.com/inngest/shoelaces/persistence"
 	"github.com/inngest/shoelaces/persistence/memory"
 	"github.com/inngest/shoelaces/polling"
 	"github.com/inngest/shoelaces/server"
@@ -229,17 +232,15 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
 		env.Templates = templates.New(env.Logger)
 		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
-		params := mappings.ParamsWithProvisioning(map[string]any{
-			"baseURL":  env.BaseURL,
-			"hostname": "boot-host",
-		}, map[string]mappings.ResolvedUser{
+		users := map[string]mappings.ResolvedUser{
 			"infra": {
 				Name:            "infra",
 				Primary:         true,
 				FullName:        "Infrastructure User",
 				PasswordCrypted: "$6$infra",
 			},
-		}, mappings.ProvisioningConfig{
+		}
+		provisioning := mappings.ProvisioningConfig{
 			Packages: mappings.PackagesConfig{
 				Install: []string{"curl", "vim"},
 			},
@@ -256,9 +257,22 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 					"encrypt_home": false,
 				},
 			},
-		})
+		}
+		params := mappings.ParamsWithProvisioning(map[string]any{
+			"baseURL":  env.BaseURL,
+			"hostname": "boot-host",
+		}, users, provisioning)
 
 		var err error
+		ref, err := env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server:       server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target:       "debian.ipxe",
+			Params:       params,
+			Users:        users,
+			Provisioning: provisioning,
+		})
+		require.NoError(t, err)
+		bootsession.ApplyReferenceParams(params, ref)
 		bootScript, err = env.Templates.RenderTemplate("debian.ipxe", params, "")
 		require.NoError(t, err)
 	})
@@ -276,6 +290,69 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 	assert.Contains(t, rr.Body.String(), "d-i passwd/user-fullname string Infrastructure User")
 	assert.Contains(t, rr.Body.String(), "d-i passwd/username string infra")
 	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string echo extra boot-host /dev/vda")
+}
+
+func TestConfigTemplateRouteResolvesBootReferenceAndPreservesQueryOverrides(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.cfg.slc"), []byte(`{{define "install.cfg" -}}
+hostname={{.hostname}}
+disk={{.storage_disk}}
+wipe={{.storage_wipe_disks}}
+template_disk={{.storage_template_disk}}
+kickstart_drive={{.kickstart_storage_drive}}
+release={{.release}}
+{{with $users := index . "users"}}{{with $users.Primary}}user={{.Name}}
+{{end}}{{end}}
+{{end}}
+`), 0o644))
+
+	var ref string
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates = templates.New(env.Logger)
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		var err error
+		ref, err = env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server: server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target: "install.cfg",
+			Params: map[string]any{
+				"hostname": "boot-host",
+			},
+			Users: map[string]mappings.ResolvedUser{
+				"infra": {Name: "infra", Primary: true},
+			},
+			Provisioning: mappings.ProvisioningConfig{
+				Repos: mappings.ReposConfig{Release: "trixie"},
+				Storage: mappings.StorageConfig{
+					Disk: "/dev/session",
+				},
+			},
+		})
+		require.NoError(t, err)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/install.cfg?ref="+url.QueryEscape(ref)+"&storage_disk=/dev/query", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "hostname=boot-host")
+	assert.Contains(t, rr.Body.String(), "disk=/dev/query")
+	assert.Contains(t, rr.Body.String(), "wipe=/dev/query")
+	assert.Contains(t, rr.Body.String(), "template_disk=/dev/query")
+	assert.Contains(t, rr.Body.String(), "kickstart_drive=query")
+	assert.Contains(t, rr.Body.String(), "release=trixie")
+	assert.Contains(t, rr.Body.String(), "user=infra")
+}
+
+func TestConfigTemplateRouteMissingBootReferenceReturnsNotFound(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/preseed/debian?ref=missing-ref", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "boot reference not found")
 }
 
 func newTestRouter(t *testing.T, dataDir string) http.Handler {
@@ -306,12 +383,18 @@ func newTestRouterWithEnvironment(t *testing.T, dataDir string, configure func(*
 		ServerStates:      &server.States{Servers: make(map[string]*server.State)},
 		RuntimeStore:      store,
 		EventLog:          event.NewLog(store, store),
+		PersistenceConfig: persistence.Config{
+			Retention: persistence.RetentionConfig{
+				BootSessions: time.Hour,
+			},
+		},
 	}
+	env.BootSessions = bootsession.NewStore(store, store, env.PersistenceConfig.Retention.BootSessions)
 	env.Templates = templates.New(env.Logger)
 	if configure != nil {
 		configure(env)
 	}
-	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 	return handlers.MiddlewareChain(env).Then(ShoelacesRouter(env))
 }
 

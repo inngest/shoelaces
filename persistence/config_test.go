@@ -30,7 +30,9 @@ func TestApplyDefaults(t *testing.T) {
 	assert.Equal(t, BackendSQLite, config.Backend)
 	assert.Equal(t, "runtime/shoelaces.db", config.Path)
 	assert.Equal(t, 720*time.Hour, config.Retention.Events)
+	assert.Equal(t, 24*time.Hour, config.Retention.EventsSweepInterval)
 	assert.Equal(t, 24*time.Hour, config.Retention.BootSessions)
+	assert.Equal(t, time.Hour, config.Retention.BootSessionsSweepInterval)
 }
 
 func TestValidateRejectsUnsupportedBackend(t *testing.T) {

@@ -1,4 +1,5 @@
 // Copyright 2018 ThousandEyes Inc.
+// Copyright 2026 Inngest Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +16,14 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
 
+	"github.com/inngest/shoelaces/bootsession"
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
@@ -43,13 +47,40 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for key, val := range r.URL.Query() {
-		variablesMap[key] = val[0]
+	queryParams := firstQueryValues(r)
+	ref := queryParams[bootsession.QueryParam]
+	if ref != "" {
+		if env.BootSessions == nil {
+			env.Logger.Error("Template request has ref but boot sessions are disabled", "component", "handler", "template", configName, "ref", ref)
+			http.Error(w, "boot references are not available", http.StatusBadRequest)
+			return
+		}
+		snapshot, err := env.BootSessions.Get(r.Context(), ref)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				env.Logger.Error("Template request references missing boot session", "component", "handler", "template", configName, "ref", ref)
+				http.Error(w, "boot reference not found", http.StatusNotFound)
+				return
+			}
+			env.Logger.Error("Failed to resolve boot session", "component", "handler", "template", configName, "ref", ref, "err", err)
+			http.Error(w, "failed to resolve boot reference", http.StatusInternalServerError)
+			return
+		}
+		delete(queryParams, bootsession.QueryParam)
+
+		params := make(map[string]any, len(snapshot.Params)+len(queryParams))
+		for key, val := range snapshot.Params {
+			params[key] = val
+		}
+		for key, val := range queryParams {
+			params[key] = val
+		}
+		variablesMap = mappings.ParamsWithProvisioning(params, snapshot.Users, snapshot.Provisioning)
+		queryParams = nil
 	}
-	if err := mappings.HydrateInstallerConfigQuery(variablesMap); err != nil {
-		env.Logger.Error("Invalid installer config query", "component", "handler", "template", configName, "err", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+
+	for key, val := range queryParams {
+		variablesMap[key] = val
 	}
 
 	envName := envNameFromRequest(r)
@@ -67,6 +98,17 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // TemplateHandler returns a TemplateHandler instance implementing http.Handler
 func TemplateServer(env *environment.Environment) *TemplateHandler {
 	return &TemplateHandler{env: env}
+}
+
+func firstQueryValues(r *http.Request) map[string]string {
+	values := make(map[string]string)
+	for key, val := range r.URL.Query() {
+		if len(val) == 0 {
+			continue
+		}
+		values[key] = val[0]
+	}
+	return values
 }
 
 // TemplateParamsHandler serves the parameters required for completing a template.

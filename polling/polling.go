@@ -24,6 +24,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/inngest/shoelaces/bootsession"
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
@@ -80,6 +81,7 @@ type Service struct {
 	resolver         *mappings.Resolver
 	eventLog         *event.Log
 	templateRenderer *templates.ShoelacesTemplates
+	bootSessions     *bootsession.Store
 	baseURL          string
 }
 
@@ -92,6 +94,12 @@ func NewService(logger log.Logger, serverStates server.StateStore, resolver *map
 		templateRenderer: templateRenderer,
 		baseURL:          baseURL,
 	}
+}
+
+// WithBootSessions enables boot/config references for rendered boot scripts.
+func (s *Service) WithBootSessions(store *bootsession.Store) *Service {
+	s.bootSessions = store
+	return s
 }
 
 // ListServers returns the hosts currently waiting for manual target selection.
@@ -190,7 +198,7 @@ func (s *Service) Poll(srv server.Server) (scriptText string, err error) {
 		if err := s.eventLog.AppendEvent(context.Background(), event.HostBoot, resolvedServer, bootTypeForMatch(result.MatchType), result.Target.Script, result.Params); err != nil {
 			return "", err
 		}
-		return s.genBootScript(result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning), nil
+		return s.genBootScript(resolvedServer, result.Target.Script, result.Target.Environment, result.Params, result.Users, result.Provisioning)
 	}
 
 	logger.Debug("Host needs manual target selection", "where", result.MatchType, "ip", srv.IP)
@@ -243,7 +251,7 @@ func (s *Service) manualAction(srv server.Server, allowedTargets []server.Target
 		if err := s.eventLog.AppendEvent(context.Background(), event.HostBoot, srv, event.ManualBoot, script.Name, script.Params); err != nil {
 			return "", err
 		}
-		return s.genBootScript(script.Name, script.Environment, script.Params, script.Users, script.Provisioning), nil
+		return s.genBootScript(srv, script.Name, script.Environment, script.Params, script.Users, script.Provisioning)
 
 	case RetryAction:
 		return s.genRetryScript(srv.Mac), nil
@@ -426,12 +434,27 @@ func genStartScript(logger log.Logger, baseURL string) string {
 	return parsedTemplate.String()
 }
 
-func (s *Service) genBootScript(scriptName, envName string, params map[string]any, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) string {
-	text, err := s.templateRenderer.RenderTemplate(scriptName, mappings.ParamsWithProvisioning(params, users, provisioning), envName)
-	if err != nil {
-		panic(err)
+func (s *Service) genBootScript(srv server.Server, scriptName, envName string, params map[string]any, users map[string]mappings.ResolvedUser, provisioning mappings.ProvisioningConfig) (string, error) {
+	renderParams := copyParams(params)
+	if s.bootSessions != nil {
+		ref, err := s.bootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server:       srv,
+			Target:       scriptName,
+			Environment:  envName,
+			Params:       params,
+			Users:        users,
+			Provisioning: provisioning,
+		})
+		if err != nil {
+			return "", err
+		}
+		bootsession.ApplyReferenceParams(renderParams, ref)
 	}
-	return text
+	text, err := s.templateRenderer.RenderTemplate(scriptName, mappings.ParamsWithProvisioning(renderParams, users, provisioning), envName)
+	if err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 func (s *Service) genRetryScript(mac string) string {

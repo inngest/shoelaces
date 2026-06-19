@@ -15,11 +15,9 @@
 package mappings
 
 import (
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing.T) {
@@ -77,13 +75,10 @@ func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing
 	assert.Equal(t, "trixie", params["release"])
 	assert.Equal(t, "preseed/custom", params["debian_installer_config_template"])
 	assert.Equal(t, true, params["encrypt_home"])
-	installerQuery, err := url.ParseQuery(params["installer_config_query"].(string))
-	require.NoError(t, err)
-	assert.Equal(t, "true", installerQuery.Get("encrypt_home"))
-	assert.Equal(t, "abc", installerQuery.Get("token"))
-	assert.NotEmpty(t, installerQuery.Get("provisioning"))
-	assert.Equal(t, "&"+params["installer_config_query"].(string), params["installer_config_query_suffix"])
-	assert.Equal(t, "?"+params["installer_config_query"].(string), params["installer_config_query_question"])
+	assert.Equal(t, "abc", params["token"])
+	assert.Equal(t, "", params["boot_ref_query"])
+	assert.Equal(t, "", params["boot_ref_query_suffix"])
+	assert.Equal(t, "", params["boot_ref_query_question"])
 	assert.Equal(t, "auto", params["iface"])
 	assert.Equal(t, "", params["installerExtra"])
 }

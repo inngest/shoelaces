@@ -18,10 +18,12 @@ package environment
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	persistencesqlite "github.com/inngest/shoelaces/persistence/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
 )
 
 func TestDefaultEnvironment(t *testing.T) {
@@ -193,7 +196,7 @@ func TestNewCleansUpOldPersistentEvents(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.AppendEvent(context.Background(), persistence.EventRecord{
 		Type:       int(event.HostBoot),
-		OccurredAt: now.Add(-10 * time.Minute),
+		OccurredAt: now.Add(time.Hour),
 		MAC:        "06:66:de:ad:be:f0",
 		Message:    "new",
 	})
@@ -220,6 +223,112 @@ func TestNewCleansUpOldPersistentEvents(t *testing.T) {
 	assert.Empty(t, events["06:66:de:ad:be:ef"])
 	require.Len(t, events["06:66:de:ad:be:f0"], 1)
 	assert.Equal(t, "new", events["06:66:de:ad:be:f0"][0].Message)
+}
+
+func TestNewCleansUpExpiredBootSessions(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+	dbPath := filepath.Join(dataDir, "runtime", "shoelaces.db")
+	store, err := persistencesqlite.Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	now := time.Now()
+	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
+		Ref:              "expired-ref",
+		MAC:              "06:66:de:ad:be:ef",
+		ParamsJSON:       []byte(`{}`),
+		UsersJSON:        []byte(`{}`),
+		ProvisioningJSON: []byte(`{}`),
+		CreatedAt:        now.Add(-2 * time.Hour),
+		ExpiresAt:        now.Add(-time.Hour),
+	}))
+	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
+		Ref:              "recently-expired-ref",
+		MAC:              "06:66:de:ad:be:f1",
+		ParamsJSON:       []byte(`{}`),
+		UsersJSON:        []byte(`{}`),
+		ProvisioningJSON: []byte(`{}`),
+		CreatedAt:        now.Add(-61 * time.Minute),
+		ExpiresAt:        now.Add(-time.Minute),
+	}))
+	require.NoError(t, store.CreateBootSession(context.Background(), persistence.BootSessionRecord{
+		Ref:              "active-ref",
+		MAC:              "06:66:de:ad:be:f0",
+		ParamsJSON:       []byte(`{}`),
+		UsersJSON:        []byte(`{}`),
+		ProvisioningJSON: []byte(`{}`),
+		CreatedAt:        now,
+		ExpiresAt:        now.Add(time.Hour),
+	}))
+	require.NoError(t, store.Close())
+
+	env := New(Options{
+		BindAddr: "localhost:0",
+		DataDir:  dataDir,
+		Persistence: persistence.Config{
+			Backend: persistence.BackendSQLite,
+			Retention: persistence.RetentionConfig{
+				Events:       time.Hour,
+				BootSessions: time.Hour,
+			},
+		},
+	})
+	t.Cleanup(func() {
+		require.NoError(t, env.RuntimeStore.Close())
+	})
+
+	db, err := sql.Open("sqlite", dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	var refs int
+	require.NoError(t, db.QueryRow(`SELECT count(*) FROM boot_sessions`).Scan(&refs))
+	assert.Equal(t, 1, refs)
+	var ref string
+	require.NoError(t, db.QueryRow(`SELECT ref FROM boot_sessions`).Scan(&ref))
+	assert.Equal(t, "active-ref", ref)
+}
+
+func TestStartRetentionCleanerRunsUntilStopped(t *testing.T) {
+	var sweeps atomic.Int64
+	done := make(chan struct{})
+	stop := startRetentionCleaner(log.MakeLogger(io.Discard), "test", time.Millisecond, func() {
+		if sweeps.Add(1) == 1 {
+			close(done)
+		}
+	})
+	t.Cleanup(stop)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("retention cleaner did not run before timeout")
+	}
+	stop()
+	stop()
+}
+
+func TestEnvironmentCloseStopsRetentionCleanersBeforeClosingStore(t *testing.T) {
+	dataDir := writeMinimalMappingsDataDir(t)
+	var logs bytes.Buffer
+	env := New(Options{
+		BindAddr:   "localhost:0",
+		DataDir:    dataDir,
+		LogHandler: "text",
+		Persistence: persistence.Config{
+			Backend: persistence.BackendSQLite,
+			Retention: persistence.RetentionConfig{
+				Events:                    time.Hour,
+				EventsSweepInterval:       time.Millisecond,
+				BootSessions:              time.Hour,
+				BootSessionsSweepInterval: time.Millisecond,
+			},
+		},
+	})
+	env.Logger = log.MakeLogger(&logs, log.WithHandler(log.HandlerText))
+
+	require.NoError(t, env.Close())
+	time.Sleep(25 * time.Millisecond)
+
+	assert.NotContains(t, logs.String(), "Failed to clean up old events")
+	assert.NotContains(t, logs.String(), "Failed to clean up old boot sessions")
 }
 
 func TestNewPanicsWhenMappingsFileIsMissing(t *testing.T) {

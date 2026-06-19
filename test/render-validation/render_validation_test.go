@@ -154,8 +154,9 @@ func TestRenderedDebianIPXEAppliesStructuredProvisioning(t *testing.T) {
 	assert.Contains(t, rendered, "Debian trixie netboot")
 	assert.Contains(t, rendered, "set mirror https://deb.example/debian/dists/trixie/")
 	assert.Contains(t, rendered, "preseed/url=http://shoelaces.example.test:8081/configs/preseed/debian?encrypt_home=false")
-	assert.Contains(t, rendered, "&site=iad")
-	assert.Contains(t, rendered, "&provisioning=")
+	assert.NotContains(t, rendered, "&site=iad")
+	assert.NotContains(t, rendered, "&provisioning=")
+	assert.NotContains(t, rendered, "&users=")
 	assert.Contains(t, rendered, "console=ttyS1")
 }
 

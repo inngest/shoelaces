@@ -9,7 +9,7 @@ echo coreos-install -d /dev/sda -C {{.release}}
 echo You will probably need to chroot into /dev/sda9 to configure accounts.
 echo More info @ http://coreos.com/docs/running-coreos/bare-metal/installing-to-disk/
 
-kernel ${coreos-url}/coreos_production_pxe.vmlinuz cloud-config-url=http://{{.baseURL}}/configs/{{.coreos_installer_config_template}}?release={{.coreos_release}}&hostname={{.hostname}}{{.installer_config_query_suffix}} console=tty1 coreos.autologin=tty1 {{.linuxargs}}
+kernel ${coreos-url}/coreos_production_pxe.vmlinuz cloud-config-url=http://{{.baseURL}}/configs/{{.coreos_installer_config_template}}?release={{.coreos_release}}&hostname={{.hostname}}{{.boot_ref_query_suffix}} console=tty1 coreos.autologin=tty1 {{.linuxargs}}
 initrd ${coreos-url}/coreos_production_pxe_image.cpio.gz
 
 boot

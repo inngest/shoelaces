@@ -24,9 +24,11 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"time"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/bootsession"
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
@@ -44,16 +46,20 @@ type Environment struct {
 	NetworkMaps  []mappings.NetworkMap
 	// MappingResolver holds the new target resolver for the mappings.yaml
 	// schema used by polling and manual boot paths.
-	MappingResolver *mappings.Resolver
-	ServerStates    server.StateStore
-	EventLog        *event.Log
-	Polling         *polling.Service
-	ParamsBlacklist []string
-	Templates       *templates.ShoelacesTemplates // Dynamic slc templates
-	StaticTemplates *template.Template            // Static Templates
-	Environments    []string                      // Valid config environments
-	Logger          log.Logger
-	RuntimeStore    persistence.Store
+	MappingResolver       *mappings.Resolver
+	ServerStates          server.StateStore
+	EventLog              *event.Log
+	Polling               *polling.Service
+	ParamsBlacklist       []string
+	Templates             *templates.ShoelacesTemplates // Dynamic slc templates
+	StaticTemplates       *template.Template            // Static Templates
+	Environments          []string                      // Valid config environments
+	Logger                log.Logger
+	RuntimeStore          persistence.Store
+	BootSessions          *bootsession.Store
+	stopRetentionCleaners func()
+	closeOnce             sync.Once
+	closeErr              error
 
 	BindAddr          string
 	BaseURL           string
@@ -93,7 +99,9 @@ func New(options Options) *Environment {
 	env.RuntimeStore = env.initPersistence()
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
 	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
+	env.BootSessions = bootsession.NewStore(env.RuntimeStore, env.RuntimeStore, env.PersistenceConfig.Retention.BootSessions)
 	env.cleanupEventRetention()
+	env.cleanupBootSessionRetention()
 
 	env.logStartupConfig()
 	env.Logger.Info("Discovered environment overrides", "component", "environment", "count", len(env.Environments), "environments", env.Environments)
@@ -106,14 +114,28 @@ func New(options Options) *Environment {
 
 	env.initStaticTemplates()
 	env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
-	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 	server.StartStateStoreCleaner(env.Logger, env.ServerStates)
+	env.stopRetentionCleaners = env.startRetentionCleaners()
 
 	return env
 }
 
+// Close stops retention cleaners and closes runtime storage.
+func (env *Environment) Close() error {
+	env.closeOnce.Do(func() {
+		if env.stopRetentionCleaners != nil {
+			env.stopRetentionCleaners()
+		}
+		if env.RuntimeStore != nil {
+			env.closeErr = env.RuntimeStore.Close()
+		}
+	})
+	return env.closeErr
+}
+
 func (env *Environment) logStartupConfig() {
-	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler, "persistence_backend", env.PersistenceConfig.Backend, "persistence_path", env.persistencePathForLog())
+	env.Logger.Info("Initialized environment", "component", "environment", "bind_addr", env.BindAddr, "base_url", env.BaseURL, "data_dir", env.DataDir, "env_dir", env.EnvDir, "template_extension", env.TemplateExtension, "ui_source", env.uiSource(), "log_level", env.LogLevel, "log_handler", env.LogHandler, "persistence_backend", env.PersistenceConfig.Backend, "persistence_path", env.persistencePathForLog(), "events_retention", env.PersistenceConfig.Retention.Events, "events_sweep_interval", env.PersistenceConfig.Retention.EventsSweepInterval, "boot_sessions_retention", env.PersistenceConfig.Retention.BootSessions, "boot_sessions_sweep_interval", env.PersistenceConfig.Retention.BootSessionsSweepInterval)
 	if env.TFTP == nil {
 		env.Logger.Info("Configured TFTP", "component", "environment", "enabled", false)
 		return
@@ -147,7 +169,8 @@ func defaultEnvironment() *Environment {
 	env.RuntimeStore = memory.New()
 	env.EventLog = event.NewLog(env.RuntimeStore, env.RuntimeStore)
 	env.ServerStates = server.NewPersistentStateStore(env.RuntimeStore, env.RuntimeStore)
-	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL)
+	env.BootSessions = bootsession.NewStore(env.RuntimeStore, env.RuntimeStore, env.PersistenceConfig.Retention.BootSessions)
+	env.Polling = polling.NewService(env.Logger, env.ServerStates, env.MappingResolver, env.EventLog, env.Templates, env.BaseURL).WithBootSessions(env.BootSessions)
 
 	return env
 }
@@ -184,6 +207,66 @@ func (env *Environment) cleanupEventRetention() {
 	}
 	if deleted > 0 {
 		env.Logger.Info("Cleaned up old events", "component", "environment", "deleted", deleted, "retention", retention.String())
+	}
+}
+
+func (env *Environment) cleanupBootSessionRetention() {
+	retention := env.PersistenceConfig.Retention.BootSessions
+	if retention <= 0 || env.BootSessions == nil {
+		return
+	}
+	cutoff := time.Now()
+	deleted, err := env.BootSessions.DeleteExpired(context.Background(), cutoff)
+	if err != nil {
+		env.Logger.Error("Failed to clean up old boot sessions", "component", "environment", "err", err)
+		return
+	}
+	if deleted > 0 {
+		env.Logger.Info("Cleaned up old boot sessions", "component", "environment", "deleted", deleted, "retention", retention.String())
+	}
+}
+
+func (env *Environment) startRetentionCleaners() func() {
+	retention := env.PersistenceConfig.Retention
+	stopEvents := startRetentionCleaner(env.Logger, "events", retention.EventsSweepInterval, env.cleanupEventRetention)
+	stopBootSessions := startRetentionCleaner(env.Logger, "boot_sessions", retention.BootSessionsSweepInterval, env.cleanupBootSessionRetention)
+	return func() {
+		stopEvents()
+		stopBootSessions()
+	}
+}
+
+func startRetentionCleaner(logger log.Logger, name string, interval time.Duration, sweep func()) func() {
+	if interval <= 0 || sweep == nil {
+		return func() {}
+	}
+	if logger == nil {
+		logger = log.MakeLogger(os.Stdout)
+	}
+	logger = logger.With("component", "retention", "records", name)
+	logger.Debug("Starting retention cleaner", "interval", interval.String())
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sweep()
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() {
+		once.Do(func() {
+			close(stop)
+			<-done
+		})
 	}
 }
 

@@ -24,7 +24,7 @@ kernel ${mirror}/linux \
   hostname={{ .hostname }} \
   domain=local \
   firmware=1 \
-  preseed/url=http://{{ .baseURL }}/configs/{{ .debian_installer_config_template }}?encrypt_home={{ .encrypt_home }}{{ .installer_config_query_suffix }} \
+  preseed/url=http://{{ .baseURL }}/configs/{{ .debian_installer_config_template }}?encrypt_home={{ .encrypt_home }}{{ .boot_ref_query_suffix }} \
   {{.linuxargs}}
 
 initrd ${mirror}/initrd.gz

@@ -18,12 +18,14 @@ package polling
 import (
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/inngest/shoelaces/bootsession"
 	"github.com/inngest/shoelaces/event"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
@@ -288,6 +290,62 @@ func TestPollBootsMappingResolvedEmbeddedTemplate(t *testing.T) {
 	require.Len(t, hostEvents, 1)
 	assert.Equal(t, event.HostBoot, hostEvents[0].Type)
 	assert.Equal(t, "debian.ipxe", hostEvents[0].Script)
+}
+
+func TestPollWithBootSessionsRendersReferenceInsteadOfStructuredQuery(t *testing.T) {
+	store := memory.New()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	bootSessions := bootsession.NewStore(store, store, time.Hour)
+	events := newEventLog()
+	resolver := mustResolver(t, &mappings.Mappings{
+		Targets: map[string]mappings.Target{
+			"debian12": {
+				Script: "debian.ipxe",
+				Params: map[string]any{
+					"encrypt_home": false,
+				},
+				Users: map[string]mappings.UserConfig{
+					"infra": {
+						Primary: boolPtr(true),
+						Groups:  []string{"sudo"},
+					},
+				},
+				Installer: mappings.InstallerConfig{
+					ConfigTemplate: "preseed/debian",
+					ConfigParams: map[string]any{
+						"site": "test",
+					},
+				},
+				Repos: mappings.ReposConfig{
+					Release: "trixie",
+				},
+			},
+		},
+		NetworkMaps: []mappings.NetworkMapConfig{{
+			Network:       "192.0.2.0/24",
+			DefaultTarget: "debian12",
+			Targets:       []string{"debian12"},
+		}},
+	})
+	srv := server.New("06:66:de:ad:be:ef", "192.0.2.10", "")
+	service := NewService(log.MakeLogger(testLogWriter{}), &server.States{Servers: make(map[string]*server.State)}, resolver, events, newEmbeddedProvisioningTemplates(t), "127.0.0.1:8081").WithBootSessions(bootSessions)
+
+	rendered, err := service.Poll(srv)
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "preseed/url=http://127.0.0.1:8081/configs/preseed/debian?encrypt_home=false&ref=")
+	assert.NotContains(t, rendered, "provisioning=")
+	assert.NotContains(t, rendered, "users=")
+
+	preseedURL := renderedPreseedURL(t, rendered)
+	ref := preseedURL.Query().Get(bootsession.QueryParam)
+	require.NotEmpty(t, ref)
+	snapshot, err := bootSessions.Get(context.Background(), ref)
+	require.NoError(t, err)
+	assert.Equal(t, "debian.ipxe", snapshot.Target)
+	assert.Equal(t, "06-66-de-ad-be-ef", snapshot.Server.Hostname)
+	assert.Equal(t, "trixie", snapshot.Params["release"])
+	assert.Equal(t, "infra", snapshot.Users["infra"].Name)
+	assert.Equal(t, "test", snapshot.Provisioning.Installer.ConfigParams["site"])
 }
 
 func TestPollNetworkDefaultTargetRendersTargetRepoRelease(t *testing.T) {
@@ -673,4 +731,18 @@ func targetOptionNames(options []server.TargetOption) []string {
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+func renderedPreseedURL(t *testing.T, bootScript string) *url.URL {
+	t.Helper()
+
+	for _, field := range strings.Fields(bootScript) {
+		if strings.HasPrefix(field, "preseed/url=") {
+			parsed, err := url.Parse(strings.TrimPrefix(field, "preseed/url="))
+			require.NoError(t, err)
+			return parsed
+		}
+	}
+	t.Fatalf("rendered boot script did not contain preseed/url: %s", bootScript)
+	return nil
 }

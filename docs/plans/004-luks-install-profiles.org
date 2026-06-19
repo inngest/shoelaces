@@ -36,10 +36,9 @@ site-specific native installer behavior.
 - =storage.mode= currently supports =plain=, =lvm=, =raid=, and =manual=.
 - Structured users already support raw values and ={ env: ENV_VAR }= values for
   password hashes and SSH keys.
-- Structured installer config is serialized into =installer_config_query= so
-  installer config requests can render without disk state. Secret-bearing LUKS
-  fields must not be added to that serialized query path without a safer
-  transport design.
+- Boot scripts carry opaque boot refs and =/configs/*= resolves structured
+  installer config server-side. Secret-bearing LUKS fields should use that
+  server-side reference path and must not be projected into boot script URLs.
 - Embedded provisioning templates currently render generic Debian, Ubuntu,
   CentOS, and CoreOS installer paths without LUKS.
 
@@ -86,8 +85,8 @@ site-specific native installer behavior.
   behavior, and make it independent of browser/UI state.
 - [ ] Redact encryption passphrases anywhere provisioning structures are logged,
   stored in events, or exposed through debug/template render logs.
-- [ ] Add unit tests proving =installer_config_query= does not contain raw LUKS
-  passphrases.
+- [ ] Add unit tests proving boot scripts carry only opaque references and do
+  not contain raw LUKS passphrases.
 - [ ] Add log/event redaction tests for raw and environment-resolved
   passphrases.
 - [ ] Add integration tests covering =/poll/*= and =/configs/preseed/*= so the
