@@ -1,3 +1,8 @@
+## [1.8.1] - 2026-06-19
+
+### 🐛 Bug Fixes
+
+- *(tftp)* Quiet expected option aborts (#67)
 ## [1.8.0] - 2026-06-19
 
 ### 🚀 Features
@@ -11,6 +16,10 @@
 ### 📚 Documentation
 
 - *(storage)* Update storage guides and mappings (#66)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.8.0 (#64)
 ## [1.7.1] - 2026-06-19
 
 ### 🐛 Bug Fixes
