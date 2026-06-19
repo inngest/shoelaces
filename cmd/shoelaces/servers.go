@@ -27,6 +27,7 @@ import (
 
 	"github.com/inngest/shoelaces/persistence"
 	"github.com/inngest/shoelaces/server"
+	"github.com/inngest/shoelaces/utils"
 	cli "github.com/urfave/cli/v3"
 )
 
@@ -205,7 +206,7 @@ func serverStateOutputRecordFromRecord(record persistence.ServerStateRecord) (se
 		Retry:          record.Retry,
 		LastAccess:     record.LastAccess,
 		AllowedTargets: serverTargetOutputRecords(allowedTargets),
-		Params:         params,
+		Params:         utils.RedactParams(params),
 	}, nil
 }
 

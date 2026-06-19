@@ -80,6 +80,26 @@ func TestServersListCommandOutputsWaitingAndSelectedJSON(t *testing.T) {
 	assert.Equal(t, "db", states[1].Params["role"])
 }
 
+func TestServersListCommandRedactsSensitiveParamsInJSON(t *testing.T) {
+	ctx := context.Background()
+	fixture := writeServerCommandFixture(t, sensitiveServerStateFixture(fixtureTime()))
+	var output bytes.Buffer
+	cmd := serverCommandFixtureCommand(fixture.configValues)
+	cmd.Writer = &output
+
+	require.NoError(t, cmd.Run(ctx, []string{"shoelaces", "servers", "list", "--output", "json"}))
+
+	var states []serverStateOutputRecord
+	require.NoError(t, json.Unmarshal(output.Bytes(), &states))
+	require.Len(t, states, 1)
+	assertRedactedServerStateParams(t, states[0].Params)
+	assert.NotContains(t, output.String(), "$6$root")
+	assert.NotContains(t, output.String(), "secret-token")
+	assert.NotContains(t, output.String(), "private-key")
+	assert.NotContains(t, output.String(), "nested-secret")
+	assert.NotContains(t, output.String(), "boot-ref")
+}
+
 func TestServersListCommandOutputsTable(t *testing.T) {
 	ctx := context.Background()
 	fixture := writeServerCommandFixture(t, waitingServerStateFixture(fixtureTime()))
@@ -147,6 +167,25 @@ func TestServersGetCommandOutputsJSON(t *testing.T) {
 	assert.Equal(t, "db", state.Params["role"])
 }
 
+func TestServersGetCommandRedactsSensitiveParamsInJSON(t *testing.T) {
+	ctx := context.Background()
+	fixture := writeServerCommandFixture(t, sensitiveServerStateFixture(fixtureTime()))
+	var output bytes.Buffer
+	cmd := serverCommandFixtureCommand(fixture.configValues)
+	cmd.Writer = &output
+
+	require.NoError(t, cmd.Run(ctx, []string{"shoelaces", "servers", "get", "00:11:22:33:44:77", "--output", "json"}))
+
+	var state serverStateOutputRecord
+	require.NoError(t, json.Unmarshal(output.Bytes(), &state))
+	assertRedactedServerStateParams(t, state.Params)
+	assert.NotContains(t, output.String(), "$6$root")
+	assert.NotContains(t, output.String(), "secret-token")
+	assert.NotContains(t, output.String(), "private-key")
+	assert.NotContains(t, output.String(), "nested-secret")
+	assert.NotContains(t, output.String(), "boot-ref")
+}
+
 func TestServersGetCommandReturnsMissingMACError(t *testing.T) {
 	ctx := context.Background()
 	fixture := writeServerCommandFixture(t)
@@ -157,6 +196,76 @@ func TestServersGetCommandReturnsMissingMACError(t *testing.T) {
 	err := cmd.Run(ctx, []string{"shoelaces", "servers", "get", "00:11:22:33:44:99"})
 
 	assert.ErrorContains(t, err, "server state not found: 00:11:22:33:44:99")
+}
+
+func TestServerStateOutputRecordFromRecordRedactsParams(t *testing.T) {
+	tests := []struct {
+		name       string
+		paramsJSON []byte
+		assertions func(t *testing.T, params map[string]any)
+	}{
+		{
+			name:       "top level sensitive params",
+			paramsJSON: []byte(`{"role":"db","root_password_crypted":"$6$root","bootstrap_token":"secret-token","ssh_private_key":"private-key"}`),
+			assertions: func(t *testing.T, params map[string]any) {
+				assert.Equal(t, "db", params["role"])
+				assert.Equal(t, "[REDACTED]", params["root_password_crypted"])
+				assert.Equal(t, "[REDACTED]", params["bootstrap_token"])
+				assert.Equal(t, "[REDACTED]", params["ssh_private_key"])
+			},
+		},
+		{
+			name:       "boot reference params",
+			paramsJSON: []byte(`{"boot_ref":"boot-ref","boot_ref_query":"ref=boot-ref","boot_ref_query_suffix":"&ref=boot-ref","boot_ref_query_question":"?ref=boot-ref"}`),
+			assertions: func(t *testing.T, params map[string]any) {
+				assert.Equal(t, "[REDACTED]", params["boot_ref"])
+				assert.Equal(t, "[REDACTED]", params["boot_ref_query"])
+				assert.Equal(t, "[REDACTED]", params["boot_ref_query_suffix"])
+				assert.Equal(t, "[REDACTED]", params["boot_ref_query_question"])
+			},
+		},
+		{
+			name:       "nested sensitive fields",
+			paramsJSON: []byte(`{"metadata":{"password":"nested-secret","region":"iad"},"installers":[{"Token":"nested-token","name":"primary"}]}`),
+			assertions: func(t *testing.T, params map[string]any) {
+				metadata := params["metadata"].(map[string]any)
+				assert.Equal(t, "[REDACTED]", metadata["password"])
+				assert.Equal(t, "iad", metadata["region"])
+
+				installers := params["installers"].([]any)
+				firstInstaller := installers[0].(map[string]any)
+				assert.Equal(t, "[REDACTED]", firstInstaller["Token"])
+				assert.Equal(t, "primary", firstInstaller["name"])
+			},
+		},
+		{
+			name:       "structured top level secret containers",
+			paramsJSON: []byte(`{"users":[{"Name":"root","PasswordCrypted":"$6$root"}],"provisioning":{"Installers":[{"ConfigParams":{"bootstrap_token":"secret-token"}}]}}`),
+			assertions: func(t *testing.T, params map[string]any) {
+				assert.Equal(t, "[REDACTED]", params["users"])
+				assert.Equal(t, "[REDACTED]", params["provisioning"])
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			record := sensitiveServerStateFixture(fixtureTime())
+			record.ParamsJSON = test.paramsJSON
+
+			output, err := serverStateOutputRecordFromRecord(record)
+
+			require.NoError(t, err)
+			test.assertions(t, output.Params)
+			encoded, err := json.Marshal(output)
+			require.NoError(t, err)
+			assert.NotContains(t, string(encoded), "$6$root")
+			assert.NotContains(t, string(encoded), "secret-token")
+			assert.NotContains(t, string(encoded), "private-key")
+			assert.NotContains(t, string(encoded), "nested-secret")
+			assert.NotContains(t, string(encoded), "boot-ref")
+		})
+	}
 }
 
 type serverCommandFixture struct {
@@ -223,6 +332,35 @@ func selectedServerStateFixture(lastAccess time.Time) persistence.ServerStateRec
 		Retry:              3,
 		LastAccess:         lastAccess,
 	}
+}
+
+func sensitiveServerStateFixture(lastAccess time.Time) persistence.ServerStateRecord {
+	return persistence.ServerStateRecord{
+		MAC:                "00:11:22:33:44:77",
+		IP:                 "192.0.2.12",
+		Hostname:           "sensitive-host",
+		Target:             "debian.ipxe",
+		Environment:        "production",
+		ParamsJSON:         []byte(`{"role":"db","root_password_crypted":"$6$root","bootstrap_token":"secret-token","ssh_private_key":"private-key","metadata":{"password":"nested-secret","region":"iad"},"boot_ref":"boot-ref"}`),
+		UsersJSON:          []byte(`{}`),
+		ProvisioningJSON:   []byte(`{}`),
+		AllowedTargetsJSON: []byte(`[]`),
+		Retry:              2,
+		LastAccess:         lastAccess,
+	}
+}
+
+func assertRedactedServerStateParams(t *testing.T, params map[string]any) {
+	t.Helper()
+
+	assert.Equal(t, "db", params["role"])
+	assert.Equal(t, "[REDACTED]", params["root_password_crypted"])
+	assert.Equal(t, "[REDACTED]", params["bootstrap_token"])
+	assert.Equal(t, "[REDACTED]", params["ssh_private_key"])
+	assert.Equal(t, "[REDACTED]", params["boot_ref"])
+	metadata := params["metadata"].(map[string]any)
+	assert.Equal(t, "[REDACTED]", metadata["password"])
+	assert.Equal(t, "iad", metadata["region"])
 }
 
 func fixtureTime() time.Time {
