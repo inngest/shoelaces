@@ -235,17 +235,17 @@ With one failed disk, the expected impact should be:
 
 *** Phase 4: Disk Wipe Behavior
 
-- [ ] Gate destructive wipe commands on =storage_wipe=.
-- [ ] If =storage_wipe= is false, omit the destructive early command.
-- [ ] Treat =storage_wipe_disks= values as disk selectors, not partition
+- [X] Gate destructive wipe commands on =storage_wipe=.
+- [X] If =storage_wipe= is false, omit the destructive early command.
+- [X] Treat =storage_wipe_disks= values as disk selectors, not partition
   selectors.
-- [ ] Skip matched partition block devices by checking
+- [X] Skip matched partition block devices by checking
   =/sys/class/block/<name>/partition=.
-- [ ] Wipe both the beginning and end of each selected disk to clear primary
+- [X] Wipe both the beginning and end of each selected disk to clear primary
   and backup GPT, LVM, and MD signatures.
-- [ ] Reread the partition table after wiping where possible, for example with
+- [X] Reread the partition table after wiping where possible, for example with
   =blockdev --rereadpt= or =partprobe=.
-- [ ] Keep unmatched glob behavior non-fatal.
+- [X] Keep unmatched glob behavior non-fatal.
 
 *** Phase 5: Regular/Wipe Validation Milestone
 
