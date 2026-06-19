@@ -348,6 +348,81 @@ func TestRenderedDebianPreseedDoesNotIncludeSitePostInstallLogicByDefault(t *tes
 	assert.NotContains(t, rendered, "ansible")
 }
 
+func TestRenderedDebianPreseedStorageModeSelection(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]interface{}
+		want   string
+	}{
+		{
+			name:   "default regular",
+			params: defaultRenderParams,
+			want:   "d-i partman-auto/method string regular",
+		},
+		{
+			name: "structured lvm",
+			params: paramsWith(defaultRenderParams, "provisioning", mappings.ProvisioningConfig{
+				Storage: mappings.StorageConfig{
+					Mode: "lvm",
+				},
+			}),
+			want: "d-i partman-auto/method string lvm",
+		},
+		{
+			name:   "explicit lvm",
+			params: paramsWith(defaultRenderParams, "storage_mode", "lvm"),
+			want:   "d-i partman-auto/method string lvm",
+		},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, "preseed/debian", tt.params)
+
+			assert.Contains(t, rendered, tt.want)
+		})
+	}
+}
+
+func TestRenderedDebianPreseedRejectsUnsupportedStorageMode(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]interface{}
+		want   string
+	}{
+		{
+			name:   "explicit query style param",
+			params: paramsWith(defaultRenderParams, "storage_mode", "zfs"),
+			want:   `preseed/debian storage_mode must be "regular" or "lvm", got "zfs"`,
+		},
+		{
+			name: "structured provisioning",
+			params: paramsWith(defaultRenderParams, "provisioning", mappings.ProvisioningConfig{
+				Storage: mappings.StorageConfig{
+					Mode: "zfs",
+				},
+			}),
+			want: `preseed/debian storage_mode must be "regular" or "lvm", got "zfs"`,
+		},
+		{
+			name:   "legacy plain mode",
+			params: paramsWith(defaultRenderParams, "storage_mode", "plain"),
+			want:   `preseed/debian storage_mode must be "regular" or "lvm", got "plain"`,
+		},
+	}
+
+	renderer := newRenderer(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := renderTemplateError(t, renderer, "preseed/debian", tt.params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
 func TestRenderedDebianPreseedAppliesStructuredProvisioning(t *testing.T) {
 	utc := false
 	ntp := false
@@ -540,6 +615,13 @@ func renderTemplate(t *testing.T, renderer *templates.ShoelacesTemplates, name s
 	rendered, err := renderer.RenderTemplate(name, params, "")
 	require.NoError(t, err)
 	return rendered
+}
+
+func renderTemplateError(t *testing.T, renderer *templates.ShoelacesTemplates, name string, params map[string]interface{}) error {
+	t.Helper()
+
+	_, err := renderer.RenderTemplate(name, params, "")
+	return err
 }
 
 func assertValidIPXEScript(t *testing.T, rendered string) []string {
