@@ -16,16 +16,21 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/persistence"
 )
 
 func inspectionOptionsFromConfig(configValues map[any]any) (environment.Options, error) {
+	return inspectionOptionsFromConfigWithEnv(configValues, os.LookupEnv)
+}
+
+func inspectionOptionsFromConfigWithEnv(configValues map[any]any, lookupEnv func(string) (string, bool)) (environment.Options, error) {
 	options := environment.DefaultOptions()
 	persistenceConfig := persistence.DefaultConfig()
 
-	dataDir, err := stringConfigValue(configValues, "data-dir")
+	dataDir, err := stringInspectionConfigValue(configValues, "data-dir", "DATA_DIR", lookupEnv)
 	if err != nil {
 		return environment.Options{}, err
 	}
@@ -33,7 +38,7 @@ func inspectionOptionsFromConfig(configValues map[any]any) (environment.Options,
 		options.DataDir = dataDir
 	}
 
-	backend, err := stringConfigValue(configValues, "persistence-backend")
+	backend, err := stringInspectionConfigValue(configValues, "persistence-backend", "PERSISTENCE_BACKEND", lookupEnv)
 	if err != nil {
 		return environment.Options{}, err
 	}
@@ -41,7 +46,7 @@ func inspectionOptionsFromConfig(configValues map[any]any) (environment.Options,
 		persistenceConfig.Backend = backend
 	}
 
-	path, err := stringConfigValue(configValues, "persistence-path")
+	path, err := stringInspectionConfigValue(configValues, "persistence-path", "PERSISTENCE_PATH", lookupEnv)
 	if err != nil {
 		return environment.Options{}, err
 	}
@@ -51,6 +56,15 @@ func inspectionOptionsFromConfig(configValues map[any]any) (environment.Options,
 
 	options.Persistence = persistenceConfig
 	return options, nil
+}
+
+func stringInspectionConfigValue(configValues map[any]any, key, env string, lookupEnv func(string) (string, bool)) (string, error) {
+	if lookupEnv != nil {
+		if value, ok := lookupEnv(env); ok {
+			return value, nil
+		}
+	}
+	return stringConfigValue(configValues, key)
 }
 
 func stringConfigValue(configValues map[any]any, key string) (string, error) {

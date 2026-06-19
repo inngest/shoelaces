@@ -57,6 +57,25 @@ func TestEventsListCommandOutputsJSONInChronologicalOrder(t *testing.T) {
 	assert.NotContains(t, output.String(), "params")
 }
 
+func TestEventsListCommandUsesEnvironmentPersistenceConfig(t *testing.T) {
+	ctx := context.Background()
+	fixture := writeEventCommandFixture(t)
+	dataDir := fixture.configValues["data-dir"].(string)
+	t.Setenv("DATA_DIR", dataDir)
+	t.Setenv("PERSISTENCE_BACKEND", persistence.BackendSQLite)
+	t.Setenv("PERSISTENCE_PATH", filepath.Join("runtime", "shoelaces.db"))
+	var output bytes.Buffer
+	cmd := eventCommandFixtureCommand(nil)
+	cmd.Writer = &output
+
+	require.NoError(t, cmd.Run(ctx, []string{"shoelaces", "events", "list", "--output", "json"}))
+
+	var events []eventOutputRecord
+	require.NoError(t, json.Unmarshal(output.Bytes(), &events))
+	require.Len(t, events, 3)
+	assert.Equal(t, fixture.oldID.String(), events[0].ID)
+}
+
 func TestEventsListCommandOutputsTable(t *testing.T) {
 	ctx := context.Background()
 	fixture := writeEventCommandFixture(t)
