@@ -205,20 +205,20 @@ With one failed disk, the expected impact should be:
 
 *** Phase 2: Debian Template Refactor For Regular And Wipe
 
-- [ ] Split =configs/data-dir/preseed/debian.preseed.slc= storage rendering
+- [X] Split =configs/data-dir/preseed/debian.preseed.slc= storage rendering
   enough to support regular mode and shared wipe behavior:
   - =preseed/debian/storage=
   - =preseed/debian/storage/wipe=
   - =preseed/debian/storage/regular=
   - shared commit and GRUB sections, if useful
-- [ ] Preserve the current LVM recipe behind a separate branch or template so
+- [X] Preserve the current LVM recipe behind a separate branch or template so
   existing explicit =storage.mode: lvm= installs are not broken while regular
   mode is tested.
-- [ ] Preserve the top-level =preseed/debian= template name.
-- [ ] Preserve the order of common, repository, storage, package,
+- [X] Preserve the top-level =preseed/debian= template name.
+- [X] Preserve the order of common, repository, storage, package,
   =installerExtra=, and finish sections unless a test proves a change is
   required.
-- [ ] Keep =partman-auto/disk= populated from =storage_disk= in every Debian
+- [X] Keep =partman-auto/disk= populated from =storage_disk= in every Debian
   single-disk storage mode.
 
 *** Phase 3: Regular Storage Recipe
