@@ -12,7 +12,7 @@ permissions:
 jobs:
   test:
     name: Unit Test
-    runs-on: depot-ubuntu-22.04
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -26,7 +26,7 @@ jobs:
 
   integration-test:
     name: Integration Test
-    runs-on: depot-ubuntu-22.04
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -40,7 +40,7 @@ jobs:
 
   provisioning-render-validation:
     name: Provisioning Render Validation
-    runs-on: depot-ubuntu-22.04
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -68,7 +68,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: depot-ubuntu-22.04
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -96,7 +96,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.head_ref == 'release/next' &&
       startsWith(github.event.pull_request.title, 'chore(release): v')
-    runs-on: depot-ubuntu-22.04
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -147,7 +147,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: depot-ubuntu-22.04
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
