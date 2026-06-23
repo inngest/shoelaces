@@ -169,6 +169,7 @@ d-i partman-auto/expert_recipe string \
         options/cipher{ {{.storage_encryption_cipher}} }                 \
         options/keysize{ {{.storage_encryption_key_size}} }              \
         options/hash{ {{.storage_encryption_hash}} }                     \
+        method{ format } format{ }                                       \
         use_filesystem{ } filesystem{ {{.debian_regular_root_fstype}} }  \
         mountpoint{ {{.debian_regular_root_mountpoint}} }                \
     .
