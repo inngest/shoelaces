@@ -413,12 +413,13 @@ hostnameMaps:
 ```
 
 Encrypted Debian layouts keep the firmware and bootloader path unencrypted. In
-`regular` mode, the ESP and `/boot` stay outside LUKS, while swap and root are
-separate LUKS volumes. In `lvm` mode, LUKS wraps the physical volume used by
-`storage.volumeGroup`, and root and swap are logical volumes inside that volume
-group. In `raid` mode, both disks get normal duplicated ESPs, `/boot` is
-unencrypted RAID1, and LUKS is placed on the RAID1 devices used for swap and
-root.
+`regular` mode, the ESP and `/boot` stay outside LUKS, `/` is formatted
+directly on the opened LUKS mapper, and swap is created as `/swapfile` inside
+that encrypted root filesystem when regular swap is enabled. In `lvm` mode,
+LUKS wraps the physical volume used by `storage.volumeGroup`, and root and swap
+are logical volumes inside that volume group. In `raid` mode, both disks get
+normal duplicated ESPs, `/boot` is unencrypted RAID1, and LUKS is placed on the
+RAID1 devices used for swap and root.
 
 The rendered Debian preseed must contain the passphrase so the install can run
 unattended. Boot-session references keep the passphrase out of iPXE URLs and

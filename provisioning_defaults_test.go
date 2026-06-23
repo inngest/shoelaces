@@ -36,6 +36,7 @@ var genericProvisioningDefaultCandidates = []string{
 	"preseed/storage.preseed.slc",
 	"preseed/ubuntu-minimal.preseed.slc",
 	"provisioning/extra.slc",
+	"static/plain-luks-autopartition-crypto.sh",
 	"static/provisioning-default.txt",
 }
 

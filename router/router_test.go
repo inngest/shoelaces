@@ -253,6 +253,18 @@ func TestConfigsStaticRouteServesEmbeddedProvisioningAsset(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "generic embedded provisioning static asset")
 }
 
+func TestConfigsStaticRouteServesEmbeddedPlainLUKSHelper(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/plain-luks-autopartition-crypto.sh", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "crypto_check_setup || exit 1")
+	assert.Contains(t, rr.Body.String(), `keysize="$((keysize / 2))"`)
+}
+
 func TestConfigsStaticRouteDiskOverridesEmbeddedProvisioningAsset(t *testing.T) {
 	dataDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
