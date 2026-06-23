@@ -1,3 +1,9 @@
+## [1.9.1] - 2026-06-23
+
+### 🐛 Bug Fixes
+
+- *(server)* Bind HTTP server to all interfaces by default (#75)
+- *(debian)* Format regular LUKS root mapper (#77)
 ## [1.9.0] - 2026-06-19
 
 ### 🚀 Features
@@ -13,6 +19,7 @@
 
 - *(depot)* Move CI to depot (#69)
 - *(depot)* Review CI to depot  (#71)
+- *(release)* V1.9.0 (#70)
 ## [1.8.1] - 2026-06-19
 
 ### 🐛 Bug Fixes
