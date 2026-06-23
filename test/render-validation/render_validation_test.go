@@ -839,6 +839,14 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "options/cipher{ aes-xts-plain64 }")
 	assert.Contains(t, rendered, "options/keysize{ 512 }")
 	assert.Contains(t, rendered, "options/hash{ sha512 }")
+	assertInOrder(t,
+		regularEncryptedRootStanza(t, rendered),
+		"method{ crypto } format{ }",
+		"options/crypto_type{ luks }",
+		"method{ format } format{ }",
+		"use_filesystem{ } filesystem{ ext4 }",
+		"mountpoint{ / }",
+	)
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "$lvmok{ }")
 	assert.NotContains(t, rendered, "partman-auto-raid/recipe")
@@ -1296,6 +1304,17 @@ func assertInOrder(t *testing.T, text string, needles ...string) {
 		require.Greaterf(t, current, previous, "%q was not after previous marker", needle)
 		previous = current
 	}
+}
+
+func regularEncryptedRootStanza(t *testing.T, rendered string) string {
+	t.Helper()
+
+	start := strings.Index(rendered, "20000 100000000 -1 ext4 \\")
+	require.NotEqual(t, -1, start, "missing regular encrypted root partition stanza")
+	remaining := rendered[start:]
+	end := strings.Index(remaining, "\n    .")
+	require.NotEqual(t, -1, end, "missing regular encrypted root stanza terminator")
+	return remaining[:end]
 }
 
 func assertValidIPXEScript(t *testing.T, rendered string) []string {
