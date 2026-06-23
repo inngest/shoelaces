@@ -47,11 +47,12 @@ shoelaces --config /srv/shoelaces.toml run --data-dir /var/lib/shoelaces
 *--base-url* <string>
 	Optional parameter. Specifies the base address that will be used when
 	generating URLs.
-	If it's not specified, the value of "--bind-addr" will be used.
+	If it's not specified, the value of "--bind-addr" will be used. Wildcard
+	listen addresses advertise "localhost:<port>" by default.
 
 *--bind-addr* <host:port>
 	The address where Shoelaces will listen for requests. Defaults to
-	"localhost:8081".
+	":8081".
 
 *--data-dir* <directory>
 	Specifies a directory with mappings, configs, templates, etc.
@@ -205,7 +206,7 @@ Here is an example TOML config file:
 
 ```
 [network]
-bindAddr = "localhost:8081"
+bindAddr = ":8081"
 baseURL = "localhost:8081"
 
 [data]
