@@ -324,6 +324,31 @@ func TestRenderedEncryptedDebianPreseedsPassDebconfSetSelectionsWhenAvailable(t 
 	}
 }
 
+func TestRenderedDebianPreseedsDoNotContainEmptyContinuationTargets(t *testing.T) {
+	renderer := newRenderer(t)
+	for _, tt := range []struct {
+		name   string
+		params map[string]interface{}
+	}{
+		{name: "default", params: defaultRenderParams},
+		{name: "regular encrypted", params: encryptedDebianParams(mappings.StorageConfig{})},
+		{name: "lvm encrypted", params: encryptedDebianParams(mappings.StorageConfig{Mode: "lvm", VolumeGroup: "vgluks"})},
+		{name: "raid encrypted", params: encryptedDebianParams(mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+		})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, "preseed/debian", tt.params)
+
+			assertNoEmptyContinuationTargets(t, rendered)
+		})
+	}
+}
+
 func TestExampleMappingsRenderDebian13Targets(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
@@ -823,33 +848,101 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{}))
 
 	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
-	assert.Contains(t, rendered, "d-i anna/choose_modules string crypto-dm-modules partman-crypto partman-ext4")
+	assert.Contains(t, rendered, "d-i anna/choose_modules string crypto-dm-modules partman-auto-crypto partman-crypto partman-ext4")
+	assert.Contains(t, rendered, "d-i partman/early_command string")
+	assert.Equal(t, 1, strings.Count(rendered, "d-i partman/early_command string"))
+	assertInOrder(t, rendered,
+		"d-i partman/early_command string",
+		"mdadm --stop --scan || true",
+		"wget -O /bin/autopartition-crypto http://shoelaces.example.test:8081/configs/static/plain-luks-autopartition-crypto.sh",
+		"d-i partman-crypto/passphrase password luks-passphrase",
+	)
+	assert.Contains(t, rendered, "wget -O /bin/autopartition-crypto http://shoelaces.example.test:8081/configs/static/plain-luks-autopartition-crypto.sh")
+	assert.Contains(t, rendered, "chmod 0755 /bin/autopartition-crypto")
 	assert.Contains(t, rendered, "d-i partman-auto/method string crypto")
+	assert.Contains(t, rendered, "d-i partman-basicfilesystems/no_swap boolean false")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular-luks")
 	assert.Contains(t, rendered, "method{ efi } format{ }")
 	assert.Contains(t, rendered, "mountpoint{ /boot/efi }")
 	assert.Contains(t, rendered, "mountpoint{ /boot }")
-	assert.Contains(t, rendered, "8192 8192 8192 linux-swap")
-	assert.Contains(t, rendered, "20000 100000000 -1 ext4")
+	assert.NotContains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.Contains(t, rendered, "20000 100000000 -1 crypto")
 	assert.Contains(t, rendered, "method{ crypto }")
-	assert.Contains(t, rendered, "method{ swap } format{ }")
-	assert.Contains(t, rendered, "use_filesystem{ } filesystem{ ext4 }")
-	assert.Contains(t, rendered, "mountpoint{ / }")
+	assert.NotContains(t, rendered, "method{ swap } format{ }")
 	assert.Contains(t, rendered, "options/crypto_type{ luks }")
 	assert.Contains(t, rendered, "options/cipher{ aes-xts-plain64 }")
 	assert.Contains(t, rendered, "options/keysize{ 512 }")
 	assert.Contains(t, rendered, "options/hash{ sha512 }")
-	assertInOrder(t,
-		regularEncryptedRootStanza(t, rendered),
-		"method{ crypto } format{ }",
-		"options/crypto_type{ luks }",
-		"method{ format } format{ }",
-		"use_filesystem{ } filesystem{ ext4 }",
-		"mountpoint{ / }",
-	)
+	rootStanza := regularEncryptedRootStanza(t, rendered)
+	assert.Contains(t, rootStanza, "method{ crypto }")
+	assert.Contains(t, rootStanza, "options/crypto_type{ luks }")
+	assert.NotContains(t, rootStanza, "method{ format }")
+	assert.NotContains(t, rootStanza, "format{ }")
+	assert.NotContains(t, rootStanza, "use_filesystem{ }")
+	assert.NotContains(t, rootStanza, "filesystem{ ext4 }")
+	assert.NotContains(t, rootStanza, "mountpoint{ / }")
+	assert.Contains(t, rendered, "root_source=\"$(awk '$2 == \"/target\" { print $1; exit }' /proc/mounts)\"")
+	assert.Contains(t, rendered, "cryptsetup status \"$crypt_name\"")
+	assert.Contains(t, rendered, "printf '%s UUID=%s none luks,discard,x-initrd.attach\\n' \"$crypt_name\" \"$backing_uuid\" > /target/etc/crypttab")
+	assert.Contains(t, rendered, "in-target apt-get -y install cryptsetup-initramfs || true")
+	assert.Contains(t, rendered, "in-target update-initramfs -u -k all")
+	assert.Contains(t, rendered, "chroot /target /usr/bin/fallocate -l 8192M /swapfile")
+	assert.Contains(t, rendered, "dd if=/dev/zero of=/target/swapfile bs=1M count=8192")
+	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
+	assert.Contains(t, rendered, "printf '/swapfile none swap sw 0 0\\n' >> /target/etc/fstab")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "$lvmok{ }")
 	assert.NotContains(t, rendered, "partman-auto-raid/recipe")
+}
+
+func TestRenderedDebianPreseedEncryptedRegularInstallsHelperWhenWipeDisabled(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(
+		encryptedDebianParams(mappings.StorageConfig{}),
+		"storage_wipe",
+		"false",
+	))
+
+	assert.Equal(t, 1, strings.Count(rendered, "d-i partman/early_command string"))
+	assert.Contains(t, rendered, "wget -O /bin/autopartition-crypto http://shoelaces.example.test:8081/configs/static/plain-luks-autopartition-crypto.sh")
+	assert.Contains(t, rendered, "chmod 0755 /bin/autopartition-crypto")
+	assert.NotContains(t, rendered, "dd if=/dev/zero of=\"$d\"")
+	assert.NotContains(t, rendered, "sfdisk --delete")
+	assert.NotContains(t, rendered, "vgremove")
+	assert.NotContains(t, rendered, "pvremove")
+}
+
+func TestRenderedDebianPreseedEncryptedRegularRecipeHonorsDisabledSwap(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(
+		encryptedDebianParams(mappings.StorageConfig{}),
+		"debian_regular_swap_enabled",
+		"false",
+	))
+
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-regular-luks")
+	assert.NotContains(t, rendered, "d-i partman-basicfilesystems/no_swap boolean false")
+	assert.NotContains(t, rendered, "8192 8192 8192 linux-swap")
+	assert.NotContains(t, rendered, "/swapfile")
+	assert.NotContains(t, rendered, "mkswap")
+	assert.NotContains(t, rendered, "method{ swap }")
+}
+
+func TestPlainLUKSAutopartitionHelperIsEmbedded(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "plain-luks-autopartition-crypto.sh"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, "crypto_check_setup || exit 1")
+	assert.Contains(t, script, "crypto_setup no || exit 1")
+	assert.Contains(t, script, "rm -f \"$id/format\" \"$id/use_filesystem\" \"$id/filesystem\" \"$id/mountpoint\"")
+	assert.Contains(t, script, "touch \"$id/skip_erase\"")
+	assert.Contains(t, script, `keysize="$((keysize / 2))"`)
+	assertInOrder(t, script,
+		"crypto_setup no || exit 1",
+		"echo format > \"$id/method\"",
+		"echo ext4 > \"$id/filesystem\"",
+		"echo / > \"$id/mountpoint\"",
+		"update_all",
+	)
 }
 
 func TestRenderedDebianPreseedEncryptedLVMRecipe(t *testing.T) {
@@ -1309,7 +1402,7 @@ func assertInOrder(t *testing.T, text string, needles ...string) {
 func regularEncryptedRootStanza(t *testing.T, rendered string) string {
 	t.Helper()
 
-	start := strings.Index(rendered, "20000 100000000 -1 ext4 \\")
+	start := strings.Index(rendered, "20000 100000000 -1 crypto \\")
 	require.NotEqual(t, -1, start, "missing regular encrypted root partition stanza")
 	remaining := rendered[start:]
 	end := strings.Index(remaining, "\n    .")
@@ -1323,6 +1416,17 @@ func assertValidIPXEScript(t *testing.T, rendered string) []string {
 	commands, err := validateIPXEScript(rendered)
 	require.NoError(t, err)
 	return commands
+}
+
+func assertNoEmptyContinuationTargets(t *testing.T, rendered string) {
+	t.Helper()
+
+	lines := strings.Split(rendered, "\n")
+	for i := 0; i < len(lines)-1; i++ {
+		if strings.HasSuffix(strings.TrimRight(lines[i], " \t"), "\\") && strings.TrimSpace(lines[i+1]) == "" {
+			t.Fatalf("line %d ends with a continuation marker but line %d is empty", i+1, i+2)
+		}
+	}
 }
 
 func validateIPXEScript(rendered string) ([]string, error) {

@@ -185,13 +185,14 @@ storage:
 ```
 
 The encrypted Debian layouts keep boot-critical files outside LUKS. In
-`regular` mode, the ESP and `/boot` are unencrypted partitions while swap and
-root are separate LUKS volumes. In `lvm` mode, the ESP and `/boot` are
-unencrypted partitions, and LUKS wraps the physical volume that backs
-`storage.volumeGroup`; root and swap remain logical volumes inside that volume
-group. In `raid` mode, each disk gets a normal duplicated ESP, `/boot` is
-unencrypted RAID1, and LUKS is placed on the RAID1 devices used for swap and
-root.
+`regular` mode, the ESP and `/boot` are unencrypted partitions, `/` is
+formatted directly on the opened LUKS mapper, and swap is created as
+`/swapfile` inside that encrypted root filesystem when regular swap is enabled.
+In `lvm` mode, the ESP and `/boot` are unencrypted partitions, and LUKS wraps
+the physical volume that backs `storage.volumeGroup`; root and swap remain
+logical volumes inside that volume group. In `raid` mode, each disk gets a
+normal duplicated ESP, `/boot` is unencrypted RAID1, and LUKS is placed on the
+RAID1 devices used for swap and root.
 
 Preseeded encryption is unattended, so the installer config necessarily
 contains the LUKS passphrase when rendered. Use environment-backed passphrases,
