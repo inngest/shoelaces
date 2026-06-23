@@ -69,14 +69,10 @@ d-i partman-crypto/erase_disks boolean false
 {{end -}}
 d-i partman/early_command string \
   /bin/ash -c 'set -eux; \
-{{if eq .storage_wipe "true" -}}
-{{template "preseed/debian/storage/wipe/commands" .}}
-{{end -}}
-{{if and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true") -}}
+{{if eq .storage_wipe "true"}}{{template "preseed/debian/storage/wipe/commands" .}}{{end}}{{if and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true") -}}
     wget -O /bin/autopartition-crypto http://{{.baseURL}}/configs/static/plain-luks-autopartition-crypto.sh; \
     chmod 0755 /bin/autopartition-crypto; \
-{{end -}}
-    true'
+{{end}}    true'
 {{end -}}
 {{end}}
 

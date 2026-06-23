@@ -324,6 +324,31 @@ func TestRenderedEncryptedDebianPreseedsPassDebconfSetSelectionsWhenAvailable(t 
 	}
 }
 
+func TestRenderedDebianPreseedsDoNotContainEmptyContinuationTargets(t *testing.T) {
+	renderer := newRenderer(t)
+	for _, tt := range []struct {
+		name   string
+		params map[string]interface{}
+	}{
+		{name: "default", params: defaultRenderParams},
+		{name: "regular encrypted", params: encryptedDebianParams(mappings.StorageConfig{})},
+		{name: "lvm encrypted", params: encryptedDebianParams(mappings.StorageConfig{Mode: "lvm", VolumeGroup: "vgluks"})},
+		{name: "raid encrypted", params: encryptedDebianParams(mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+		})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rendered := renderTemplate(t, renderer, "preseed/debian", tt.params)
+
+			assertNoEmptyContinuationTargets(t, rendered)
+		})
+	}
+}
+
 func TestExampleMappingsRenderDebian13Targets(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
@@ -1391,6 +1416,17 @@ func assertValidIPXEScript(t *testing.T, rendered string) []string {
 	commands, err := validateIPXEScript(rendered)
 	require.NoError(t, err)
 	return commands
+}
+
+func assertNoEmptyContinuationTargets(t *testing.T, rendered string) {
+	t.Helper()
+
+	lines := strings.Split(rendered, "\n")
+	for i := 0; i < len(lines)-1; i++ {
+		if strings.HasSuffix(strings.TrimRight(lines[i], " \t"), "\\") && strings.TrimSpace(lines[i+1]) == "" {
+			t.Fatalf("line %d ends with a continuation marker but line %d is empty", i+1, i+2)
+		}
+	}
 }
 
 func validateIPXEScript(rendered string) ([]string, error) {
