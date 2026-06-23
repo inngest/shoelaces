@@ -825,6 +825,13 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-crypto/passphrase password luks-passphrase")
 	assert.Contains(t, rendered, "d-i anna/choose_modules string crypto-dm-modules partman-auto-crypto partman-crypto partman-ext4")
 	assert.Contains(t, rendered, "d-i partman/early_command string")
+	assert.Equal(t, 1, strings.Count(rendered, "d-i partman/early_command string"))
+	assertInOrder(t, rendered,
+		"d-i partman/early_command string",
+		"mdadm --stop --scan || true",
+		"wget -O /bin/autopartition-crypto http://shoelaces.example.test:8081/configs/static/plain-luks-autopartition-crypto.sh",
+		"d-i partman-crypto/passphrase password luks-passphrase",
+	)
 	assert.Contains(t, rendered, "wget -O /bin/autopartition-crypto http://shoelaces.example.test:8081/configs/static/plain-luks-autopartition-crypto.sh")
 	assert.Contains(t, rendered, "chmod 0755 /bin/autopartition-crypto")
 	assert.Contains(t, rendered, "d-i partman-auto/method string crypto")
@@ -861,6 +868,22 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "$lvmok{ }")
 	assert.NotContains(t, rendered, "partman-auto-raid/recipe")
+}
+
+func TestRenderedDebianPreseedEncryptedRegularInstallsHelperWhenWipeDisabled(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(
+		encryptedDebianParams(mappings.StorageConfig{}),
+		"storage_wipe",
+		"false",
+	))
+
+	assert.Equal(t, 1, strings.Count(rendered, "d-i partman/early_command string"))
+	assert.Contains(t, rendered, "wget -O /bin/autopartition-crypto http://shoelaces.example.test:8081/configs/static/plain-luks-autopartition-crypto.sh")
+	assert.Contains(t, rendered, "chmod 0755 /bin/autopartition-crypto")
+	assert.NotContains(t, rendered, "dd if=/dev/zero of=\"$d\"")
+	assert.NotContains(t, rendered, "sfdisk --delete")
+	assert.NotContains(t, rendered, "vgremove")
+	assert.NotContains(t, rendered, "pvremove")
 }
 
 func TestRenderedDebianPreseedEncryptedRegularRecipeHonorsDisabledSwap(t *testing.T) {

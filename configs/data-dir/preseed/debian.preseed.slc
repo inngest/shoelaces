@@ -21,13 +21,7 @@ d-i partman-auto/disk string {{.storage_raid_devices}}
 d-i partman-auto/disk string {{.storage_disk}}
 {{end}}
 
-{{if eq .storage_mode "regular" -}}
-{{if ne .storage_encryption_enabled "true" -}}
-{{template "preseed/debian/storage/wipe" .}}
-{{end -}}
-{{else -}}
-{{template "preseed/debian/storage/wipe" .}}
-{{end -}}
+{{template "preseed/debian/storage/early_command" .}}
 {{template "preseed/debian/storage/encryption" .}}
 {{if eq .storage_mode "lvm" -}}
 {{if eq .storage_encryption_enabled "true" -}}
@@ -64,15 +58,29 @@ d-i partman-crypto/erase_disks boolean false
 {{end -}}
 {{end}}
 
-{{define "preseed/debian/storage/wipe" -}}
-{{if eq .storage_wipe "true" -}}
-# ---- HARD RESET OF SELECTED WIPE DISKS (kills old GPT/md/LVM) ----
+{{define "preseed/debian/storage/early_command" -}}
+{{if or (eq .storage_wipe "true") (and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true")) -}}
+# ---- Early storage setup ----
 # Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
+{{if eq .storage_wipe "true" -}}
 # storage_wipe_disks may contain explicit /dev glob patterns; unmatched globs
 # are skipped by the block-device check below. Matched partitions are skipped:
 # storage_wipe_disks selectors are disk selectors, not partition selectors.
+{{end -}}
 d-i partman/early_command string \
   /bin/ash -c 'set -eux; \
+{{if eq .storage_wipe "true" -}}
+{{template "preseed/debian/storage/wipe/commands" .}}
+{{end -}}
+{{if and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true") -}}
+    wget -O /bin/autopartition-crypto http://{{.baseURL}}/configs/static/plain-luks-autopartition-crypto.sh; \
+    chmod 0755 /bin/autopartition-crypto; \
+{{end -}}
+    true'
+{{end -}}
+{{end}}
+
+{{define "preseed/debian/storage/wipe/commands" -}}
     mdadm --stop --scan || true; \
     vgchange -an || true; \
     vgs --noheadings -o vg_name 2>/dev/null | awk "NF{print \$1}" | while read -r vg; do vgremove -ff "$vg" || true; done; \
@@ -90,8 +98,7 @@ d-i partman/early_command string \
         dd if=/dev/zero of="$d" bs=512 seek="$seek" count=20480 conv=fsync || true; \
       fi; \
       blockdev --rereadpt "$d" 2>/dev/null || partprobe "$d" 2>/dev/null || true; \
-    done'
-{{end -}}
+    done; \
 {{end}}
 
 {{define "preseed/debian/storage/regular" -}}
@@ -135,35 +142,6 @@ d-i partman-auto/choose_recipe select uefi-regular
 
 {{define "preseed/debian/storage/regular/encrypted" -}}
 d-i anna/choose_modules string crypto-dm-modules partman-auto-crypto partman-crypto {{.debian_regular_partman_modules}}
-
-# Replace Debian's crypto autopartitioner helper. The stock helper always turns
-# the opened LUKS mapper into an LVM PV; Shoelaces regular mode keeps the mapper
-# as the formatted root filesystem. ESP and /boot stay unencrypted so UEFI
-# firmware and GRUB can start before unlocking the root volume.
-d-i partman/early_command string \
-  /bin/ash -c 'set -eux; \
-{{if eq .storage_wipe "true" -}}
-    mdadm --stop --scan || true; \
-    vgchange -an || true; \
-    vgs --noheadings -o vg_name 2>/dev/null | awk "NF{print \$1}" | while read -r vg; do vgremove -ff "$vg" || true; done; \
-    pvs --noheadings -o pv_name 2>/dev/null | awk "NF{print \$1}" | while read -r pv; do pvremove -ff "$pv" || true; done; \
-    for d in {{.storage_wipe_disks}}; do \
-      [ -b "$d" ] || continue; \
-      d="$(readlink -f "$d" 2>/dev/null || echo "$d")"; \
-      b="${d##*/}"; \
-      [ ! -e "/sys/class/block/$b/partition" ] || continue; \
-      sfdisk --delete "$d" 2>/dev/null || true; \
-      dd if=/dev/zero of="$d" bs=1M count=16 conv=fsync || true; \
-      sectors="$(blockdev --getsz "$d" 2>/dev/null || echo 0)"; \
-      if [ "$sectors" -gt 32768 ]; then \
-        seek="$((sectors - 32768))"; \
-        dd if=/dev/zero of="$d" bs=512 seek="$seek" count=32768 conv=fsync || true; \
-      fi; \
-      blockdev --rereadpt "$d" 2>/dev/null || partprobe "$d" 2>/dev/null || true; \
-    done; \
-{{end -}}
-    wget -O /bin/autopartition-crypto http://{{.baseURL}}/configs/static/plain-luks-autopartition-crypto.sh; \
-    chmod 0755 /bin/autopartition-crypto'
 
 d-i partman-auto/method string crypto
 
