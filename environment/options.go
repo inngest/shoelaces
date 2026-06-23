@@ -36,7 +36,7 @@ type Options struct {
 func DefaultOptions() Options {
 	tftp := DefaultTFTPConfig()
 	return Options{
-		BindAddr:          "localhost:8081",
+		BindAddr:          ":8081",
 		EnvDir:            "env_overrides",
 		TemplateExtension: ".slc",
 		MappingsFile:      "mappings.yaml",

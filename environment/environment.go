@@ -92,7 +92,7 @@ func New(options Options) *Environment {
 	}
 
 	if env.BaseURL == "" {
-		env.BaseURL = env.BindAddr
+		env.BaseURL = defaultBaseURL(env.BindAddr)
 	}
 
 	env.Environments = env.initEnvOverrides()
@@ -119,6 +119,17 @@ func New(options Options) *Environment {
 	env.stopRetentionCleaners = env.startRetentionCleaners()
 
 	return env
+}
+
+func defaultBaseURL(bindAddr string) string {
+	host, port, err := net.SplitHostPort(bindAddr)
+	if err != nil {
+		return bindAddr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return net.JoinHostPort("localhost", port)
+	}
+	return bindAddr
 }
 
 // Close stops retention cleaners and closes runtime storage.

@@ -19,21 +19,25 @@ func TestCommandValuePrecedence(t *testing.T) {
 		envValue    string
 		cliValue    string
 		expected    string
+		expectedURL string
 	}{
 		{
-			name:     "default used when no source is set",
-			expected: "localhost:8081",
+			name:        "default used when no source is set",
+			expected:    ":8081",
+			expectedURL: "localhost:8081",
 		},
 		{
 			name:        "config overrides default",
 			configValue: "config:8081",
 			expected:    "config:8081",
+			expectedURL: "config:8081",
 		},
 		{
 			name:        "env overrides config",
 			configValue: "config:8081",
 			envValue:    "env:8081",
 			expected:    "env:8081",
+			expectedURL: "env:8081",
 		},
 		{
 			name:        "cli overrides env",
@@ -41,6 +45,7 @@ func TestCommandValuePrecedence(t *testing.T) {
 			envValue:    "env:8081",
 			cliValue:    "cli:8081",
 			expected:    "cli:8081",
+			expectedURL: "cli:8081",
 		},
 	}
 
@@ -72,6 +77,7 @@ func TestCommandValuePrecedence(t *testing.T) {
 			require.NoError(t, cmd.Run(context.Background(), args))
 			require.NotNil(t, got)
 			assert.Equal(t, tt.expected, got.BindAddr)
+			assert.Equal(t, tt.expectedURL, got.BaseURL)
 		})
 	}
 }

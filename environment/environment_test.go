@@ -45,6 +45,46 @@ func TestDefaultEnvironment(t *testing.T) {
 	assert.Equal(t, []string{"baseURL"}, env.ParamsBlacklist)
 }
 
+func TestDefaultBaseURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		bindAddr string
+		want     string
+	}{
+		{
+			name:     "wildcard host",
+			bindAddr: ":8081",
+			want:     "localhost:8081",
+		},
+		{
+			name:     "ipv4 wildcard",
+			bindAddr: "0.0.0.0:8081",
+			want:     "localhost:8081",
+		},
+		{
+			name:     "ipv6 wildcard",
+			bindAddr: "[::]:8081",
+			want:     "localhost:8081",
+		},
+		{
+			name:     "concrete host",
+			bindAddr: "192.0.2.10:8081",
+			want:     "192.0.2.10:8081",
+		},
+		{
+			name:     "unparseable address keeps existing behavior",
+			bindAddr: "localhost",
+			want:     "localhost",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, defaultBaseURL(tt.bindAddr))
+		})
+	}
+}
+
 func TestInitScript(t *testing.T) {
 	configMappings := &mappings.Mappings{
 		Defaults: mappings.DefaultsMap{Params: map[string]any{"one": "default", "shared": "default"}},

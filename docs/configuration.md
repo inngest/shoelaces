@@ -44,8 +44,8 @@ inspection commands where applicable.
 | CLI flag                                | Config key                           | Environment                           | Default                | Notes                                                                                                       |
 |-----------------------------------------|--------------------------------------|---------------------------------------|------------------------|-------------------------------------------------------------------------------------------------------------|
 | `--config`                              | N/A                                  | `CONFIG`                             | First existing `/etc/shoelaces/shoelaces.yaml`, `.json`, then `.toml` | Path to a TOML, YAML, or JSON config file. |
-| `--bind-addr`                           | `network.bindAddr`                   | `BIND_ADDR`                           | `localhost:8081`       | HTTP listen address.                                                                                        |
-| `--base-url`                            | `network.baseURL`                    | `BASE_URL`                            | `network.bindAddr`     | Used when rendered templates need to refer back to Shoelaces.                                               |
+| `--bind-addr`                           | `network.bindAddr`                   | `BIND_ADDR`                           | `:8081`                | HTTP listen address.                                                                                        |
+| `--base-url`                            | `network.baseURL`                    | `BASE_URL`                            | `network.bindAddr`     | Used when rendered templates need to refer back to Shoelaces. Wildcard listen addresses advertise `localhost:<port>` by default. |
 | `--data-dir`                            | `data.dir`                           | `DATA_DIR`                            | Required               | Root directory for mappings, disk template overrides, provisioning static files, and environment overrides. |
 | `--ui-dir`                              | `ui.dir`                             | `UI_DIR`                              | Embedded UI            | Optional custom web UI directory containing templates and static frontend assets.                           |
 | `--static-dir`                          | `static.dir`                         | `STATIC_DIR`                          | N/A                    | Compatibility alias for `ui.dir`; it does not control provisioning static files.                            |
@@ -95,7 +95,7 @@ event IDs, and redacted lookup APIs backed by the persistence store.
 
 ```toml
 [network]
-bindAddr = "localhost:8081"
+bindAddr = ":8081"
 baseURL = "localhost:8081"
 
 [data]

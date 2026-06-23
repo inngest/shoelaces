@@ -1,5 +1,5 @@
 [network]
-bindAddr = "localhost:8081"
+bindAddr = ":8081"
 
 [data]
 dir = "configs/data-dir/"
