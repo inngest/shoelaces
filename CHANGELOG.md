@@ -1,9 +1,18 @@
+## [1.9.2] - 2026-06-23
+
+### 🐛 Bug Fixes
+
+- *(debian)* Support plain regular LUKS installs (#78)
 ## [1.9.1] - 2026-06-23
 
 ### 🐛 Bug Fixes
 
 - *(server)* Bind HTTP server to all interfaces by default (#75)
 - *(debian)* Format regular LUKS root mapper (#77)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.1 (#76)
 ## [1.9.0] - 2026-06-19
 
 ### 🚀 Features
