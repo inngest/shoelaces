@@ -1,8 +1,14 @@
+## [1.9.4] - 2026-06-24
+
+### ⚙️ Miscellaneous Tasks
+
+- *(installer)* Append structured late commands (#82)
 ## [1.9.3] - 2026-06-24
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(debian)* Support TPM unlock for regular LUKS (#80)
+- *(release)* V1.9.3 (#81)
 ## [1.9.2] - 2026-06-23
 
 ### 🐛 Bug Fixes
