@@ -282,6 +282,78 @@ func TestConfigsStaticRouteLiteralFileWinsOverStaticTemplate(t *testing.T) {
 	assert.Equal(t, "literal {{.site}}\n", rr.Body.String())
 }
 
+func TestConfigsStaticRouteDataDirStaticTemplateOverridesEmbeddedLiteral(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "provisioning-default.txt.slc"), []byte(`{{define "static/provisioning-default.txt"}}templated {{.site}}{{end}}`), 0o644))
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt?site=iad", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "templated iad", rr.Body.String())
+}
+
+func TestConfigsStaticRouteEnvStaticTemplateOverridesBaseLiteral(t *testing.T) {
+	dataDir := t.TempDir()
+	baseStaticDir := filepath.Join(dataDir, "static")
+	envStaticDir := filepath.Join(dataDir, "env_overrides", "staging", "static")
+	require.NoError(t, os.MkdirAll(baseStaticDir, 0o755))
+	require.NoError(t, os.MkdirAll(envStaticDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(baseStaticDir, "install-firstboot.sh"), []byte("base literal\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(envStaticDir, "install-firstboot.sh.slc"), []byte(`{{define "static/install-firstboot.sh"}}env templated {{.site}}{{end}}`), 0o644))
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Environments = []string{"staging"}
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/env/staging/configs/static/install-firstboot.sh?site=iad", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "env templated iad", rr.Body.String())
+}
+
+func TestConfigsStaticRouteRendersEnvStaticTemplateFromBootReference(t *testing.T) {
+	dataDir := t.TempDir()
+	envStaticDir := filepath.Join(dataDir, "env_overrides", "staging", "static")
+	require.NoError(t, os.MkdirAll(envStaticDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(envStaticDir, "install-firstboot.sh.slc"), []byte(`{{define "static/install-firstboot.sh" -}}
+variant=staging
+baseURL={{.baseURL}}
+hostname={{.hostname}}
+{{end}}
+`), 0o644))
+
+	var ref string
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Environments = []string{"staging"}
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		var err error
+		ref, err = env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server:      server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target:      "install.cfg",
+			Environment: "staging",
+			Params:      map[string]any{"hostname": "boot-host"},
+		})
+		require.NoError(t, err)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/install-firstboot.sh?ref="+url.QueryEscape(ref), nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "variant=staging")
+	assert.Contains(t, rr.Body.String(), "baseURL=localhost:8081/env/staging")
+	assert.Contains(t, rr.Body.String(), "hostname=boot-host")
+}
+
 func TestConfigsStaticRouteServesEmbeddedProvisioningAsset(t *testing.T) {
 	handler := newTestRouter(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt", nil)

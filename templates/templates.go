@@ -401,6 +401,23 @@ func (s *ShoelacesTemplates) HasTemplate(configName string, envName string) bool
 	return false
 }
 
+// HasTemplateOverride reports whether configName is defined by envName rather
+// than merely inherited from the default environment.
+func (s *ShoelacesTemplates) HasTemplateOverride(configName string, envName string) bool {
+	if envName == "" || envName == defaultEnvironment {
+		return s.HasTemplate(configName, defaultEnvironment)
+	}
+	templateEnv, ok := s.envTemplates[envName]
+	if !ok || templateEnv.templateObj.Lookup(configName) == nil {
+		return false
+	}
+	defaultEnv := s.envTemplates[defaultEnvironment]
+	if defaultEnv.templateObj.Lookup(configName) == nil {
+		return true
+	}
+	return templateEnv.templateBodies[configName] != defaultEnv.templateBodies[configName]
+}
+
 func validateRenderParams(configName string, paramMap map[string]interface{}, embeddedTemplate bool) error {
 	switch configName {
 	case "preseed/debian", "generated/debian/luks-tpm-setup.sh", "generated/plain/luks-tpm.passphrase", "generated/plain/luks-tpm-reenroll.env":

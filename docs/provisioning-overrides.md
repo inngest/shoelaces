@@ -116,11 +116,19 @@ flowchart TD
 
 ## Static Helper Templates
 
-`/configs/static/*` is for installer helper artifacts. Shoelaces first serves a
-literal file from `data-dir/static`, then falls back to embedded static defaults.
-If no literal static file exists, Shoelaces also checks for a `.slc` template
-with the matching static template name and renders it through the same request
-context.
+`/configs/static/*` is for installer helper artifacts. For file requests,
+Shoelaces resolves static helpers in this order:
+
+1. literal file from `data-dir/env_overrides/<env>/static`, when an environment
+   is selected;
+2. `.slc` template from that environment's `static` directory;
+3. literal file from `data-dir/static`;
+4. `.slc` template from `data-dir/static`;
+5. embedded static defaults.
+
+Directory requests still return the merged static overlay listing. Static
+templates are rendered through the same request context as other `/configs/*`
+templates.
 
 For example, this file:
 
