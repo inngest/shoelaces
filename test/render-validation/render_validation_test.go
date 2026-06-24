@@ -990,6 +990,8 @@ func TestRenderedGeneratedLUKSTPMReenrollScriptReenrollsLUKSTPM(t *testing.T) {
 	assert.Contains(t, rendered, "grep -E \"tpm2-hash-pcrs:[[:space:]]*$SHOELACES_LUKS_TPM_PCRS\"")
 	assert.Contains(t, rendered, "grep -E 'tpm2-pcr-bank:[[:space:]]*sha256'")
 	assert.Contains(t, rendered, "rm -f \"$SHOELACES_LUKS_TPM_PASSPHRASE_FILE\"")
+	assert.Contains(t, rendered, "systemctl disable shoelaces-luks-tpm-reenroll.service || true")
+	assert.Contains(t, rendered, "rm -f /etc/systemd/system/multi-user.target.wants/shoelaces-luks-tpm-reenroll.service")
 }
 
 func TestRenderedGeneratedLUKSTPMPassphraseUsesResolvedSecret(t *testing.T) {

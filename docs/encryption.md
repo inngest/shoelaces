@@ -90,6 +90,8 @@ reenrollment service:
 - verifies `systemd-tpm2`, `tpm2-hash-pcrs`, and SHA256 PCR bank metadata in
   `cryptsetup luksDump`;
 - deletes `/var/lib/shoelaces/luks-tpm.passphrase`.
+- disables `shoelaces-luks-tpm-reenroll.service` so later boots do not run the
+  first-boot helper again.
 
 Defaults:
 

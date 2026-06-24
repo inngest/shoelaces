@@ -49,6 +49,16 @@ mark_reenroll_failed() {
   exit "$rc"
 }
 
+disable_reenroll_service() {
+  # The service is only needed for the first installed boot. Leave the unit,
+  # script, logs, status, and done marker on disk for debugging, but remove the
+  # boot-time enablement so normal boots do not wait on this no-op helper.
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable shoelaces-luks-tpm-reenroll.service || true
+  fi
+  rm -f /etc/systemd/system/multi-user.target.wants/shoelaces-luks-tpm-reenroll.service
+}
+
 trap mark_reenroll_failed EXIT
 
 reenroll_phase start
@@ -109,4 +119,5 @@ reenroll_phase complete
 rm -f "$REENROLL_FAILED"
 write_reenroll_status succeeded 0
 touch "$REENROLL_DONE"
+disable_reenroll_service
 {{end}}
