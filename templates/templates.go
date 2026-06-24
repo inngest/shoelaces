@@ -487,12 +487,25 @@ func validateDebianTPMPreseedParams(paramMap map[string]interface{}, encryptionE
 	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_initramfs"])) != "dracut" {
 		return errors.New(`preseed/debian storage_encryption_tpm_initramfs must be "dracut" when TPM unlock is enabled`)
 	}
-	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_device"])) == "" {
+	device := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_device"]))
+	if device == "" {
 		return errors.New("preseed/debian storage_encryption_tpm_device must not be empty when TPM unlock is enabled")
 	}
-	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_pcrs"])) == "" {
+	if containsShellUnsafeValue(device) {
+		return errors.New("preseed/debian storage_encryption_tpm_device contains unsupported shell metacharacters")
+	}
+	paramMap["storage_encryption_tpm_device"] = device
+	pcrs := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_pcrs"]))
+	if pcrs == "" {
 		return errors.New("preseed/debian storage_encryption_tpm_pcrs must not be empty when TPM unlock is enabled")
 	}
+	if containsShellUnsafeValue(pcrs) {
+		return errors.New("preseed/debian storage_encryption_tpm_pcrs contains unsupported shell metacharacters")
+	}
+	if !isPCRSelection(pcrs) {
+		return errors.New("preseed/debian storage_encryption_tpm_pcrs must contain PCR numbers separated by + or comma")
+	}
+	paramMap["storage_encryption_tpm_pcrs"] = pcrs
 	requireSHA256Bank := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_require_sha256_bank"]))
 	if requireSHA256Bank != "true" && requireSHA256Bank != "false" {
 		return errors.New(`preseed/debian storage_encryption_tpm_require_sha256_bank must be "true" or "false", got ` + strconv.Quote(requireSHA256Bank))
@@ -533,6 +546,29 @@ func validateDebianRAIDPreseedParams(paramMap map[string]interface{}) error {
 		return errors.New(`preseed/debian storage_raid_boot_degraded must be "true" or "false", got ` + strconv.Quote(bootDegraded))
 	}
 	return nil
+}
+
+func containsShellUnsafeValue(value string) bool {
+	return strings.ContainsAny(value, " \t\n\r'\"\\;$&|<>`")
+}
+
+func isPCRSelection(value string) bool {
+	hasToken := false
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			hasToken = true
+			continue
+		}
+		if r == '+' || r == ',' {
+			if !hasToken {
+				return false
+			}
+			hasToken = false
+			continue
+		}
+		return false
+	}
+	return hasToken
 }
 
 func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {
