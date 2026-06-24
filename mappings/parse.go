@@ -477,13 +477,22 @@ func containsShellUnsafeValue(value string) bool {
 }
 
 func isPCRSelection(value string) bool {
+	hasToken := false
 	for _, r := range value {
-		if (r >= '0' && r <= '9') || r == '+' || r == ',' {
+		if r >= '0' && r <= '9' {
+			hasToken = true
+			continue
+		}
+		if r == '+' || r == ',' {
+			if !hasToken {
+				return false
+			}
+			hasToken = false
 			continue
 		}
 		return false
 	}
-	return strings.Trim(value, "+,") != ""
+	return hasToken
 }
 
 func validateFilesystems(path string, filesystems map[string]FilesystemConfig) error {

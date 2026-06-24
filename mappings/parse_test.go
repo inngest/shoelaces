@@ -662,6 +662,38 @@ targets:
 			want: `targets["debian13"].storage.encryption.tpm.pcrs contains unsupported shell metacharacters`,
 		},
 		{
+			name: "encryption TPM pcrs rejects trailing separator",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          pcrs: "7+"
+`,
+			want: `targets["debian13"].storage.encryption.tpm.pcrs must contain PCR numbers separated by + or comma`,
+		},
+		{
+			name: "encryption TPM pcrs rejects empty token",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          pcrs: "7,,11"
+`,
+			want: `targets["debian13"].storage.encryption.tpm.pcrs must contain PCR numbers separated by + or comma`,
+		},
+		{
 			name: "encryption TPM device must be safe",
 			content: `
 targets:
