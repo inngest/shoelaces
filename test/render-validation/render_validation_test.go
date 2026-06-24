@@ -67,7 +67,7 @@ var structuredRenderUsers = map[string]mappings.ResolvedUser{
 
 var siteOnlyMarkers = []string{
 	"git@example.com:infra/provisioning.git",
-	"/static/firstboot",
+	"/configs/static/firstboot",
 	"/static/authorized_keys",
 	"/static/id_ansible",
 	"ANSIBLE_REPO_URL",
@@ -920,34 +920,84 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 }
 
 func TestRenderedDebianPreseedEncryptedRegularTPMUnlock(t *testing.T) {
-	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianTPMParams())
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(
+		encryptedDebianTPMParams(),
+		"boot_ref_query_question",
+		"?ref=01JTPMREFTESTREFTEST0000",
+	))
 
 	assert.Contains(t, rendered, "d-i preseed/late_command string \\\n  set -eu;")
+	assert.Contains(t, rendered, `wget -O /tmp/shoelaces-luks-tpm-setup.sh "http://shoelaces.example.test:8081/configs/generated/debian/luks-tpm-setup.sh?ref=01JTPMREFTESTREFTEST0000"`)
+	assert.Contains(t, rendered, "chmod 0755 /tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "/tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "rm -f /tmp/shoelaces-luks-tpm-setup.sh")
+	assert.NotContains(t, rendered, "systemd-cryptenroll")
+	assert.NotContains(t, rendered, "cryptsetup luksDump")
+}
+
+func TestRenderedDebianLUKSTPMHelperUsesTwoPhaseEnrollment(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/debian/luks-tpm-setup.sh", paramsWith(
+		encryptedDebianTPMParams(),
+		"boot_ref_query_question",
+		"?ref=01JTPMREFTESTREFTEST0000",
+	))
+
+	assert.Contains(t, rendered, "base_url='http://shoelaces.example.test:8081'")
+	assert.Contains(t, rendered, "boot_ref_query='?ref=01JTPMREFTESTREFTEST0000'")
+	assert.Contains(t, rendered, "installer_tpm_pcrs=\"\"")
+	assert.Contains(t, rendered, `wget -O "$tpm_passphrase_file" "$base_url/configs/generated/plain/luks-tpm.passphrase$boot_ref_query"`)
 	assert.Contains(t, rendered, "in-target apt-get -y install cryptsetup-initramfs dracut-core dracut-config-generic tpm2-tools")
-	assert.Contains(t, rendered, "in-target systemd-cryptenroll --tpm2-device=list | grep -q '/dev/tpm'")
+	assert.Contains(t, rendered, "mount --bind /sys /target/sys")
+	assert.Contains(t, rendered, "chroot /target systemd-cryptenroll --tpm2-device=list")
 	assert.Contains(t, rendered, "[ ! -e /sys/class/tpm/tpm0/pcr-sha256 ]")
-	assert.Contains(t, rendered, "tpm_passphrase_file=/target/run/shoelaces-luks-tpm.passphrase")
-	assert.Contains(t, rendered, `trap 'rm -f "$tpm_passphrase_file"' EXIT HUP INT TERM`)
-	assert.Contains(t, rendered, "printf %s 'luks-passphrase' > \"$tpm_passphrase_file\"")
-	assert.Contains(t, rendered, "chmod 0600 \"$tpm_passphrase_file\"")
-	assert.Contains(t, rendered, `in-target systemd-cryptenroll "$backing_device" --unlock-key-file=/run/shoelaces-luks-tpm.passphrase --tpm2-device='auto' --tpm2-pcrs='7'`)
-	assert.Contains(t, rendered, "cryptsetup luksDump \"$backing_device\" | grep -F 'tpm2-hash-pcrs:   7'")
-	assert.Contains(t, rendered, "cryptsetup luksDump \"$backing_device\" | grep -F 'tpm2-pcr-bank:    sha256'")
-	assert.Contains(t, rendered, "printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\\n' \"$crypt_name\" \"$backing_uuid\" 'auto' > /target/etc/crypttab")
+	assert.Contains(t, rendered, `chroot /target systemd-cryptenroll "$backing_device" \`)
+	assert.Contains(t, rendered, `--unlock-key-file="${tpm_passphrase_file#/target}" \`)
+	assert.Contains(t, rendered, `--tpm2-device="$tpm_device" \`)
+	assert.Contains(t, rendered, `--tpm2-pcrs="$installer_tpm_pcrs"`)
+	assert.NotContains(t, rendered, `--tpm2-pcrs='7'`)
+	assert.NotContains(t, rendered, "luks-passphrase")
+	assert.Contains(t, rendered, "firstboot_tpm_passphrase_file=/target/var/lib/firstboot/luks-tpm.passphrase")
+	assert.Contains(t, rendered, "cp \"$tpm_passphrase_file\" \"$firstboot_tpm_passphrase_file\"")
+	assert.Contains(t, rendered, "chmod 0600 \"$firstboot_tpm_passphrase_file\"")
+	assert.Contains(t, rendered, "printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\\n'")
 	assert.Contains(t, rendered, "add_dracutmodules+=\" systemd systemd-cryptsetup crypt tpm2-tss \"")
 	assert.Contains(t, rendered, "add_drivers+=\" tpm tpm_tis tpm_tis_core tpm_crb \"")
 	assert.Contains(t, rendered, "install_items+=\" /etc/crypttab \"")
-	assert.Contains(t, rendered, `chroot /target dracut --force --hostonly --kver "$kernel_version" "/boot/initrd.img-$kernel_version.hostonly-dracut"`)
-	assert.Contains(t, rendered, "menuentry 'Debian TPM unlock - dracut'")
-	assert.Contains(t, rendered, `initrd /initrd.img-$kernel_version.hostonly-dracut`)
-	assert.Contains(t, rendered, `GRUB_DEFAULT="Debian TPM unlock - dracut"`)
+	assert.Contains(t, rendered, `chroot /target dracut --force --hostonly --kver "$kernel_version" \`)
+	assert.Contains(t, rendered, "menuentry '$grub_entry_name'")
+	assert.Contains(t, rendered, `GRUB_DEFAULT=\"`)
 	assert.Contains(t, rendered, "in-target update-grub")
+	assert.Contains(t, rendered, "grep -F \"root=UUID=$root_uuid\" /target/boot/grub/grub.cfg")
+	assert.Contains(t, rendered, "wget -O /target/usr/local/bin/firstboot.sh \"$base_url/configs/generated/static/firstboot.sh$boot_ref_query\"")
+	assert.Contains(t, rendered, "wget -O /target/etc/default/firstboot \"$base_url/configs/generated/plain/firstboot.defaults$boot_ref_query\"")
+	assert.Contains(t, rendered, "wget -O /target/etc/systemd/system/firstboot.service \"$base_url/configs/generated/static/firstboot.service$boot_ref_query\"")
 	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
-	assert.NotContains(t, rendered, "--unlock-key-file=luks-passphrase")
+}
+
+func TestRenderedGeneratedFirstbootReenrollsLUKSTPM(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/static/firstboot.sh", defaultRenderParams)
+
+	assert.Contains(t, rendered, "firstboot_phase reenroll-luks-tpm")
+	assert.Contains(t, rendered, ": \"${FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE:=/var/lib/firstboot/luks-tpm.passphrase}\"")
+	assert.Contains(t, rendered, ": \"${FIRSTBOOT_LUKS_TPM_PCRS:=7}\"")
+	assert.Contains(t, rendered, "root_source=\"$(findmnt -no SOURCE /)\"")
+	assert.Contains(t, rendered, "systemd-cryptenroll --tpm2-device=list")
+	assert.Contains(t, rendered, "systemd-cryptenroll \"$backing_device\" --wipe-slot=tpm2")
+	assert.Contains(t, rendered, "--unlock-key-file=\"$FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE\"")
+	assert.Contains(t, rendered, "--tpm2-pcrs=\"$FIRSTBOOT_LUKS_TPM_PCRS\"")
+	assert.Contains(t, rendered, "grep -E \"tpm2-hash-pcrs:[[:space:]]*$FIRSTBOOT_LUKS_TPM_PCRS\"")
+	assert.Contains(t, rendered, "grep -E 'tpm2-pcr-bank:[[:space:]]*sha256'")
+	assert.Contains(t, rendered, "rm -f \"$FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE\"")
+}
+
+func TestRenderedGeneratedLUKSTPMPassphraseUsesResolvedSecret(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/plain/luks-tpm.passphrase", encryptedDebianTPMParams())
+
+	assert.Equal(t, "luks-passphrase", rendered)
 }
 
 func TestRenderedDebianPreseedEncryptedRegularTPMUnlockHonorsDisabledSHA256BankRequirement(t *testing.T) {
-	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
+	rendered := renderTemplate(t, newRenderer(t), "generated/debian/luks-tpm-setup.sh", encryptedDebianParams(mappings.StorageConfig{
 		Encryption: mappings.StorageEncryptionConfig{
 			TPM: mappings.StorageEncryptionTPMConfig{
 				Enabled:           boolPtr(true),
@@ -957,8 +1007,7 @@ func TestRenderedDebianPreseedEncryptedRegularTPMUnlockHonorsDisabledSHA256BankR
 	}))
 
 	assert.Contains(t, rendered, "systemd-cryptenroll")
-	assert.NotContains(t, rendered, "/sys/class/tpm/tpm0/pcr-sha256")
-	assert.NotContains(t, rendered, "tpm2-pcr-bank:    sha256")
+	assert.Contains(t, rendered, "require_sha256_bank='false'")
 }
 
 func TestRenderedDebianPreseedAppendsInstallerLateCommandsToRegularLUKS(t *testing.T) {

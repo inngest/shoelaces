@@ -34,10 +34,14 @@ type TemplateHandler struct {
 	env *environment.Environment
 }
 
+type resolvedTemplateRequest struct {
+	variables map[string]any
+	envName   string
+}
+
 // TemplateHandler is the dynamic configuration provider endpoint. It
 // receives a key and maybe an environment.
 func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	variablesMap := map[string]any{}
 	configName := filepath.Clean(r.URL.Path)
 	env := t.env
 
@@ -47,25 +51,51 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resolved, ok := resolveTemplateRequest(w, r, env, configName, false)
+	if !ok {
+		return
+	}
+
+	configString, err := env.Templates.RenderTemplate(configName, resolved.variables, resolved.envName)
+	if err != nil {
+		env.Logger.Error("Failed to render config template", "component", "handler", "template", configName, "environment", resolved.envName, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		_, _ = io.WriteString(w, configString)
+	}
+}
+
+// TemplateHandler returns a TemplateHandler instance implementing http.Handler
+func TemplateServer(env *environment.Environment) *TemplateHandler {
+	return &TemplateHandler{env: env}
+}
+
+func resolveTemplateRequest(w http.ResponseWriter, r *http.Request, env *environment.Environment, configName string, requireRef bool) (resolvedTemplateRequest, bool) {
+	variablesMap := map[string]any{}
 	queryParams := firstQueryValues(r)
 	envName := envNameFromRequest(r)
 	ref := queryParams[bootsession.QueryParam]
+	if requireRef && ref == "" {
+		env.Logger.Error("Generated template request missing boot reference", "component", "handler", "template", configName)
+		http.Error(w, "boot reference is required", http.StatusBadRequest)
+		return resolvedTemplateRequest{}, false
+	}
 	if ref != "" {
 		if env.BootSessions == nil {
 			env.Logger.Error("Template request has ref but boot sessions are disabled", "component", "handler", "template", configName, "ref", ref)
 			http.Error(w, "boot references are not available", http.StatusBadRequest)
-			return
+			return resolvedTemplateRequest{}, false
 		}
 		snapshot, err := env.BootSessions.Get(r.Context(), ref)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				env.Logger.Error("Template request references missing boot session", "component", "handler", "template", configName, "ref", ref)
 				http.Error(w, "boot reference not found", http.StatusNotFound)
-				return
+				return resolvedTemplateRequest{}, false
 			}
 			env.Logger.Error("Failed to resolve boot session", "component", "handler", "template", configName, "ref", ref, "err", err)
 			http.Error(w, "failed to resolve boot reference", http.StatusInternalServerError)
-			return
+			return resolvedTemplateRequest{}, false
 		}
 		if snapshot.Environment != "" {
 			envName = snapshot.Environment
@@ -79,6 +109,10 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for key, val := range queryParams {
 			params[key] = val
 		}
+		// Templates rendered from a boot reference often fetch follow-up generated
+		// helpers. Re-expose the same opaque ref so those URLs stay scoped to the
+		// resolved boot context without serializing secrets into the iPXE URL.
+		bootsession.ApplyReferenceParams(params, ref)
 		variablesMap = mappings.ParamsWithProvisioning(params, snapshot.Users, snapshot.Provisioning)
 		queryParams = nil
 	}
@@ -88,19 +122,7 @@ func (t *TemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	variablesMap["baseURL"] = utils.BaseURLforEnvName(env.BaseURL, envName)
-
-	configString, err := env.Templates.RenderTemplate(configName, variablesMap, envName)
-	if err != nil {
-		env.Logger.Error("Failed to render config template", "component", "handler", "template", configName, "environment", envName, "err", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	} else {
-		_, _ = io.WriteString(w, configString)
-	}
-}
-
-// TemplateHandler returns a TemplateHandler instance implementing http.Handler
-func TemplateServer(env *environment.Environment) *TemplateHandler {
-	return &TemplateHandler{env: env}
+	return resolvedTemplateRequest{variables: variablesMap, envName: envName}, true
 }
 
 func firstQueryValues(r *http.Request) map[string]string {

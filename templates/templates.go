@@ -387,7 +387,7 @@ func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[stri
 
 func validateRenderParams(configName string, paramMap map[string]interface{}, embeddedTemplate bool) error {
 	switch configName {
-	case "preseed/debian":
+	case "preseed/debian", "generated/debian/luks-tpm-setup.sh", "generated/plain/luks-tpm.passphrase":
 		return validateDebianPreseedParams(paramMap)
 	default:
 		if isStorageEncryptionEnabled(paramMap) && isUnsupportedEncryptedInstallerTemplate(configName) && embeddedTemplate && !hasInstallerExtraTemplate(paramMap, configName) {

@@ -1,0 +1,5 @@
+{{define "generated/plain/firstboot.defaults" -}}
+# Managed by Shoelaces.
+FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE=/var/lib/firstboot/luks-tpm.passphrase
+FIRSTBOOT_LUKS_TPM_PCRS={{.storage_encryption_tpm_pcrs}}
+{{end}}

@@ -484,6 +484,51 @@ d-i preseed/late_command string echo luks {{.provisioning.Storage.Encryption.Pas
 	assert.Contains(t, rr.Body.String(), "d-i preseed/late_command string echo luks luks-passphrase")
 }
 
+func TestGeneratedConfigRouteRequiresBootReference(t *testing.T) {
+	handler := newTestRouter(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/configs/generated/plain/luks-tpm.passphrase", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "boot reference is required")
+}
+
+func TestGeneratedConfigRouteResolvesBootReference(t *testing.T) {
+	var ref string
+	handler := newTestRouterWithEnvironment(t, t.TempDir(), func(env *environment.Environment) {
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+		provisioning := mappings.ProvisioningConfig{
+			Storage: mappings.StorageConfig{
+				Encryption: mappings.StorageEncryptionConfig{
+					Enabled:    boolPtr(true),
+					Passphrase: "luks-passphrase",
+					TPM: mappings.StorageEncryptionTPMConfig{
+						Enabled:   boolPtr(true),
+						Initramfs: "dracut",
+					},
+				},
+			},
+		}
+		var err error
+		ref, err = env.BootSessions.Create(context.Background(), bootsession.Snapshot{
+			Server:       server.New("06:66:de:ad:be:ef", "192.0.2.10", "boot-host"),
+			Target:       "debian.ipxe",
+			Params:       map[string]any{"hostname": "boot-host"},
+			Provisioning: provisioning,
+		})
+		require.NoError(t, err)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/generated/plain/luks-tpm.passphrase?ref="+url.QueryEscape(ref), nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "luks-passphrase", rr.Body.String())
+}
+
 func TestConfigTemplateRouteResolvesBootReferenceAndPreservesQueryOverrides(t *testing.T) {
 	dataDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "install.cfg.slc"), []byte(`{{define "install.cfg" -}}

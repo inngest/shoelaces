@@ -1,0 +1,188 @@
+{{define "generated/debian/luks-tpm-setup.sh" -}}
+#!/bin/sh
+set -eux
+
+base_url={{printf "http://%s" .baseURL | shquote}}
+boot_ref_query={{.boot_ref_query_question | shquote}}
+swap_enabled={{.debian_regular_swap_enabled | shquote}}
+swap_size_mib={{.debian_regular_swap_min_size_mib | shquote}}
+tpm_device={{.storage_encryption_tpm_device | shquote}}
+installer_tpm_pcrs=""
+require_sha256_bank={{.storage_encryption_tpm_require_sha256_bank | shquote}}
+dracut_config_path={{.storage_encryption_tpm_dracut_config_path | shquote}}
+dracut_image_suffix={{.storage_encryption_tpm_dracut_image_suffix | shquote}}
+grub_custom_path={{.storage_encryption_tpm_grub_custom_path | shquote}}
+grub_entry_name={{.storage_encryption_tpm_grub_entry_name | shquote}}
+tpm_passphrase_file=/target/run/shoelaces-luks-tpm.passphrase
+tpm_devices_file=/tmp/shoelaces-luks-tpm-devices
+luks_dump_file=/tmp/shoelaces-luks-tpm-luksdump
+firstboot_tpm_passphrase_file=/target/var/lib/firstboot/luks-tpm.passphrase
+
+case "$swap_enabled" in
+  true|false) ;;
+  *)
+    echo "swap_enabled must be true or false" >&2
+    exit 2
+    ;;
+esac
+case "$swap_size_mib" in
+  ''|*[!0-9]*)
+    echo "swap_size_mib must be a positive integer" >&2
+    exit 2
+    ;;
+esac
+if [ "$swap_size_mib" -le 0 ]; then
+  echo "swap_size_mib must be a positive integer" >&2
+  exit 2
+fi
+if [ -z "$boot_ref_query" ]; then
+  echo "generated LUKS TPM setup requires a Shoelaces boot ref" >&2
+  exit 2
+fi
+
+cleanup() {
+  rm -f "$tpm_passphrase_file" "$tpm_devices_file" "$luks_dump_file"
+}
+trap cleanup EXIT HUP INT TERM
+
+echo "Resolving installed encrypted root"
+root_source="$(awk '$2 == "/target" { print $1; exit }' /proc/mounts)"
+case "$root_source" in
+  /dev/mapper/*) ;;
+  *)
+    echo "root_source=$root_source is not a LUKS mapper" >&2
+    exit 1
+    ;;
+esac
+crypt_name="${root_source##*/}"
+backing_device="$(cryptsetup status "$crypt_name" | sed -n 's/^[[:space:]]*device:[[:space:]]*//p')"
+backing_uuid="$(cryptsetup luksUUID "$backing_device")"
+if [ -z "$backing_device" ] || [ -z "$backing_uuid" ]; then
+  echo "cannot resolve LUKS backing device or UUID for $crypt_name" >&2
+  exit 1
+fi
+
+echo "Fetching ref-scoped LUKS passphrase"
+mkdir -p /target/run
+umask 077
+wget -O "$tpm_passphrase_file" "$base_url/configs/generated/plain/luks-tpm.passphrase$boot_ref_query"
+chmod 0600 "$tpm_passphrase_file"
+
+# Debian initramfs-tools currently ignores tpm2-device=auto for this plain-LUKS
+# root shape, so the TPM boot path uses host-only dracut and leaves the normal
+# passphrase-capable initramfs as a fallback.
+in-target apt-get -y install cryptsetup-initramfs dracut-core dracut-config-generic tpm2-tools
+in-target update-initramfs -u -k all || true
+
+# chroot systemd-cryptenroll needs the installer's TPM sysfs view.
+if ! grep -q '[[:space:]]/target/sys[[:space:]]' /proc/mounts; then
+  mkdir -p /target/sys
+  mount --bind /sys /target/sys
+fi
+
+if ! chroot /target systemd-cryptenroll --tpm2-device=list > "$tpm_devices_file" 2>&1; then
+  cat "$tpm_devices_file" >&2
+  echo "TPM2 support is unavailable; install tpm2-tools/TSS libraries and expose a TPM2 device" >&2
+  exit 1
+fi
+cat "$tpm_devices_file"
+if ! grep -q '/dev/tpm' "$tpm_devices_file"; then
+  cat "$tpm_devices_file" >&2
+  echo "TPM2 support is unavailable; install tpm2-tools/TSS libraries and expose a TPM2 device" >&2
+  exit 1
+fi
+rm -f "$tpm_devices_file"
+
+if [ "$require_sha256_bank" = "true" ] && [ ! -e /sys/class/tpm/tpm0/pcr-sha256 ]; then
+  echo "TPM2 SHA256 PCR bank is required for LUKS enrollment" >&2
+  exit 1
+fi
+
+echo "Enrolling temporary no-PCR TPM token for first installed boot"
+if cryptsetup luksDump "$backing_device" | grep -q 'systemd-tpm2'; then
+  chroot /target systemd-cryptenroll "$backing_device" --wipe-slot=tpm2
+fi
+chroot /target systemd-cryptenroll "$backing_device" \
+  --unlock-key-file="${tpm_passphrase_file#/target}" \
+  --tpm2-device="$tpm_device" \
+  --tpm2-pcrs="$installer_tpm_pcrs"
+
+cryptsetup luksDump "$backing_device" > "$luks_dump_file"
+cat "$luks_dump_file"
+grep -q 'systemd-tpm2' "$luks_dump_file"
+
+# Preserve a root-only copy on the encrypted target root. Firstboot uses it to
+# replace this bootstrap token with a PCR-bound token from the disk boot context.
+mkdir -p /target/var/lib/firstboot
+cp "$tpm_passphrase_file" "$firstboot_tpm_passphrase_file"
+chmod 0600 "$firstboot_tpm_passphrase_file"
+
+printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\n' \
+  "$crypt_name" "$backing_uuid" "$tpm_device" > /target/etc/crypttab
+
+mkdir -p /target/etc/dracut.conf.d
+printf '%s\n' \
+  '# Managed by Shoelaces.' \
+  'hostonly="yes"' \
+  'add_dracutmodules+=" systemd systemd-cryptsetup crypt tpm2-tss "' \
+  'add_drivers+=" tpm tpm_tis tpm_tis_core tpm_crb "' \
+  'install_items+=" /etc/crypttab "' \
+  > "/target$dracut_config_path"
+
+kernel_version="$(chroot /target sh -c 'ls /lib/modules | sort -V | tail -n1')"
+if [ -z "$kernel_version" ]; then
+  echo "cannot determine installed kernel version for dracut TPM initramfs" >&2
+  exit 1
+fi
+chroot /target dracut --force --hostonly --kver "$kernel_version" \
+  "/boot/initrd.img-$kernel_version.$dracut_image_suffix"
+
+boot_source="$(awk '$2 == "/target/boot" { print $1; exit }' /proc/mounts)"
+boot_uuid="$(blkid -s UUID -o value "$boot_source")"
+root_uuid="$(blkid -s UUID -o value "$root_source")"
+
+printf '%s\n' \
+  '#!/bin/sh' \
+  'exec tail -n +3 "$0"' \
+  "menuentry '$grub_entry_name' {" \
+  '    insmod gzio' \
+  '    insmod part_gpt' \
+  '    insmod ext2' \
+  "    search --no-floppy --fs-uuid --set=root $boot_uuid" \
+  "    linux /vmlinuz-$kernel_version root=UUID=$root_uuid ro quiet" \
+  "    initrd /initrd.img-$kernel_version.$dracut_image_suffix" \
+  '}' \
+  > "/target$grub_custom_path"
+chmod 0755 "/target$grub_custom_path"
+
+if grep -q '^GRUB_DEFAULT=' /target/etc/default/grub; then
+  sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"$grub_entry_name\"/" /target/etc/default/grub
+else
+  printf 'GRUB_DEFAULT="%s"\n' "$grub_entry_name" >> /target/etc/default/grub
+fi
+
+in-target update-grub
+grep -F "menuentry '$grub_entry_name'" /target/boot/grub/grub.cfg
+grep -F "root=UUID=$root_uuid" /target/boot/grub/grub.cfg
+grep -F "initrd /initrd.img-$kernel_version.$dracut_image_suffix" /target/boot/grub/grub.cfg
+
+echo "Installing firstboot TPM re-enrollment service"
+wget -O /target/usr/local/bin/firstboot.sh "$base_url/configs/generated/static/firstboot.sh$boot_ref_query"
+chmod 0755 /target/usr/local/bin/firstboot.sh
+wget -O /target/etc/default/firstboot "$base_url/configs/generated/plain/firstboot.defaults$boot_ref_query"
+mkdir -p /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants
+wget -O /target/etc/systemd/system/firstboot.service "$base_url/configs/generated/static/firstboot.service$boot_ref_query"
+chroot /target /bin/systemctl enable firstboot.service || \
+  ln -sf /etc/systemd/system/firstboot.service /target/etc/systemd/system/multi-user.target.wants/firstboot.service
+
+if [ "$swap_enabled" = "true" ]; then
+  if ! chroot /target /usr/bin/fallocate -l "${swap_size_mib}M" /swapfile; then
+    dd if=/dev/zero of=/target/swapfile bs=1M count="$swap_size_mib"
+  fi
+  chmod 0600 /target/swapfile
+  chroot /target /sbin/mkswap /swapfile
+  if ! grep -q '^/swapfile[[:space:]]' /target/etc/fstab; then
+    printf '/swapfile none swap sw 0 0\n' >> /target/etc/fstab
+  fi
+fi
+{{end}}

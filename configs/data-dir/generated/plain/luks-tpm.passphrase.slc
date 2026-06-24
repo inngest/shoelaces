@@ -1,0 +1,1 @@
+{{define "generated/plain/luks-tpm.passphrase" -}}{{.storage_encryption_passphrase}}{{- end}}
