@@ -615,7 +615,7 @@ Use full-template replacement when a site needs to replace an entire embedded
 template. Use `installer.extraTemplate` when a site needs native installer
 snippets or arbitrary imperative behavior.
 
-Embedded defaults do not include site firstboot orchestration, SSH keys,
-credentials, Ansible repository URLs, or host enrollment logic. Supply those
-from disk-backed extra templates, full-template overrides, or external
-automation.
+Outside the native Debian LUKS TPM reenrollment helper, embedded defaults do
+not include site firstboot orchestration, SSH keys, credentials, Ansible
+repository URLs, or host enrollment logic. Supply those from disk-backed extra
+templates, full-template overrides, or external automation.

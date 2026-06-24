@@ -19,14 +19,14 @@ import (
 	"io/fs"
 )
 
-//go:embed configs/data-dir/cloud-config configs/data-dir/ipxe configs/data-dir/kickstart configs/data-dir/preseed configs/data-dir/provisioning configs/data-dir/static/plain-luks-autopartition-crypto.sh configs/data-dir/static/provisioning-default.txt
+//go:embed configs/data-dir/cloud-config configs/data-dir/generated configs/data-dir/ipxe configs/data-dir/kickstart configs/data-dir/preseed configs/data-dir/provisioning configs/data-dir/static/plain-luks-autopartition-crypto.sh configs/data-dir/static/provisioning-default.txt
 var embeddedProvisioningDefaults embed.FS
 
 // ProvisioningDefaultsFS returns the embedded generic provisioning defaults.
 //
 // The filesystem is rooted like data-dir and intentionally excludes runtime
-// site policy and site-only examples such as mappings.yaml, firstboot scripts,
-// SSH key material, and other static bootstrap artifacts.
+// site policy and site-only examples such as mappings.yaml, static firstboot
+// examples, SSH key material, and other static bootstrap artifacts.
 func ProvisioningDefaultsFS() fs.FS {
 	return mustSub(embeddedProvisioningDefaults, "configs/data-dir")
 }

@@ -596,30 +596,34 @@ func TestRenderTemplateRejectsInvalidFlatTPMPCRParam(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
-			params := map[string]interface{}{
-				"baseURL":                                       "127.0.0.1:8081",
-				"hostname":                                      "tpm-host",
-				"storage_mode":                                  "regular",
-				"storage_encryption_enabled":                    "true",
-				"storage_encryption_passphrase":                 "luks-passphrase",
-				"storage_encryption_cipher":                     "aes-xts-plain64",
-				"storage_encryption_hash":                       "sha512",
-				"storage_encryption_key_size":                   "512",
-				"storage_encryption_tpm_enabled":                "true",
-				"storage_encryption_tpm_initramfs":              "dracut",
-				"storage_encryption_tpm_device":                 "auto",
-				"storage_encryption_tpm_pcrs":                   tt.pcrs,
-				"storage_encryption_tpm_require_sha256_bank":    "true",
-				"storage_encryption_tpm_dracut_config_path":     "/etc/dracut.conf.d/shoelaces-tpm.conf",
-				"storage_encryption_tpm_passphrase_temp_path":   "/run/shoelaces-luks-tpm.passphrase",
-				"storage_encryption_tpm_passphrase_target_path": "/target/run/shoelaces-luks-tpm.passphrase",
+			for _, configName := range []string{"preseed/debian", "generated/plain/luks-tpm-reenroll.env"} {
+				t.Run(configName, func(t *testing.T) {
+					renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+					params := map[string]interface{}{
+						"baseURL":                                       "127.0.0.1:8081",
+						"hostname":                                      "tpm-host",
+						"storage_mode":                                  "regular",
+						"storage_encryption_enabled":                    "true",
+						"storage_encryption_passphrase":                 "luks-passphrase",
+						"storage_encryption_cipher":                     "aes-xts-plain64",
+						"storage_encryption_hash":                       "sha512",
+						"storage_encryption_key_size":                   "512",
+						"storage_encryption_tpm_enabled":                "true",
+						"storage_encryption_tpm_initramfs":              "dracut",
+						"storage_encryption_tpm_device":                 "auto",
+						"storage_encryption_tpm_pcrs":                   tt.pcrs,
+						"storage_encryption_tpm_require_sha256_bank":    "true",
+						"storage_encryption_tpm_dracut_config_path":     "/etc/dracut.conf.d/shoelaces-tpm.conf",
+						"storage_encryption_tpm_passphrase_temp_path":   "/run/shoelaces-luks-tpm.passphrase",
+						"storage_encryption_tpm_passphrase_target_path": "/target/run/shoelaces-luks-tpm.passphrase",
+					}
+
+					rendered, err := renderer.RenderTemplate(configName, params, "")
+
+					require.ErrorContains(t, err, tt.want)
+					assert.Empty(t, rendered)
+				})
 			}
-
-			rendered, err := renderer.RenderTemplate("preseed/debian", params, "")
-
-			require.ErrorContains(t, err, tt.want)
-			assert.Empty(t, rendered)
 		})
 	}
 }

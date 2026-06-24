@@ -53,6 +53,9 @@ func ShoelacesRouter(env *environment.Environment) http.Handler {
 	// Static configuration files endpoint
 	r.Handle("/configs/static/*", http.StripPrefix("/configs/static/", handlers.StaticConfigFileServer()))
 
+	// Ref-scoped generated helper endpoint
+	r.Handle("/configs/generated/*", http.StripPrefix("/configs/generated/", handlers.GeneratedConfigServer(env)))
+
 	// Dynamic configuration endpoint
 	r.Handle("/configs/*", http.StripPrefix("/configs/", handlers.TemplateServer(env)))
 

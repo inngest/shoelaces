@@ -24,6 +24,11 @@ import (
 
 var genericProvisioningDefaultCandidates = []string{
 	"cloud-config/cloud-config-release.slc",
+	"generated/debian/luks-tpm-setup.sh.slc",
+	"generated/plain/luks-tpm.passphrase.slc",
+	"generated/plain/luks-tpm-reenroll.env.slc",
+	"generated/static/luks-tpm-reenroll.service.slc",
+	"generated/static/luks-tpm-reenroll.sh.slc",
 	"ipxe/centos.ipxe.slc",
 	"ipxe/coreos.ipxe.slc",
 	"ipxe/debian.ipxe.slc",
@@ -52,7 +57,7 @@ var siteOnlyProvisioningFiles = []string{
 
 var siteOnlyProvisioningMarkers = []string{
 	"git@example.com:infra/provisioning.git",
-	"/static/firstboot",
+	"/configs/static/firstboot",
 	"/static/authorized_keys",
 	"/static/id_ansible",
 	"ANSIBLE_REPO_URL",
