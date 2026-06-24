@@ -1,8 +1,14 @@
+## [1.9.5] - 2026-06-24
+
+### 🐛 Bug Fixes
+
+- *(debian)* Stage LUKS TPM reenroll with generated helpers (#84)
 ## [1.9.4] - 2026-06-24
 
 ### ⚙️ Miscellaneous Tasks
 
 - *(installer)* Append structured late commands (#82)
+- *(release)* V1.9.4 (#83)
 ## [1.9.3] - 2026-06-24
 
 ### ⚙️ Miscellaneous Tasks
