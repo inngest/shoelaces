@@ -114,6 +114,22 @@ type StorageEncryptionConfig struct {
 	KeySize *int `koanf:"keySize"`
 	// Hash optionally selects the LUKS hash.
 	Hash string `koanf:"hash"`
+	// TPM contains TPM-backed unlock settings for encrypted installs.
+	TPM StorageEncryptionTPMConfig `koanf:"tpm"`
+}
+
+// StorageEncryptionTPMConfig describes TPM-backed LUKS unlock settings.
+type StorageEncryptionTPMConfig struct {
+	// Enabled controls whether the installer enrolls a TPM2 unlock token.
+	Enabled *bool `koanf:"enabled"`
+	// Device selects the TPM2 device for systemd-cryptenroll.
+	Device string `koanf:"device"`
+	// PCRs selects the PCR set for systemd-cryptenroll.
+	PCRs string `koanf:"pcrs"`
+	// RequireSHA256Bank fails installation when the TPM lacks a SHA256 PCR bank.
+	RequireSHA256Bank *bool `koanf:"requireSha256Bank"`
+	// Initramfs selects the initramfs implementation for TPM unlock.
+	Initramfs string `koanf:"initramfs"`
 }
 
 // RAIDConfig describes the narrow mdraid shape supported by installers.
@@ -350,6 +366,15 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "storage_encryption_cipher", "aes-xts-plain64")
 	setDefaultParamValue(params, "storage_encryption_key_size", "512")
 	setDefaultParamValue(params, "storage_encryption_hash", "sha512")
+	setDefaultParamValue(params, "storage_encryption_tpm_enabled", "false")
+	setDefaultParamValue(params, "storage_encryption_tpm_device", "auto")
+	setDefaultParamValue(params, "storage_encryption_tpm_pcrs", "7")
+	setDefaultParamValue(params, "storage_encryption_tpm_require_sha256_bank", "true")
+	setDefaultParamValue(params, "storage_encryption_tpm_initramfs", "dracut")
+	setDefaultParamValue(params, "storage_encryption_tpm_dracut_image_suffix", "hostonly-dracut")
+	setDefaultParamValue(params, "storage_encryption_tpm_dracut_config_path", "/etc/dracut.conf.d/90-shoelaces-luks-tpm.conf")
+	setDefaultParamValue(params, "storage_encryption_tpm_grub_entry_name", "Debian TPM unlock - dracut")
+	setDefaultParamValue(params, "storage_encryption_tpm_grub_custom_path", "/etc/grub.d/40_luks_tpm")
 	setDefaultParamValue(params, "ubuntu_minimal_storage_mode", "regular")
 	setDefaultParamValue(params, "debian_regular_partman_modules", "partman-ext4")
 	setDefaultParamValue(params, "debian_regular_esp_min_size_mib", "512")
@@ -466,6 +491,19 @@ func projectStorageEncryptionParams(params map[string]interface{}, encryption St
 		setDefaultParamValue(params, "storage_encryption_key_size", *encryption.KeySize)
 	}
 	setDefaultParam(params, "storage_encryption_hash", encryption.Hash)
+	projectStorageEncryptionTPMParams(params, encryption.TPM)
+}
+
+func projectStorageEncryptionTPMParams(params map[string]interface{}, tpm StorageEncryptionTPMConfig) {
+	if tpm.Enabled != nil {
+		setDefaultParamValue(params, "storage_encryption_tpm_enabled", *tpm.Enabled)
+	}
+	setDefaultParam(params, "storage_encryption_tpm_device", tpm.Device)
+	setDefaultParam(params, "storage_encryption_tpm_pcrs", tpm.PCRs)
+	if tpm.RequireSHA256Bank != nil {
+		setDefaultParamValue(params, "storage_encryption_tpm_require_sha256_bank", *tpm.RequireSHA256Bank)
+	}
+	setDefaultParam(params, "storage_encryption_tpm_initramfs", tpm.Initramfs)
 }
 
 func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {
@@ -928,6 +966,26 @@ func mergeStorageEncryptionConfig(base StorageEncryptionConfig, override Storage
 	if override.Hash != "" {
 		base.Hash = override.Hash
 	}
+	base.TPM = mergeStorageEncryptionTPMConfig(base.TPM, override.TPM)
+	return base
+}
+
+func mergeStorageEncryptionTPMConfig(base StorageEncryptionTPMConfig, override StorageEncryptionTPMConfig) StorageEncryptionTPMConfig {
+	if override.Enabled != nil {
+		base.Enabled = copyBoolPtr(override.Enabled)
+	}
+	if override.Device != "" {
+		base.Device = override.Device
+	}
+	if override.PCRs != "" {
+		base.PCRs = override.PCRs
+	}
+	if override.RequireSHA256Bank != nil {
+		base.RequireSHA256Bank = copyBoolPtr(override.RequireSHA256Bank)
+	}
+	if override.Initramfs != "" {
+		base.Initramfs = override.Initramfs
+	}
 	return base
 }
 
@@ -1090,7 +1148,14 @@ func copyStorageEncryptionConfig(encryption StorageEncryptionConfig) StorageEncr
 		copied := *encryption.KeySize
 		encryption.KeySize = &copied
 	}
+	encryption.TPM = copyStorageEncryptionTPMConfig(encryption.TPM)
 	return encryption
+}
+
+func copyStorageEncryptionTPMConfig(tpm StorageEncryptionTPMConfig) StorageEncryptionTPMConfig {
+	tpm.Enabled = copyBoolPtr(tpm.Enabled)
+	tpm.RequireSHA256Bank = copyBoolPtr(tpm.RequireSHA256Bank)
+	return tpm
 }
 
 func copyRAIDConfig(raid RAIDConfig) RAIDConfig {

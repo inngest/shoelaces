@@ -867,6 +867,13 @@ func TestResolverMergesStructuredStorageEncryption(t *testing.T) {
 					Cipher:     "aes-xts-plain64",
 					KeySize:    intPtr(256),
 					Hash:       "sha256",
+					TPM: StorageEncryptionTPMConfig{
+						Enabled:           boolPtr(true),
+						Device:            "auto",
+						PCRs:              "7",
+						RequireSHA256Bank: boolPtr(true),
+						Initramfs:         "dracut",
+					},
 				},
 			},
 		},
@@ -877,6 +884,9 @@ func TestResolverMergesStructuredStorageEncryption(t *testing.T) {
 					Encryption: StorageEncryptionConfig{
 						KeySize: intPtr(512),
 						Hash:    "sha512",
+						TPM: StorageEncryptionTPMConfig{
+							PCRs: "7+11",
+						},
 					},
 				},
 			},
@@ -913,6 +923,13 @@ func TestResolverMergesStructuredStorageEncryption(t *testing.T) {
 	require.NotNil(t, encryption.KeySize)
 	assert.Equal(t, 512, *encryption.KeySize)
 	assert.Equal(t, "sha512", encryption.Hash)
+	require.NotNil(t, encryption.TPM.Enabled)
+	assert.True(t, *encryption.TPM.Enabled)
+	assert.Equal(t, "auto", encryption.TPM.Device)
+	assert.Equal(t, "7+11", encryption.TPM.PCRs)
+	require.NotNil(t, encryption.TPM.RequireSHA256Bank)
+	assert.True(t, *encryption.TPM.RequireSHA256Bank)
+	assert.Equal(t, "dracut", encryption.TPM.Initramfs)
 }
 
 func TestResolverAcceptsStorageEncryptionPassphraseFromMergedDefaults(t *testing.T) {
@@ -984,6 +1001,35 @@ func TestResolverRejectsResolvedStorageEncryptionWithoutPassphrase(t *testing.T)
 	})
 
 	require.EqualError(t, err, "resolved provisioning.storage.encryption.passphrase is required when encryption is enabled")
+}
+
+func TestResolverRejectsTPMUnlockWithoutStorageEncryption(t *testing.T) {
+	resolver, err := NewResolver(&Mappings{
+		Targets: map[string]Target{
+			"debian13": {
+				Script: "debian.ipxe",
+				Storage: StorageConfig{
+					Encryption: StorageEncryptionConfig{
+						TPM: StorageEncryptionTPMConfig{
+							Enabled: boolPtr(true),
+						},
+					},
+				},
+			},
+		},
+		MacMaps: []MacMapConfig{{
+			Mac:           "0c:42:a1:c3:52:96",
+			DefaultTarget: "debian13",
+			Targets:       []string{"debian13"},
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(ResolveRequest{
+		Mac: "0c:42:a1:c3:52:96",
+	})
+
+	require.EqualError(t, err, "resolved provisioning.storage.encryption.tpm.enabled requires storage.encryption.enabled to be true")
 }
 
 func TestResolverDoesNotResolveDisabledStorageEncryptionPassphrase(t *testing.T) {

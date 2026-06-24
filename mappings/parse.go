@@ -423,6 +423,31 @@ func validateStorageEncryptionConfig(path string, encryption StorageEncryptionCo
 	if requirePassphrase && boolValue(encryption.Enabled) && encryption.Passphrase == nil {
 		return fmt.Errorf("%s.passphrase is required when encryption is enabled", path)
 	}
+	if err := validateStorageEncryptionTPMConfig(path+".tpm", encryption, requirePassphrase); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateStorageEncryptionTPMConfig(path string, encryption StorageEncryptionConfig, requireEncryptionEnabled bool) error {
+	tpm := encryption.TPM
+	if boolValue(tpm.Enabled) && requireEncryptionEnabled && !boolValue(encryption.Enabled) {
+		return fmt.Errorf("%s.enabled requires storage.encryption.enabled to be true", path)
+	}
+	if tpm.Device != "" && containsShellUnsafeValue(tpm.Device) {
+		return fmt.Errorf("%s.device contains unsupported shell metacharacters", path)
+	}
+	if tpm.PCRs != "" {
+		if containsShellUnsafeValue(tpm.PCRs) {
+			return fmt.Errorf("%s.pcrs contains unsupported shell metacharacters", path)
+		}
+		if !isPCRSelection(tpm.PCRs) {
+			return fmt.Errorf("%s.pcrs must contain PCR numbers separated by + or comma", path)
+		}
+	}
+	if tpm.Initramfs != "" && tpm.Initramfs != "dracut" {
+		return fmt.Errorf("%s.initramfs has unsupported value %q", path, tpm.Initramfs)
+	}
 	return nil
 }
 
@@ -445,6 +470,20 @@ func validateStorageEncryptionPassphrase(path string, passphrase any) error {
 	default:
 		return fmt.Errorf("%s must be a string or { env: ENV_VAR } reference", path)
 	}
+}
+
+func containsShellUnsafeValue(value string) bool {
+	return strings.ContainsAny(value, " \t\n\r'\"\\;$&|<>`")
+}
+
+func isPCRSelection(value string) bool {
+	for _, r := range value {
+		if (r >= '0' && r <= '9') || r == '+' || r == ',' {
+			continue
+		}
+		return false
+	}
+	return strings.Trim(value, "+,") != ""
 }
 
 func validateFilesystems(path string, filesystems map[string]FilesystemConfig) error {

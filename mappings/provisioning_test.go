@@ -165,6 +165,13 @@ func TestParamsWithProvisioningProjectsStructuredStorageEncryption(t *testing.T)
 				Cipher:     "xchacha12,aes-adiantum-plain64",
 				KeySize:    intPtr(256),
 				Hash:       "sha256",
+				TPM: StorageEncryptionTPMConfig{
+					Enabled:           boolPtr(true),
+					Device:            "auto",
+					PCRs:              "7",
+					RequireSHA256Bank: boolPtr(true),
+					Initramfs:         "dracut",
+				},
 			},
 		},
 	})
@@ -174,6 +181,11 @@ func TestParamsWithProvisioningProjectsStructuredStorageEncryption(t *testing.T)
 	assert.Equal(t, "xchacha12,aes-adiantum-plain64", params["storage_encryption_cipher"])
 	assert.Equal(t, "256", params["storage_encryption_key_size"])
 	assert.Equal(t, "sha256", params["storage_encryption_hash"])
+	assert.Equal(t, "true", params["storage_encryption_tpm_enabled"])
+	assert.Equal(t, "auto", params["storage_encryption_tpm_device"])
+	assert.Equal(t, "7", params["storage_encryption_tpm_pcrs"])
+	assert.Equal(t, "true", params["storage_encryption_tpm_require_sha256_bank"])
+	assert.Equal(t, "dracut", params["storage_encryption_tpm_initramfs"])
 }
 
 func TestParamsWithProvisioningProjectsStructuredRAID(t *testing.T) {
