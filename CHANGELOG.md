@@ -1,8 +1,17 @@
+## [1.9.3] - 2026-06-24
+
+### ⚙️ Miscellaneous Tasks
+
+- *(debian)* Support TPM unlock for regular LUKS (#80)
 ## [1.9.2] - 2026-06-23
 
 ### 🐛 Bug Fixes
 
 - *(debian)* Support plain regular LUKS installs (#78)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.2 (#79)
 ## [1.9.1] - 2026-06-23
 
 ### 🐛 Bug Fixes
