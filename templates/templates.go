@@ -31,6 +31,7 @@ import (
 	"text/template/parse"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/internal/validation"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
@@ -491,7 +492,7 @@ func validateDebianTPMPreseedParams(paramMap map[string]interface{}, encryptionE
 	if device == "" {
 		return errors.New("preseed/debian storage_encryption_tpm_device must not be empty when TPM unlock is enabled")
 	}
-	if containsShellUnsafeValue(device) {
+	if validation.ContainsShellUnsafeValue(device) {
 		return errors.New("preseed/debian storage_encryption_tpm_device contains unsupported shell metacharacters")
 	}
 	paramMap["storage_encryption_tpm_device"] = device
@@ -499,10 +500,10 @@ func validateDebianTPMPreseedParams(paramMap map[string]interface{}, encryptionE
 	if pcrs == "" {
 		return errors.New("preseed/debian storage_encryption_tpm_pcrs must not be empty when TPM unlock is enabled")
 	}
-	if containsShellUnsafeValue(pcrs) {
+	if validation.ContainsShellUnsafeValue(pcrs) {
 		return errors.New("preseed/debian storage_encryption_tpm_pcrs contains unsupported shell metacharacters")
 	}
-	if !isPCRSelection(pcrs) {
+	if !validation.IsTPMPCRSelection(pcrs) {
 		return errors.New("preseed/debian storage_encryption_tpm_pcrs must contain PCR numbers separated by + or comma")
 	}
 	paramMap["storage_encryption_tpm_pcrs"] = pcrs
@@ -546,29 +547,6 @@ func validateDebianRAIDPreseedParams(paramMap map[string]interface{}) error {
 		return errors.New(`preseed/debian storage_raid_boot_degraded must be "true" or "false", got ` + strconv.Quote(bootDegraded))
 	}
 	return nil
-}
-
-func containsShellUnsafeValue(value string) bool {
-	return strings.ContainsAny(value, " \t\n\r'\"\\;$&|<>`")
-}
-
-func isPCRSelection(value string) bool {
-	hasToken := false
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			hasToken = true
-			continue
-		}
-		if r == '+' || r == ',' {
-			if !hasToken {
-				return false
-			}
-			hasToken = false
-			continue
-		}
-		return false
-	}
-	return hasToken
 }
 
 func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {

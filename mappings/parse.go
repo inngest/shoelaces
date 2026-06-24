@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/inngest/shoelaces/internal/validation"
 	"github.com/inngest/shoelaces/log"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -434,14 +435,14 @@ func validateStorageEncryptionTPMConfig(path string, encryption StorageEncryptio
 	if boolValue(tpm.Enabled) && requireEncryptionEnabled && !boolValue(encryption.Enabled) {
 		return fmt.Errorf("%s.enabled requires storage.encryption.enabled to be true", path)
 	}
-	if tpm.Device != "" && containsShellUnsafeValue(tpm.Device) {
+	if tpm.Device != "" && validation.ContainsShellUnsafeValue(tpm.Device) {
 		return fmt.Errorf("%s.device contains unsupported shell metacharacters", path)
 	}
 	if tpm.PCRs != "" {
-		if containsShellUnsafeValue(tpm.PCRs) {
+		if validation.ContainsShellUnsafeValue(tpm.PCRs) {
 			return fmt.Errorf("%s.pcrs contains unsupported shell metacharacters", path)
 		}
-		if !isPCRSelection(tpm.PCRs) {
+		if !validation.IsTPMPCRSelection(tpm.PCRs) {
 			return fmt.Errorf("%s.pcrs must contain PCR numbers separated by + or comma", path)
 		}
 	}
@@ -470,29 +471,6 @@ func validateStorageEncryptionPassphrase(path string, passphrase any) error {
 	default:
 		return fmt.Errorf("%s must be a string or { env: ENV_VAR } reference", path)
 	}
-}
-
-func containsShellUnsafeValue(value string) bool {
-	return strings.ContainsAny(value, " \t\n\r'\"\\;$&|<>`")
-}
-
-func isPCRSelection(value string) bool {
-	hasToken := false
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			hasToken = true
-			continue
-		}
-		if r == '+' || r == ',' {
-			if !hasToken {
-				return false
-			}
-			hasToken = false
-			continue
-		}
-		return false
-	}
-	return hasToken
 }
 
 func validateFilesystems(path string, filesystems map[string]FilesystemConfig) error {
