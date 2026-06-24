@@ -31,6 +31,7 @@ import (
 	"text/template/parse"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/internal/validation"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
 	"github.com/inngest/shoelaces/utils"
@@ -65,7 +66,7 @@ func New(logger log.Logger) *ShoelacesTemplates {
 	logger = logger.With("component", "template")
 	e := make(map[string]shoelacesTemplateEnvironment)
 	e[defaultEnvironment] = shoelacesTemplateEnvironment{
-		templateObj:      template.New(""),
+		templateObj:      template.New("").Funcs(templateFuncMap()),
 		templateVars:     make(map[string][]string),
 		templateRefs:     make(map[string][]string),
 		templateEmbedded: make(map[string]bool),
@@ -104,7 +105,7 @@ func (s *ShoelacesTemplates) addTemplate(path string, environment string) error 
 func (s *ShoelacesTemplates) addTemplateContent(source string, content []byte, environment string, embedded bool) error {
 	s.checkAddEnvironment(environment)
 	sourceName := filepath.Base(source)
-	parsed, err := template.New(sourceName).Parse(string(content))
+	parsed, err := template.New(sourceName).Funcs(templateFuncMap()).Parse(string(content))
 	if err != nil {
 		return err
 	}
@@ -126,6 +127,23 @@ func (s *ShoelacesTemplates) addTemplateContent(source string, content []byte, e
 		templateEnv.templateBodies[parsedTemplate.Name()] = body
 	}
 	return nil
+}
+
+func templateFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"shquote": shellQuote,
+	}
+}
+
+// shellQuote is intentionally small and POSIX-sh compatible. Installer
+// templates use it for values that must become one shell word, including the
+// LUKS passphrase temp-file write used before TPM enrollment.
+func shellQuote(value any) string {
+	text := fmt.Sprint(value)
+	if text == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(text, "'", "'\\''") + "'"
 }
 
 func cloneTemplateIndex(index map[string][]string) map[string][]string {
@@ -426,6 +444,9 @@ func validateDebianEncryptionPreseedParams(paramMap map[string]interface{}) erro
 		return errors.New(`preseed/debian storage_encryption_enabled must be "true" or "false", got ` + strconv.Quote(enabled))
 	}
 	paramMap["storage_encryption_enabled"] = enabled
+	if err := validateDebianTPMPreseedParams(paramMap, enabled); err != nil {
+		return err
+	}
 	if enabled == "false" {
 		return nil
 	}
@@ -446,6 +467,51 @@ func validateDebianEncryptionPreseedParams(paramMap map[string]interface{}) erro
 	if err != nil || keySize <= 0 {
 		return errors.New("preseed/debian storage_encryption_key_size must be a positive integer when storage_encryption_enabled is true")
 	}
+	return nil
+}
+
+func validateDebianTPMPreseedParams(paramMap map[string]interface{}, encryptionEnabled string) error {
+	enabled := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_enabled"]))
+	if enabled != "true" && enabled != "false" {
+		return errors.New(`preseed/debian storage_encryption_tpm_enabled must be "true" or "false", got ` + strconv.Quote(enabled))
+	}
+	paramMap["storage_encryption_tpm_enabled"] = enabled
+	if enabled == "false" {
+		return nil
+	}
+	if encryptionEnabled != "true" {
+		return errors.New("preseed/debian storage_encryption_tpm_enabled requires storage_encryption_enabled to be true")
+	}
+	if strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"])) != "regular" {
+		return errors.New("preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular")
+	}
+	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_initramfs"])) != "dracut" {
+		return errors.New(`preseed/debian storage_encryption_tpm_initramfs must be "dracut" when TPM unlock is enabled`)
+	}
+	device := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_device"]))
+	if device == "" {
+		return errors.New("preseed/debian storage_encryption_tpm_device must not be empty when TPM unlock is enabled")
+	}
+	if validation.ContainsShellUnsafeValue(device) {
+		return errors.New("preseed/debian storage_encryption_tpm_device contains unsupported shell metacharacters")
+	}
+	paramMap["storage_encryption_tpm_device"] = device
+	pcrs := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_pcrs"]))
+	if pcrs == "" {
+		return errors.New("preseed/debian storage_encryption_tpm_pcrs must not be empty when TPM unlock is enabled")
+	}
+	if validation.ContainsShellUnsafeValue(pcrs) {
+		return errors.New("preseed/debian storage_encryption_tpm_pcrs contains unsupported shell metacharacters")
+	}
+	if !validation.IsTPMPCRSelection(pcrs) {
+		return errors.New("preseed/debian storage_encryption_tpm_pcrs must contain PCR numbers separated by + or comma")
+	}
+	paramMap["storage_encryption_tpm_pcrs"] = pcrs
+	requireSHA256Bank := strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_require_sha256_bank"]))
+	if requireSHA256Bank != "true" && requireSHA256Bank != "false" {
+		return errors.New(`preseed/debian storage_encryption_tpm_require_sha256_bank must be "true" or "false", got ` + strconv.Quote(requireSHA256Bank))
+	}
+	paramMap["storage_encryption_tpm_require_sha256_bank"] = requireSHA256Bank
 	return nil
 }
 

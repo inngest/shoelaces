@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/inngest/shoelaces/internal/validation"
 	"github.com/inngest/shoelaces/log"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -422,6 +423,31 @@ func validateStorageEncryptionConfig(path string, encryption StorageEncryptionCo
 	}
 	if requirePassphrase && boolValue(encryption.Enabled) && encryption.Passphrase == nil {
 		return fmt.Errorf("%s.passphrase is required when encryption is enabled", path)
+	}
+	if err := validateStorageEncryptionTPMConfig(path+".tpm", encryption, requirePassphrase); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateStorageEncryptionTPMConfig(path string, encryption StorageEncryptionConfig, requireEncryptionEnabled bool) error {
+	tpm := encryption.TPM
+	if boolValue(tpm.Enabled) && requireEncryptionEnabled && !boolValue(encryption.Enabled) {
+		return fmt.Errorf("%s.enabled requires storage.encryption.enabled to be true", path)
+	}
+	if tpm.Device != "" && validation.ContainsShellUnsafeValue(tpm.Device) {
+		return fmt.Errorf("%s.device contains unsupported shell metacharacters", path)
+	}
+	if tpm.PCRs != "" {
+		if validation.ContainsShellUnsafeValue(tpm.PCRs) {
+			return fmt.Errorf("%s.pcrs contains unsupported shell metacharacters", path)
+		}
+		if !validation.IsTPMPCRSelection(tpm.PCRs) {
+			return fmt.Errorf("%s.pcrs must contain PCR numbers separated by + or comma", path)
+		}
+	}
+	if tpm.Initramfs != "" && tpm.Initramfs != "dracut" {
+		return fmt.Errorf("%s.initramfs has unsupported value %q", path, tpm.Initramfs)
 	}
 	return nil
 }

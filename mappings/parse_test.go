@@ -315,6 +315,12 @@ targets:
         cipher: aes-xts-plain64
         keySize: 512
         hash: sha512
+        tpm:
+          enabled: true
+          device: auto
+          pcrs: "7"
+          requireSha256Bank: true
+          initramfs: dracut
 networkMaps:
   - network: 192.0.2.0/24
     defaultTarget: debian13
@@ -333,6 +339,13 @@ networkMaps:
 	require.NotNil(t, encryption.KeySize)
 	assert.Equal(t, 512, *encryption.KeySize)
 	assert.Equal(t, "sha512", encryption.Hash)
+	require.NotNil(t, encryption.TPM.Enabled)
+	assert.True(t, *encryption.TPM.Enabled)
+	assert.Equal(t, "auto", encryption.TPM.Device)
+	assert.Equal(t, "7", encryption.TPM.PCRs)
+	require.NotNil(t, encryption.TPM.RequireSHA256Bank)
+	assert.True(t, *encryption.TPM.RequireSHA256Bank)
+	assert.Equal(t, "dracut", encryption.TPM.Initramfs)
 }
 
 func TestParseMappingsReturnsErrors(t *testing.T) {
@@ -615,6 +628,86 @@ targets:
         keySize: 0
 `,
 			want: `targets["debian13"].storage.encryption.keySize must be greater than 0`,
+		},
+		{
+			name: "encryption TPM initramfs must be dracut",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          initramfs: initramfs-tools
+`,
+			want: `targets["debian13"].storage.encryption.tpm.initramfs has unsupported value "initramfs-tools"`,
+		},
+		{
+			name: "encryption TPM pcrs must be safe",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          pcrs: "7;reboot"
+`,
+			want: `targets["debian13"].storage.encryption.tpm.pcrs contains unsupported shell metacharacters`,
+		},
+		{
+			name: "encryption TPM pcrs rejects trailing separator",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          pcrs: "7+"
+`,
+			want: `targets["debian13"].storage.encryption.tpm.pcrs must contain PCR numbers separated by + or comma`,
+		},
+		{
+			name: "encryption TPM pcrs rejects empty token",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          pcrs: "7,,11"
+`,
+			want: `targets["debian13"].storage.encryption.tpm.pcrs must contain PCR numbers separated by + or comma`,
+		},
+		{
+			name: "encryption TPM device must be safe",
+			content: `
+targets:
+  debian13:
+    script: debian.ipxe
+    storage:
+      encryption:
+        enabled: true
+        passphrase: lab-passphrase
+        tpm:
+          enabled: true
+          device: "auto;reboot"
+`,
+			want: `targets["debian13"].storage.encryption.tpm.device contains unsupported shell metacharacters`,
 		},
 		{
 			name: "invalid mirror url",
