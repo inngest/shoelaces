@@ -946,7 +946,7 @@ func TestRenderedDebianLUKSTPMHelperUsesTwoPhaseEnrollment(t *testing.T) {
 	assert.Contains(t, rendered, "boot_ref_query='?ref=01JTPMREFTESTREFTEST0000'")
 	assert.Contains(t, rendered, "installer_tpm_pcrs=\"\"")
 	assert.Contains(t, rendered, `wget -O "$tpm_passphrase_file" "$base_url/configs/generated/plain/luks-tpm.passphrase$boot_ref_query"`)
-	assert.Contains(t, rendered, "in-target apt-get -y install cryptsetup-initramfs dracut-core dracut-config-generic tpm2-tools")
+	assert.Contains(t, rendered, "in-target apt-get -y install cryptsetup-initramfs systemd-cryptsetup dracut-core dracut-config-generic tpm2-tools util-linux")
 	assert.Contains(t, rendered, "mount --bind /sys /target/sys")
 	assert.Contains(t, rendered, "chroot /target systemd-cryptenroll --tpm2-device=list")
 	assert.Contains(t, rendered, "[ ! -e /sys/class/tpm/tpm0/pcr-sha256 ]")

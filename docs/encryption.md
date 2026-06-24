@@ -57,7 +57,9 @@ and then appends any `installer.lateCommands`.
 
 The generated installer helper:
 
-- installs `dracut-core`, `dracut-config-generic`, and `tpm2-tools`;
+- installs first-boot TPM reenrollment dependencies: `cryptsetup-initramfs`,
+  `systemd-cryptsetup`, `dracut-core`, `dracut-config-generic`, `tpm2-tools`,
+  and `util-linux`;
 - verifies `systemd-cryptenroll --tpm2-device=list` sees a TPM device;
 - fails install when `requireSha256Bank: true` and
   `/sys/class/tpm/tpm0/pcr-sha256` is missing;
