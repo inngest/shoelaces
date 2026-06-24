@@ -39,6 +39,11 @@ func (s *StaticConfigFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	env := envFromRequest(r)
 	envName := envNameFromRequest(r)
 	fp := cleanRequestPath(r.URL.Path)
+	if isStaticTemplateSourcePath(env, fp) {
+		env.Logger.Debug("Static template source request rejected", "component", "static", "path", fp)
+		http.NotFound(w, r)
+		return
+	}
 	templateName := path.Join("static", fp)
 
 	var resolved resolvedTemplateRequest
@@ -169,6 +174,10 @@ func staticConfigEnvDiskLayers(env *environment.Environment, envName string) []o
 
 func staticConfigBaseDiskLayers(env *environment.Environment) []overlayLayer {
 	return []overlayLayer{{dir: path.Join(env.DataDir, "static")}}
+}
+
+func isStaticTemplateSourcePath(env *environment.Environment, fp string) bool {
+	return env.TemplateExtension != "" && strings.HasSuffix(fp, env.TemplateExtension)
 }
 
 func embeddedStaticConfigLayer() (overlayLayer, error) {
