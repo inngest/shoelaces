@@ -956,9 +956,9 @@ func TestRenderedDebianLUKSTPMHelperUsesTwoPhaseEnrollment(t *testing.T) {
 	assert.Contains(t, rendered, `--tpm2-pcrs="$installer_tpm_pcrs"`)
 	assert.NotContains(t, rendered, `--tpm2-pcrs='7'`)
 	assert.NotContains(t, rendered, "luks-passphrase")
-	assert.Contains(t, rendered, "firstboot_tpm_passphrase_file=/target/var/lib/firstboot/luks-tpm.passphrase")
-	assert.Contains(t, rendered, "cp \"$tpm_passphrase_file\" \"$firstboot_tpm_passphrase_file\"")
-	assert.Contains(t, rendered, "chmod 0600 \"$firstboot_tpm_passphrase_file\"")
+	assert.Contains(t, rendered, "reenroll_tpm_passphrase_file=/target/var/lib/shoelaces/luks-tpm.passphrase")
+	assert.Contains(t, rendered, "cp \"$tpm_passphrase_file\" \"$reenroll_tpm_passphrase_file\"")
+	assert.Contains(t, rendered, "chmod 0600 \"$reenroll_tpm_passphrase_file\"")
 	assert.Contains(t, rendered, "printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\\n'")
 	assert.Contains(t, rendered, "add_dracutmodules+=\" systemd systemd-cryptsetup crypt tpm2-tss \"")
 	assert.Contains(t, rendered, "add_drivers+=\" tpm tpm_tis tpm_tis_core tpm_crb \"")
@@ -968,26 +968,28 @@ func TestRenderedDebianLUKSTPMHelperUsesTwoPhaseEnrollment(t *testing.T) {
 	assert.Contains(t, rendered, `GRUB_DEFAULT=\"`)
 	assert.Contains(t, rendered, "in-target update-grub")
 	assert.Contains(t, rendered, "grep -F \"root=UUID=$root_uuid\" /target/boot/grub/grub.cfg")
-	assert.Contains(t, rendered, "wget -O /target/usr/local/bin/firstboot.sh \"$base_url/configs/generated/static/firstboot.sh$boot_ref_query\"")
-	assert.Contains(t, rendered, "wget -O /target/etc/default/firstboot \"$base_url/configs/generated/plain/firstboot.defaults$boot_ref_query\"")
-	assert.Contains(t, rendered, "wget -O /target/etc/systemd/system/firstboot.service \"$base_url/configs/generated/static/firstboot.service$boot_ref_query\"")
+	assert.Contains(t, rendered, "wget -O /target/usr/local/lib/shoelaces/luks-tpm-reenroll.sh \"$base_url/configs/generated/static/luks-tpm-reenroll.sh$boot_ref_query\"")
+	assert.Contains(t, rendered, "wget -O /target/etc/default/shoelaces-luks-tpm-reenroll \"$base_url/configs/generated/plain/luks-tpm-reenroll.env$boot_ref_query\"")
+	assert.Contains(t, rendered, "wget -O /target/etc/systemd/system/shoelaces-luks-tpm-reenroll.service \"$base_url/configs/generated/static/luks-tpm-reenroll.service$boot_ref_query\"")
+	assert.Contains(t, rendered, "chroot /target /bin/systemctl enable shoelaces-luks-tpm-reenroll.service")
 	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
 }
 
-func TestRenderedGeneratedFirstbootReenrollsLUKSTPM(t *testing.T) {
-	rendered := renderTemplate(t, newRenderer(t), "generated/static/firstboot.sh", defaultRenderParams)
+func TestRenderedGeneratedLUKSTPMReenrollScriptReenrollsLUKSTPM(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/static/luks-tpm-reenroll.sh", defaultRenderParams)
 
-	assert.Contains(t, rendered, "firstboot_phase reenroll-luks-tpm")
-	assert.Contains(t, rendered, ": \"${FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE:=/var/lib/firstboot/luks-tpm.passphrase}\"")
-	assert.Contains(t, rendered, ": \"${FIRSTBOOT_LUKS_TPM_PCRS:=7}\"")
+	assert.Contains(t, rendered, "REENROLL_DONE=/var/lib/shoelaces/luks-tpm-reenroll.done")
+	assert.Contains(t, rendered, "reenroll_phase reenroll-luks-tpm")
+	assert.Contains(t, rendered, ": \"${SHOELACES_LUKS_TPM_PASSPHRASE_FILE:=/var/lib/shoelaces/luks-tpm.passphrase}\"")
+	assert.Contains(t, rendered, ": \"${SHOELACES_LUKS_TPM_PCRS:=7}\"")
 	assert.Contains(t, rendered, "root_source=\"$(findmnt -no SOURCE /)\"")
 	assert.Contains(t, rendered, "systemd-cryptenroll --tpm2-device=list")
 	assert.Contains(t, rendered, "systemd-cryptenroll \"$backing_device\" --wipe-slot=tpm2")
-	assert.Contains(t, rendered, "--unlock-key-file=\"$FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE\"")
-	assert.Contains(t, rendered, "--tpm2-pcrs=\"$FIRSTBOOT_LUKS_TPM_PCRS\"")
-	assert.Contains(t, rendered, "grep -E \"tpm2-hash-pcrs:[[:space:]]*$FIRSTBOOT_LUKS_TPM_PCRS\"")
+	assert.Contains(t, rendered, "--unlock-key-file=\"$SHOELACES_LUKS_TPM_PASSPHRASE_FILE\"")
+	assert.Contains(t, rendered, "--tpm2-pcrs=\"$SHOELACES_LUKS_TPM_PCRS\"")
+	assert.Contains(t, rendered, "grep -E \"tpm2-hash-pcrs:[[:space:]]*$SHOELACES_LUKS_TPM_PCRS\"")
 	assert.Contains(t, rendered, "grep -E 'tpm2-pcr-bank:[[:space:]]*sha256'")
-	assert.Contains(t, rendered, "rm -f \"$FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE\"")
+	assert.Contains(t, rendered, "rm -f \"$SHOELACES_LUKS_TPM_PASSPHRASE_FILE\"")
 }
 
 func TestRenderedGeneratedLUKSTPMPassphraseUsesResolvedSecret(t *testing.T) {

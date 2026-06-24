@@ -1,0 +1,112 @@
+{{define "generated/static/luks-tpm-reenroll.sh" -}}
+#!/bin/sh
+set -eu
+
+exec >> /var/log/shoelaces-luks-tpm-reenroll.log 2>&1
+
+REENROLL_DONE=/var/lib/shoelaces/luks-tpm-reenroll.done
+REENROLL_FAILED=/var/lib/shoelaces/luks-tpm-reenroll.failed
+REENROLL_STATE_DIR=/var/lib/shoelaces/luks-tpm-reenroll
+REENROLL_STATUS="$REENROLL_STATE_DIR/status.json"
+REENROLL_PHASE=init
+
+mkdir -p "$REENROLL_STATE_DIR"
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+write_reenroll_status() {
+  status="$1"
+  rc="$2"
+  timestamp="$(date -Is)"
+  {
+    printf '{\n'
+    printf '  "status": "%s",\n' "$(json_escape "$status")"
+    printf '  "phase": "%s",\n' "$(json_escape "$REENROLL_PHASE")"
+    printf '  "exit_code": %s,\n' "$rc"
+    printf '  "timestamp": "%s"\n' "$(json_escape "$timestamp")"
+    printf '}\n'
+  } > "$REENROLL_STATUS"
+}
+
+reenroll_phase() {
+  REENROLL_PHASE="$1"
+  printf '\n=== shoelaces LUKS TPM phase: %s @ %s ===\n' "$REENROLL_PHASE" "$(date -Is)"
+  write_reenroll_status running 0
+}
+
+mark_reenroll_failed() {
+  rc="$?"
+  if [ "$rc" -ne 0 ]; then
+    write_reenroll_status failed "$rc"
+    {
+      printf 'shoelaces LUKS TPM re-enroll failed at %s\n' "$(date -Is)"
+      printf 'phase=%s\n' "$REENROLL_PHASE"
+      printf 'exit_code=%s\n' "$rc"
+    } > "$REENROLL_FAILED"
+  fi
+  exit "$rc"
+}
+
+trap mark_reenroll_failed EXIT
+
+reenroll_phase start
+
+if [ -f "$REENROLL_DONE" ]; then
+  write_reenroll_status already_complete 0
+  exit 0
+fi
+rm -f "$REENROLL_FAILED"
+
+reenroll_phase load-defaults
+
+[ -f /etc/default/shoelaces-luks-tpm-reenroll ] && . /etc/default/shoelaces-luks-tpm-reenroll
+
+: "${SHOELACES_LUKS_TPM_PASSPHRASE_FILE:=/var/lib/shoelaces/luks-tpm.passphrase}"
+: "${SHOELACES_LUKS_TPM_PCRS:=7}"
+
+reenroll_phase reenroll-luks-tpm
+
+# The installer enrolls a temporary no-PCR TPM token because PXE installer PCRs
+# differ from installed-disk boot PCRs. Re-enroll here from the real disk boot
+# context so the steady-state token is bound to normal boot PCRs.
+if [ -f "$SHOELACES_LUKS_TPM_PASSPHRASE_FILE" ]; then
+  root_source="$(findmnt -no SOURCE /)"
+  case "$root_source" in
+    /dev/mapper/*)
+      crypt_name="${root_source#/dev/mapper/}"
+      backing_device="$(cryptsetup status "$crypt_name" | sed -n 's/^[[:space:]]*device:[[:space:]]*//p')"
+      if [ -z "$backing_device" ]; then
+        echo "cannot resolve LUKS backing device for $crypt_name" >&2
+        exit 1
+      fi
+
+      systemd-cryptenroll --tpm2-device=list
+      systemd-cryptenroll "$backing_device" --wipe-slot=tpm2
+      systemd-cryptenroll "$backing_device" \
+        --unlock-key-file="$SHOELACES_LUKS_TPM_PASSPHRASE_FILE" \
+        --tpm2-device=auto \
+        --tpm2-pcrs="$SHOELACES_LUKS_TPM_PCRS"
+
+      luks_dump_file="$REENROLL_STATE_DIR/luks-tpm-reenroll.luksdump"
+      cryptsetup luksDump "$backing_device" > "$luks_dump_file"
+      cat "$luks_dump_file"
+      grep -q 'systemd-tpm2' "$luks_dump_file"
+      grep -E "tpm2-hash-pcrs:[[:space:]]*$SHOELACES_LUKS_TPM_PCRS" "$luks_dump_file"
+      grep -E 'tpm2-pcr-bank:[[:space:]]*sha256' "$luks_dump_file"
+      rm -f "$SHOELACES_LUKS_TPM_PASSPHRASE_FILE"
+      ;;
+    *)
+      echo "root_source=$root_source is not a LUKS mapper; skipping TPM re-enrollment"
+      ;;
+  esac
+else
+  echo "No Shoelaces LUKS TPM passphrase file found; skipping TPM re-enrollment"
+fi
+
+reenroll_phase complete
+rm -f "$REENROLL_FAILED"
+write_reenroll_status succeeded 0
+touch "$REENROLL_DONE"
+{{end}}

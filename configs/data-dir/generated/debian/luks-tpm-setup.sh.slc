@@ -16,7 +16,7 @@ grub_entry_name={{.storage_encryption_tpm_grub_entry_name | shquote}}
 tpm_passphrase_file=/target/run/shoelaces-luks-tpm.passphrase
 tpm_devices_file=/tmp/shoelaces-luks-tpm-devices
 luks_dump_file=/tmp/shoelaces-luks-tpm-luksdump
-firstboot_tpm_passphrase_file=/target/var/lib/firstboot/luks-tpm.passphrase
+reenroll_tpm_passphrase_file=/target/var/lib/shoelaces/luks-tpm.passphrase
 
 case "$swap_enabled" in
   true|false) ;;
@@ -111,11 +111,12 @@ cryptsetup luksDump "$backing_device" > "$luks_dump_file"
 cat "$luks_dump_file"
 grep -q 'systemd-tpm2' "$luks_dump_file"
 
-# Preserve a root-only copy on the encrypted target root. Firstboot uses it to
-# replace this bootstrap token with a PCR-bound token from the disk boot context.
-mkdir -p /target/var/lib/firstboot
-cp "$tpm_passphrase_file" "$firstboot_tpm_passphrase_file"
-chmod 0600 "$firstboot_tpm_passphrase_file"
+# Preserve a root-only copy on the encrypted target root. The dedicated
+# Shoelaces reenroll service uses it to replace this bootstrap token with a
+# PCR-bound token from the disk boot context.
+mkdir -p /target/var/lib/shoelaces
+cp "$tpm_passphrase_file" "$reenroll_tpm_passphrase_file"
+chmod 0600 "$reenroll_tpm_passphrase_file"
 
 printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\n' \
   "$crypt_name" "$backing_uuid" "$tpm_device" > /target/etc/crypttab
@@ -166,14 +167,15 @@ grep -F "menuentry '$grub_entry_name'" /target/boot/grub/grub.cfg
 grep -F "root=UUID=$root_uuid" /target/boot/grub/grub.cfg
 grep -F "initrd /initrd.img-$kernel_version.$dracut_image_suffix" /target/boot/grub/grub.cfg
 
-echo "Installing firstboot TPM re-enrollment service"
-wget -O /target/usr/local/bin/firstboot.sh "$base_url/configs/generated/static/firstboot.sh$boot_ref_query"
-chmod 0755 /target/usr/local/bin/firstboot.sh
-wget -O /target/etc/default/firstboot "$base_url/configs/generated/plain/firstboot.defaults$boot_ref_query"
+echo "Installing Shoelaces TPM re-enrollment service"
+mkdir -p /target/usr/local/lib/shoelaces
+wget -O /target/usr/local/lib/shoelaces/luks-tpm-reenroll.sh "$base_url/configs/generated/static/luks-tpm-reenroll.sh$boot_ref_query"
+chmod 0755 /target/usr/local/lib/shoelaces/luks-tpm-reenroll.sh
+wget -O /target/etc/default/shoelaces-luks-tpm-reenroll "$base_url/configs/generated/plain/luks-tpm-reenroll.env$boot_ref_query"
 mkdir -p /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants
-wget -O /target/etc/systemd/system/firstboot.service "$base_url/configs/generated/static/firstboot.service$boot_ref_query"
-chroot /target /bin/systemctl enable firstboot.service || \
-  ln -sf /etc/systemd/system/firstboot.service /target/etc/systemd/system/multi-user.target.wants/firstboot.service
+wget -O /target/etc/systemd/system/shoelaces-luks-tpm-reenroll.service "$base_url/configs/generated/static/luks-tpm-reenroll.service$boot_ref_query"
+chroot /target /bin/systemctl enable shoelaces-luks-tpm-reenroll.service || \
+  ln -sf /etc/systemd/system/shoelaces-luks-tpm-reenroll.service /target/etc/systemd/system/multi-user.target.wants/shoelaces-luks-tpm-reenroll.service
 
 if [ "$swap_enabled" = "true" ]; then
   if ! chroot /target /usr/bin/fallocate -l "${swap_size_mib}M" /swapfile; then

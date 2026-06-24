@@ -68,29 +68,32 @@ The generated installer helper:
 - writes `tpm2-device=<device>` into `/etc/crypttab`;
 - builds a host-only dracut initramfs with systemd cryptsetup and TPM2 modules;
 - creates a GRUB entry for the dracut image and makes it the default;
-- installs a generated firstboot service and stores a root-only copy of the
-  passphrase at `/var/lib/firstboot/luks-tpm.passphrase` inside the encrypted
-  target root.
+- installs a dedicated Shoelaces TPM re-enrollment service and stores a
+  root-only copy of the passphrase at
+  `/var/lib/shoelaces/luks-tpm.passphrase` inside the encrypted target root.
 
 The temporary installer enrollment intentionally has no PCR binding. PCR 7
 during PXE installer boot can differ from PCR 7 during installed disk boot, so
-the final PCR-bound token is created by firstboot. On the first installed boot,
-the generated firstboot script runs a local `reenroll-luks-tpm` phase before
-any network recovery work. If
-`/var/lib/firstboot/luks-tpm.passphrase` exists, firstboot:
+the final PCR-bound token is created by
+`shoelaces-luks-tpm-reenroll.service`. On the first installed boot, the
+generated service runs a local `reenroll-luks-tpm` phase before network startup
+and before a downstream `firstboot.service` if one is present. It uses
+Shoelaces-specific paths so site-provided firstboot units, defaults, and
+scripts can coexist. If `/var/lib/shoelaces/luks-tpm.passphrase` exists, the
+reenrollment service:
 
 - resolves the current root mapper and backing LUKS device;
 - wipes the temporary `systemd-tpm2` token;
-- enrolls a new TPM token with `--tpm2-pcrs="$FIRSTBOOT_LUKS_TPM_PCRS"`;
+- enrolls a new TPM token with `--tpm2-pcrs="$SHOELACES_LUKS_TPM_PCRS"`;
 - verifies `systemd-tpm2`, `tpm2-hash-pcrs`, and SHA256 PCR bank metadata in
   `cryptsetup luksDump`;
-- deletes `/var/lib/firstboot/luks-tpm.passphrase`.
+- deletes `/var/lib/shoelaces/luks-tpm.passphrase`.
 
 Defaults:
 
 ```text
-FIRSTBOOT_LUKS_TPM_PASSPHRASE_FILE=/var/lib/firstboot/luks-tpm.passphrase
-FIRSTBOOT_LUKS_TPM_PCRS=7
+SHOELACES_LUKS_TPM_PASSPHRASE_FILE=/var/lib/shoelaces/luks-tpm.passphrase
+SHOELACES_LUKS_TPM_PCRS=7
 ```
 
 Debian initramfs-tools does not honor `tpm2-device=auto` for this flow, so
@@ -105,8 +108,9 @@ real installs. Shoelaces redacts `storage.encryption.passphrase` in logs and
 events. The TPM installer helper writes the passphrase to a `0600` temporary
 file under `/target/run`, removes that transient file on exit, and does not pass
 the passphrase as a command-line argument. For the two-phase TPM flow it also
-leaves `/target/var/lib/firstboot/luks-tpm.passphrase` at mode `0600`; firstboot
-removes that file after successful PCR-bound reenrollment.
+leaves `/target/var/lib/shoelaces/luks-tpm.passphrase` at mode `0600`; the
+Shoelaces reenrollment service removes that file after successful PCR-bound
+reenrollment.
 
 Treat any machine that can fetch installer configs during provisioning as able
 to access the install secret for that boot session.

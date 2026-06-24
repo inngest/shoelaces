@@ -1,0 +1,16 @@
+{{define "generated/static/luks-tpm-reenroll.service" -}}
+[Unit]
+Description=Re-enroll Shoelaces LUKS TPM token after first installed boot
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target network.target network-online.target firstboot.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/shoelaces-luks-tpm-reenroll
+ExecStart=/usr/local/lib/shoelaces/luks-tpm-reenroll.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+{{end}}
