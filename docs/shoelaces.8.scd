@@ -153,8 +153,8 @@ provisioning files.
 "mappings.yaml" remains external site policy. It is not embedded and must be
 provided through *--data-dir*. See "docs/provisioning-overrides.md" in the
 source tree for full-template overrides, structured provisioning fields, and
-*installer.extraTemplate* snippets for native installer behavior such as Debian
-late_command, kickstart %post, or cloud-init runcmd.
+Debian *installer.lateCommands* plus *installer.extraTemplate* snippets for
+native installer behavior such as kickstart %post or cloud-init runcmd.
 See "docs/persistence.md" for database location, retention behavior,
 backup/recovery expectations, boot reference resolution, and the sqlc/Goose
 workflow.

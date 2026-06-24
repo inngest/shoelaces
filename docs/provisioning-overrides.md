@@ -131,10 +131,32 @@ override contract.
 
 ## Native Installer Extra Templates
 
+For Debian shell commands that should run from `preseed/late_command`, prefer
+`installer.lateCommands`. Shoelaces owns the single generated
+`d-i preseed/late_command` line for embedded Debian storage flows and appends
+these commands after any storage setup it needs for LUKS, TPM unlock, RAID, or
+initramfs handling.
+
+```yaml
+targets:
+  debian13:
+    script: debian.ipxe
+    installer:
+      lateCommands:
+        - wget -O /target/usr/local/sbin/late-command.sh http://shoelaces.example.test:8081/configs/static/late-command.sh
+        - chmod 0755 /target/usr/local/sbin/late-command.sh
+        - in-target /usr/local/sbin/late-command.sh
+```
+
+Each item must be one shell command line. Shoelaces appends semicolons and
+preseed line continuations when rendering the Debian installer config.
+
 For site-specific native installer snippets, set `installer.extraTemplate` on
 the selected target or mapping. Shoelaces renders that template verbatim near
 the end of the installer config. The embedded default `provisioning/extra` is a
-no-op.
+no-op. Avoid emitting Debian `d-i preseed/late_command` from
+`installer.extraTemplate` when using the embedded Debian preseed; a second
+preseed answer can replace the generated storage late command.
 
 ```yaml
 targets:
@@ -155,8 +177,7 @@ data-dir/
 
 ```gotemplate
 {{define "provisioning/debian-extra" -}}
-d-i preseed/late_command string \
-  in-target /bin/sh -c 'echo site late_command override'
+d-i pkgsel/include string site-specific-package
 {{end}}
 ```
 
@@ -528,7 +549,7 @@ macMaps:
 ## Late Command Scripts
 
 For larger site behavior, keep shell scripts out of the preseed body and serve
-them through Shoelaces from an `installer.extraTemplate` snippet.
+them through Shoelaces from `installer.lateCommands`.
 
 For a raw script, place it under disk-backed `data-dir/static`:
 
@@ -540,13 +561,14 @@ data-dir/
 
 Then reference it through `/configs/static/*`:
 
-```gotemplate
-{{define "provisioning/debian-extra" -}}
-d-i preseed/late_command string \
-  wget -O /target/usr/local/sbin/late-command.sh http://{{ .baseURL }}/configs/static/late-command.sh; \
-  chmod 0755 /target/usr/local/sbin/late-command.sh; \
-  in-target /usr/local/sbin/late-command.sh
-{{end}}
+```yaml
+targets:
+  debian13:
+    installer:
+      lateCommands:
+        - wget -O /target/usr/local/sbin/late-command.sh http://shoelaces.example.test:8081/configs/static/late-command.sh
+        - chmod 0755 /target/usr/local/sbin/late-command.sh
+        - in-target /usr/local/sbin/late-command.sh
 ```
 
 For a script that needs Shoelaces template parameters, place a dynamic template
@@ -569,13 +591,14 @@ hostnamectl set-hostname {{ .hostname }}
 
 Then fetch it through `/configs/<template>` and pass required query parameters:
 
-```gotemplate
-{{define "provisioning/debian-extra" -}}
-d-i preseed/late_command string \
-  wget -O /target/usr/local/sbin/late-command.sh "http://{{ .baseURL }}/configs/scripts/late-command.sh?hostname={{ .hostname | urlquery }}"; \
-  chmod 0755 /target/usr/local/sbin/late-command.sh; \
-  in-target /usr/local/sbin/late-command.sh
-{{end}}
+```yaml
+targets:
+  debian13:
+    installer:
+      lateCommands:
+        - wget -O /target/usr/local/sbin/late-command.sh "http://shoelaces.example.test:8081/configs/scripts/late-command.sh?hostname=iad-1"
+        - chmod 0755 /target/usr/local/sbin/late-command.sh
+        - in-target /usr/local/sbin/late-command.sh
 ```
 
 ## Removed Partial Hooks
