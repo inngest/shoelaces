@@ -525,6 +525,9 @@ func formatLateCommands(commands []string) string {
 		if trimmed == "" {
 			continue
 		}
+		if b.Len() == 0 {
+			b.WriteString("  set -e; \\\n")
+		}
 		b.WriteString("    ")
 		b.WriteString(trimmed)
 		b.WriteString("; \\\n")

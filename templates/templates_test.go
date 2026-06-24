@@ -498,6 +498,62 @@ d-i preseed/late_command string echo extra {{.hostname}} {{.storage_disk}}
 	assert.NotContains(t, rendered, "<no value>")
 }
 
+func TestRenderTemplateInstallerLateCommandsFailFast(t *testing.T) {
+	tests := []struct {
+		name    string
+		storage mappings.StorageConfig
+	}{
+		{
+			name: "regular",
+		},
+		{
+			name: "lvm",
+			storage: mappings.StorageConfig{
+				Mode: "lvm",
+			},
+		},
+		{
+			name: "raid",
+			storage: mappings.StorageConfig{
+				Mode: "raid",
+				RAID: mappings.RAIDConfig{
+					Level:   1,
+					Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+				},
+			},
+		},
+	}
+	want := "  set -e; \\\n" +
+		"    wget -O /target/root/site.sh http://127.0.0.1:8081/configs/static/site.sh; \\\n" +
+		"    chmod 0755 /target/root/site.sh; \\\n" +
+		"    in-target /root/site.sh; \\"
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
+			params := mappings.ParamsWithProvisioning(map[string]interface{}{
+				"baseURL":  "127.0.0.1:8081",
+				"hostname": "late-command-host",
+			}, nil, mappings.ProvisioningConfig{
+				Storage: tt.storage,
+				Installer: mappings.InstallerConfig{
+					LateCommands: []string{
+						"wget -O /target/root/site.sh http://127.0.0.1:8081/configs/static/site.sh",
+						"chmod 0755 /target/root/site.sh",
+						"in-target /root/site.sh",
+					},
+				},
+			})
+
+			rendered, err := renderer.RenderTemplate("preseed/debian", params, "")
+
+			require.NoError(t, err)
+			assert.Contains(t, rendered, "d-i preseed/late_command string \\")
+			assert.Contains(t, rendered, want)
+		})
+	}
+}
+
 func TestRenderTemplateAppliesBooleanInstallerEncryptionParam(t *testing.T) {
 	renderer := newEmbeddedFallbackRenderer(t, t.TempDir())
 	params := mappings.ParamsWithProvisioning(map[string]interface{}{
