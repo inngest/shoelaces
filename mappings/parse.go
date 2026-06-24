@@ -396,6 +396,9 @@ func validateProvisioningConfig(path string, config ProvisioningConfig) error {
 	if err := validateStringList(path+".boot.installed.kernelArgs", config.Boot.Installed.KernelArgs); err != nil {
 		return err
 	}
+	if err := validateInstallerLateCommands(path+".installer.lateCommands", config.Installer.LateCommands); err != nil {
+		return err
+	}
 	if config.Repos.OSMirror != "" {
 		parsed, err := url.Parse(config.Repos.OSMirror)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -549,6 +552,21 @@ func validateStringList(path string, values []string) error {
 	for i, value := range values {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("%s[%d] must not be empty", path, i)
+		}
+	}
+	return nil
+}
+
+func validateInstallerLateCommands(path string, commands []string) error {
+	if err := validateStringList(path, commands); err != nil {
+		return err
+	}
+	for i, command := range commands {
+		// Debian preseeds get one late_command value. Keep each configured item on
+		// a single shell line so a YAML block scalar cannot silently inject extra
+		// preseed syntax or break the generated continuation chain.
+		if strings.ContainsAny(command, "\r\n") {
+			return fmt.Errorf("%s[%d] must be a single shell command line", path, i)
 		}
 	}
 	return nil

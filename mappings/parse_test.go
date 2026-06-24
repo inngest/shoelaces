@@ -78,6 +78,8 @@ defaults:
   installer:
     configTemplate: preseed/debian
     extraTemplate: provisioning/extra
+    lateCommands:
+      - in-target systemctl enable ssh
     configParams:
       encrypt_home: false
   users:
@@ -185,6 +187,7 @@ ipMaps:
 	assert.True(t, *parsed.Defaults.Repos.Firmware)
 	assert.Equal(t, "preseed/debian", parsed.Defaults.Installer.ConfigTemplate)
 	assert.Equal(t, "provisioning/extra", parsed.Defaults.Installer.ExtraTemplate)
+	assert.Equal(t, []string{"in-target systemctl enable ssh"}, parsed.Defaults.Installer.LateCommands)
 	assert.Equal(t, false, parsed.Defaults.Installer.ConfigParams["encrypt_home"])
 	require.NotNil(t, parsed.Defaults.Users["root"].Locked)
 	assert.True(t, *parsed.Defaults.Users["root"].Locked)
@@ -457,6 +460,20 @@ networkMaps:
       - debian12
 `,
 			want: `targets["debian12"].packages.install[0] must not be empty`,
+		},
+		{
+			name: "invalid installer late command multiline",
+			content: `
+targets:
+  debian12:
+    script: debian.ipxe
+    installer:
+      lateCommands:
+        - |
+          in-target true
+          in-target false
+`,
+			want: `targets["debian12"].installer.lateCommands[0] must be a single shell command line`,
 		},
 		{
 			name: "invalid wipe disk pattern outside dev",

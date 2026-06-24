@@ -332,8 +332,30 @@ func TestRenderedDebianPreseedsDoNotContainEmptyContinuationTargets(t *testing.T
 	}{
 		{name: "default", params: defaultRenderParams},
 		{name: "regular encrypted", params: encryptedDebianParams(mappings.StorageConfig{})},
+		{name: "regular with late commands", params: installerLateCommandsParams(mappings.StorageConfig{})},
+		{name: "regular encrypted with late commands", params: installerLateCommandsParams(mappings.StorageConfig{
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    boolPtr(true),
+				Passphrase: "luks-passphrase",
+			},
+		})},
 		{name: "lvm encrypted", params: encryptedDebianParams(mappings.StorageConfig{Mode: "lvm", VolumeGroup: "vgluks"})},
+		{name: "lvm encrypted with late commands", params: installerLateCommandsParams(mappings.StorageConfig{
+			Mode:        "lvm",
+			VolumeGroup: "vgluks",
+			Encryption: mappings.StorageEncryptionConfig{
+				Enabled:    boolPtr(true),
+				Passphrase: "luks-passphrase",
+			},
+		})},
 		{name: "raid encrypted", params: encryptedDebianParams(mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+		})},
+		{name: "raid with late commands", params: installerLateCommandsParams(mappings.StorageConfig{
 			Mode: "raid",
 			RAID: mappings.RAIDConfig{
 				Level:   1,
@@ -937,6 +959,39 @@ func TestRenderedDebianPreseedEncryptedRegularTPMUnlockHonorsDisabledSHA256BankR
 	assert.Contains(t, rendered, "systemd-cryptenroll")
 	assert.NotContains(t, rendered, "/sys/class/tpm/tpm0/pcr-sha256")
 	assert.NotContains(t, rendered, "tpm2-pcr-bank:    sha256")
+}
+
+func TestRenderedDebianPreseedAppendsInstallerLateCommandsToRegularLUKS(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", installerLateCommandsParams(mappings.StorageConfig{
+		Encryption: mappings.StorageEncryptionConfig{
+			Enabled:    boolPtr(true),
+			Passphrase: "luks-passphrase",
+		},
+	}))
+
+	assert.Equal(t, 1, strings.Count(rendered, "d-i preseed/late_command string"))
+	assertInOrder(t, rendered,
+		"printf '%s UUID=%s none luks,discard,x-initrd.attach\\n' \"$crypt_name\" \"$backing_uuid\" > /target/etc/crypttab",
+		"chroot /target /sbin/mkswap /swapfile",
+		"    in-target systemctl enable ssh; \\",
+		"    in-target touch /root/from-late-command; \\",
+		"    true; \\\n  fi",
+	)
+	assert.NotContains(t, rendered, "\nd-i preseed/late_command string \\\n    in-target systemctl enable ssh")
+}
+
+func TestRenderedDebianPreseedRendersInstallerLateCommandsWithoutStorageLateCommand(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", installerLateCommandsParams(mappings.StorageConfig{}))
+
+	assert.Equal(t, 1, strings.Count(rendered, "d-i preseed/late_command string"))
+	assertInOrder(t, rendered,
+		"# Site late commands. Storage modes with Shoelaces-managed late_command blocks",
+		"d-i preseed/late_command string \\",
+		"    in-target systemctl enable ssh; \\",
+		"    in-target touch /root/from-late-command; \\\n  true",
+	)
+	assert.NotContains(t, rendered, "cryptsetup status \"$crypt_name\"")
+	assert.NotContains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
 }
 
 func TestRenderedDebianPreseedEncryptedRegularInstallsHelperWhenWipeDisabled(t *testing.T) {
@@ -1631,6 +1686,19 @@ func encryptedDebianTPMParams() map[string]interface{} {
 				Initramfs:         "dracut",
 			},
 		},
+	})
+}
+
+func installerLateCommandsParams(storage mappings.StorageConfig) map[string]interface{} {
+	return mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
+		Installer: mappings.InstallerConfig{
+			LateCommands: []string{
+				"in-target systemctl enable ssh",
+				"in-target touch /root/from-late-command",
+			},
+		},
+		Storage: storage,
+		Boot:    mappings.BootConfig{Firmware: "uefi"},
 	})
 }
 
