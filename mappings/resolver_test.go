@@ -613,6 +613,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 				ConfigParams: map[string]any{
 					"encrypt_home": false,
 				},
+				LateCommands:  []string{"in-target touch /root/default-late-command"},
 				ExtraTemplate: "provisioning/extra",
 			},
 			Params: map[string]any{"release": "legacy-param"},
@@ -635,6 +636,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 					ConfigParams: map[string]any{
 						"locale": "en_US",
 					},
+					LateCommands: []string{"in-target touch /root/target-late-command"},
 				},
 				Params: map[string]any{"release": "target-param"},
 			},
@@ -657,6 +659,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 				ConfigParams: map[string]any{
 					"secret": map[string]any{"env": "INSTALL_SECRET"},
 				},
+				LateCommands: []string{"in-target touch /root/map-late-command"},
 			},
 			Params: map[string]any{"role": "database"},
 		}},
@@ -704,6 +707,7 @@ func TestResolverMergesStructuredProvisioningConfig(t *testing.T) {
 	assert.True(t, *result.Provisioning.Repos.NonFree)
 	assert.Equal(t, "preseed/debian", result.Provisioning.Installer.ConfigTemplate)
 	assert.Equal(t, "provisioning/extra", result.Provisioning.Installer.ExtraTemplate)
+	assert.Equal(t, []string{"in-target touch /root/map-late-command"}, result.Provisioning.Installer.LateCommands)
 	assert.Equal(t, map[string]any{
 		"encrypt_home": false,
 		"locale":       "en_US",

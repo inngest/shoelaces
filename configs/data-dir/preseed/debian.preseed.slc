@@ -42,9 +42,22 @@ d-i partman-auto/disk string {{.storage_disk}}
 {{template "preseed/debian/storage/regular" .}}
 {{end -}}
 {{end -}}
+{{template "preseed/debian/storage/user_late_command" .}}
 {{template "preseed/debian/storage/commit" .}}
 {{template "preseed/debian/storage/grub" .}}
 {{end}}
+
+{{define "preseed/debian/storage/user_late_command" -}}
+{{if and (ne .installer_late_commands "") (not (or (eq .storage_mode "raid") (and (ne .storage_mode "lvm") (eq .storage_encryption_enabled "true")))) -}}
+# Site late commands. Storage modes with Shoelaces-managed late_command blocks
+# append these commands directly inside those blocks instead.
+d-i preseed/late_command string \
+{{template "preseed/debian/installer/late_commands" .}}  true
+{{end -}}
+{{end}}
+
+{{define "preseed/debian/installer/late_commands" -}}
+{{.installer_late_commands}}{{end}}
 
 {{define "preseed/debian/storage/encryption" -}}
 {{if eq .storage_encryption_enabled "true" -}}
@@ -250,6 +263,7 @@ d-i preseed/late_command string \
     chroot /target /sbin/mkswap /swapfile; \
     printf '/swapfile none swap sw 0 0\n' >> /target/etc/fstab; \
 {{end -}}
+{{if ne .installer_late_commands ""}}{{template "preseed/debian/installer/late_commands" .}}{{end}}    true; \
   fi
 {{end}}
 
@@ -448,7 +462,8 @@ d-i preseed/late_command string \
       mkdir -p "$efi/EFI/BOOT"; \
       cp -f "$efi/EFI/debian/grubx64.efi" "$efi/EFI/BOOT/BOOTX64.EFI" || true; \
       [ "$efi" = /target/boot/efi ] || umount "$efi" || true; \
-    done'
+    done'; \
+{{if ne .installer_late_commands ""}}{{template "preseed/debian/installer/late_commands" .}}{{end}}  true
 {{end}}
 
 {{define "preseed/debian/storage/raid/encrypted" -}}
@@ -535,7 +550,8 @@ d-i preseed/late_command string \
       mkdir -p "$efi/EFI/BOOT"; \
       cp -f "$efi/EFI/debian/grubx64.efi" "$efi/EFI/BOOT/BOOTX64.EFI" || true; \
       [ "$efi" = /target/boot/efi ] || umount "$efi" || true; \
-    done'
+    done'; \
+{{if ne .installer_late_commands ""}}{{template "preseed/debian/installer/late_commands" .}}{{end}}  true
 {{end}}
 
 {{define "preseed/debian/storage/commit" -}}

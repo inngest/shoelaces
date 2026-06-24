@@ -36,7 +36,7 @@ type ProvisioningConfig struct {
 	Boot BootConfig `koanf:"boot"`
 	// Repos configures OS mirror/release and repository components.
 	Repos ReposConfig `koanf:"repos"`
-	// Installer configures the installer config template and native extra snippet.
+	// Installer configures the installer config template and native extra behavior.
 	Installer InstallerConfig `koanf:"installer"`
 }
 
@@ -204,6 +204,8 @@ type InstallerConfig struct {
 	ConfigTemplate string `koanf:"configTemplate"`
 	// ConfigParams contains low-level query/config params for that template.
 	ConfigParams map[string]any `koanf:"configParams"`
+	// LateCommands contains shell commands appended to the installer late hook.
+	LateCommands []string `koanf:"lateCommands"`
 	// ExtraTemplate selects a native installer snippet template escape hatch.
 	ExtraTemplate string `koanf:"extraTemplate"`
 }
@@ -266,6 +268,7 @@ func projectProvisioningParams(params map[string]interface{}, users map[string]R
 	setDefaultParam(params, "ubuntu_minimal_installer_config_template", provisioning.Installer.ConfigTemplate)
 	setDefaultParam(params, "centos_installer_config_template", provisioning.Installer.ConfigTemplate)
 	setDefaultParam(params, "coreos_installer_config_template", provisioning.Installer.ConfigTemplate)
+	projectInstallerLateCommandsParams(params, provisioning.Installer.LateCommands)
 	if provisioning.Time.UTC != nil {
 		setDefaultParamValue(params, "time_utc", *provisioning.Time.UTC)
 		if *provisioning.Time.UTC {
@@ -461,6 +464,7 @@ func setProvisioningDefaults(params map[string]interface{}) {
 	setDefaultParamValue(params, "boot_ref_query", "")
 	setDefaultParamValue(params, "boot_ref_query_suffix", "")
 	setDefaultParamValue(params, "boot_ref_query_question", "")
+	setDefaultParamValue(params, "installer_late_commands", "")
 	setDefaultParamValue(params, "installerExtra", "")
 }
 
@@ -504,6 +508,31 @@ func projectStorageEncryptionTPMParams(params map[string]interface{}, tpm Storag
 		setDefaultParamValue(params, "storage_encryption_tpm_require_sha256_bank", *tpm.RequireSHA256Bank)
 	}
 	setDefaultParam(params, "storage_encryption_tpm_initramfs", tpm.Initramfs)
+}
+
+func projectInstallerLateCommandsParams(params map[string]interface{}, commands []string) {
+	rendered := formatLateCommands(commands)
+	if rendered == "" {
+		return
+	}
+	setDefaultParam(params, "installer_late_commands", rendered)
+}
+
+func formatLateCommands(commands []string) string {
+	var b strings.Builder
+	for _, command := range commands {
+		trimmed := strings.TrimSpace(command)
+		if trimmed == "" {
+			continue
+		}
+		if b.Len() == 0 {
+			b.WriteString("  set -e; \\\n")
+		}
+		b.WriteString("    ")
+		b.WriteString(trimmed)
+		b.WriteString("; \\\n")
+	}
+	return b.String()
 }
 
 func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {
@@ -1110,6 +1139,9 @@ func mergeInstallerConfig(base InstallerConfig, override InstallerConfig) Instal
 		}
 		mergeParamMap(base.ConfigParams, override.ConfigParams)
 	}
+	if override.LateCommands != nil {
+		base.LateCommands = append([]string(nil), override.LateCommands...)
+	}
 	if override.ExtraTemplate != "" {
 		base.ExtraTemplate = override.ExtraTemplate
 	}
@@ -1138,6 +1170,7 @@ func copyProvisioningConfig(config ProvisioningConfig) ProvisioningConfig {
 	config.Repos.Contrib = copyBoolPtr(config.Repos.Contrib)
 	config.Repos.NonFree = copyBoolPtr(config.Repos.NonFree)
 	config.Installer.ConfigParams = copyParamMap(config.Installer.ConfigParams)
+	config.Installer.LateCommands = append([]string(nil), config.Installer.LateCommands...)
 	return config
 }
 

@@ -58,6 +58,10 @@ func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing
 				"encrypt_home": true,
 				"token":        "abc",
 			},
+			LateCommands: []string{
+				"in-target systemctl enable ssh",
+				"in-target touch /root/from-late-command",
+			},
 		},
 	})
 
@@ -78,11 +82,19 @@ func TestParamsWithProvisioningProjectsStructuredValuesBeforeDefaults(t *testing
 	assert.Equal(t, "preseed/custom", params["debian_installer_config_template"])
 	assert.Equal(t, true, params["encrypt_home"])
 	assert.Equal(t, "abc", params["token"])
+	assert.Contains(t, params["installer_late_commands"], "    in-target systemctl enable ssh; \\")
+	assert.Contains(t, params["installer_late_commands"], "    in-target touch /root/from-late-command; \\")
 	assert.Equal(t, "", params["boot_ref_query"])
 	assert.Equal(t, "", params["boot_ref_query_suffix"])
 	assert.Equal(t, "", params["boot_ref_query_question"])
 	assert.Equal(t, "auto", params["iface"])
 	assert.Equal(t, "", params["installerExtra"])
+}
+
+func TestParamsWithProvisioningDefaultsInstallerLateCommands(t *testing.T) {
+	params := ParamsWithProvisioning(nil, nil, ProvisioningConfig{})
+
+	assert.Equal(t, "", params["installer_late_commands"])
 }
 
 func TestParamsWithProvisioningProjectsStructuredWipeDiskPatterns(t *testing.T) {
@@ -265,6 +277,9 @@ func TestParamsWithProvisioningProjectsStructuredRAIDFilesystems(t *testing.T) {
 func TestCopyProvisioningConfigCopiesRAID(t *testing.T) {
 	bootDegraded := true
 	original := ProvisioningConfig{
+		Installer: InstallerConfig{
+			LateCommands: []string{"in-target touch /root/original"},
+		},
 		Storage: StorageConfig{
 			RAID: RAIDConfig{
 				Level:        1,
@@ -275,9 +290,11 @@ func TestCopyProvisioningConfigCopiesRAID(t *testing.T) {
 	}
 
 	copied := copyProvisioningConfig(original)
+	copied.Installer.LateCommands[0] = "in-target touch /root/mutated"
 	copied.Storage.RAID.Devices[0] = "/dev/mutated"
 	*copied.Storage.RAID.BootDegraded = false
 
+	assert.Equal(t, []string{"in-target touch /root/original"}, original.Installer.LateCommands)
 	assert.Equal(t, []string{"/dev/nvme0n1", "/dev/nvme1n1"}, original.Storage.RAID.Devices)
 	require.NotNil(t, original.Storage.RAID.BootDegraded)
 	assert.True(t, *original.Storage.RAID.BootDegraded)
