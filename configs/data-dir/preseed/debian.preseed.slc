@@ -175,16 +175,73 @@ d-i partman-auto/expert_recipe string \
 
 d-i partman-auto/choose_recipe select uefi-regular-luks
 
+# The plain regular-LUKS path creates / directly on a dm-crypt mapper. Debian's
+# initramfs-tools can unlock that with a passphrase, but ignores
+# tpm2-device=auto; TPM unlock therefore uses a host-only dracut image and a
+# dedicated GRUB entry while keeping the passphrase-capable initramfs as a
+# fallback.
 d-i preseed/late_command string \
-  set -eux; \
+  set -eu; \
   root_source="$(awk '$2 == "/target" { print $1; exit }' /proc/mounts)"; \
   if echo "$root_source" | grep -q '^/dev/mapper/'; then \
     crypt_name="${root_source##*/}"; \
     backing_device="$(cryptsetup status "$crypt_name" | sed -n 's/^[[:space:]]*device:[[:space:]]*//p')"; \
     backing_uuid="$(cryptsetup luksUUID "$backing_device")"; \
+{{if eq .storage_encryption_tpm_enabled "true" -}}
+    in-target apt-get -y install cryptsetup-initramfs dracut-core dracut-config-generic tpm2-tools; \
+    in-target update-initramfs -u -k all || true; \
+    if ! in-target systemd-cryptenroll --tpm2-device=list | grep -q '/dev/tpm'; then \
+      echo "TPM2 support is unavailable; install tpm2-tools/TSS libraries and expose a TPM2 device" >&2; \
+      exit 1; \
+    fi; \
+{{if eq .storage_encryption_tpm_require_sha256_bank "true" -}}
+    if [ ! -e /sys/class/tpm/tpm0/pcr-sha256 ]; then \
+      echo "TPM2 SHA256 PCR bank is required for LUKS enrollment" >&2; \
+      exit 1; \
+    fi; \
+{{end -}}
+    tpm_passphrase_file=/target/run/shoelaces-luks-tpm.passphrase; \
+    trap 'rm -f "$tpm_passphrase_file"' EXIT HUP INT TERM; \
+    mkdir -p /target/run; \
+    umask 077; \
+    printf %s {{.storage_encryption_passphrase | shquote}} > "$tpm_passphrase_file"; \
+    chmod 0600 "$tpm_passphrase_file"; \
+    if cryptsetup luksDump "$backing_device" | grep -q 'systemd-tpm2'; then \
+      in-target systemd-cryptenroll "$backing_device" --wipe-slot=tpm2; \
+    fi; \
+    in-target systemd-cryptenroll "$backing_device" --unlock-key-file=/run/shoelaces-luks-tpm.passphrase --tpm2-device={{.storage_encryption_tpm_device | shquote}} --tpm2-pcrs={{.storage_encryption_tpm_pcrs | shquote}}; \
+    rm -f "$tpm_passphrase_file"; \
+    trap - EXIT HUP INT TERM; \
+    cryptsetup luksDump "$backing_device" | grep -q 'systemd-tpm2'; \
+    cryptsetup luksDump "$backing_device" | grep -F 'tpm2-hash-pcrs:   {{.storage_encryption_tpm_pcrs}}'; \
+{{if eq .storage_encryption_tpm_require_sha256_bank "true" -}}
+    cryptsetup luksDump "$backing_device" | grep -F 'tpm2-pcr-bank:    sha256'; \
+{{end -}}
+    printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\n' "$crypt_name" "$backing_uuid" {{.storage_encryption_tpm_device | shquote}} > /target/etc/crypttab; \
+    mkdir -p /target/etc/dracut.conf.d; \
+    printf '%s\n' '# Managed by Shoelaces.' 'hostonly="yes"' 'add_dracutmodules+=" systemd systemd-cryptsetup crypt tpm2-tss "' 'add_drivers+=" tpm tpm_tis tpm_tis_core tpm_crb "' 'install_items+=" /etc/crypttab "' > /target{{.storage_encryption_tpm_dracut_config_path}}; \
+    kernel_version="$(chroot /target sh -c 'ls /lib/modules | sort -V | tail -n1')"; \
+    if [ -z "$kernel_version" ]; then \
+      echo "cannot determine installed kernel version for dracut TPM initramfs" >&2; \
+      exit 1; \
+    fi; \
+    chroot /target dracut --force --hostonly --kver "$kernel_version" "/boot/initrd.img-$kernel_version.{{.storage_encryption_tpm_dracut_image_suffix}}"; \
+    boot_source="$(awk '$2 == "/target/boot" { print $1; exit }' /proc/mounts)"; \
+    boot_uuid="$(blkid -s UUID -o value "$boot_source")"; \
+    root_uuid="$(blkid -s UUID -o value "$root_source")"; \
+    printf '%s\n' '#!/bin/sh' 'exec tail -n +3 "$0"' "menuentry '{{.storage_encryption_tpm_grub_entry_name}}' {" '    insmod gzio' '    insmod part_gpt' '    insmod ext2' "    search --no-floppy --fs-uuid --set=root $boot_uuid" "    linux /vmlinuz-$kernel_version root=UUID=$root_uuid ro quiet" "    initrd /initrd.img-$kernel_version.{{.storage_encryption_tpm_dracut_image_suffix}}" '}' > /target{{.storage_encryption_tpm_grub_custom_path}}; \
+    chmod 0755 /target{{.storage_encryption_tpm_grub_custom_path}}; \
+    if grep -q '^GRUB_DEFAULT=' /target/etc/default/grub; then \
+      sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT="{{.storage_encryption_tpm_grub_entry_name}}"/' /target/etc/default/grub; \
+    else \
+      printf 'GRUB_DEFAULT="{{.storage_encryption_tpm_grub_entry_name}}"\n' >> /target/etc/default/grub; \
+    fi; \
+    in-target update-grub; \
+{{else -}}
     printf '%s UUID=%s none luks,discard,x-initrd.attach\n' "$crypt_name" "$backing_uuid" > /target/etc/crypttab; \
     in-target apt-get -y install cryptsetup-initramfs || true; \
     in-target update-initramfs -u -k all; \
+{{end -}}
 {{if eq .debian_regular_swap_enabled "true" -}}
     if ! chroot /target /usr/bin/fallocate -l {{.debian_regular_swap_min_size_mib}}M /swapfile; then \
       dd if=/dev/zero of=/target/swapfile bs=1M count={{.debian_regular_swap_min_size_mib}}; \

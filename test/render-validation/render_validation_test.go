@@ -886,6 +886,8 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "printf '%s UUID=%s none luks,discard,x-initrd.attach\\n' \"$crypt_name\" \"$backing_uuid\" > /target/etc/crypttab")
 	assert.Contains(t, rendered, "in-target apt-get -y install cryptsetup-initramfs || true")
 	assert.Contains(t, rendered, "in-target update-initramfs -u -k all")
+	assert.NotContains(t, rendered, "systemd-cryptenroll")
+	assert.NotContains(t, rendered, "tpm2-device=%s")
 	assert.Contains(t, rendered, "chroot /target /usr/bin/fallocate -l 8192M /swapfile")
 	assert.Contains(t, rendered, "dd if=/dev/zero of=/target/swapfile bs=1M count=8192")
 	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
@@ -893,6 +895,48 @@ func TestRenderedDebianPreseedEncryptedRegularRecipe(t *testing.T) {
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "$lvmok{ }")
 	assert.NotContains(t, rendered, "partman-auto-raid/recipe")
+}
+
+func TestRenderedDebianPreseedEncryptedRegularTPMUnlock(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianTPMParams())
+
+	assert.Contains(t, rendered, "d-i preseed/late_command string \\\n  set -eu;")
+	assert.Contains(t, rendered, "in-target apt-get -y install cryptsetup-initramfs dracut-core dracut-config-generic tpm2-tools")
+	assert.Contains(t, rendered, "in-target systemd-cryptenroll --tpm2-device=list | grep -q '/dev/tpm'")
+	assert.Contains(t, rendered, "[ ! -e /sys/class/tpm/tpm0/pcr-sha256 ]")
+	assert.Contains(t, rendered, "tpm_passphrase_file=/target/run/shoelaces-luks-tpm.passphrase")
+	assert.Contains(t, rendered, `trap 'rm -f "$tpm_passphrase_file"' EXIT HUP INT TERM`)
+	assert.Contains(t, rendered, "printf %s 'luks-passphrase' > \"$tpm_passphrase_file\"")
+	assert.Contains(t, rendered, "chmod 0600 \"$tpm_passphrase_file\"")
+	assert.Contains(t, rendered, `in-target systemd-cryptenroll "$backing_device" --unlock-key-file=/run/shoelaces-luks-tpm.passphrase --tpm2-device='auto' --tpm2-pcrs='7'`)
+	assert.Contains(t, rendered, "cryptsetup luksDump \"$backing_device\" | grep -F 'tpm2-hash-pcrs:   7'")
+	assert.Contains(t, rendered, "cryptsetup luksDump \"$backing_device\" | grep -F 'tpm2-pcr-bank:    sha256'")
+	assert.Contains(t, rendered, "printf '%s UUID=%s none luks,discard,x-initrd.attach,tpm2-device=%s\\n' \"$crypt_name\" \"$backing_uuid\" 'auto' > /target/etc/crypttab")
+	assert.Contains(t, rendered, "add_dracutmodules+=\" systemd systemd-cryptsetup crypt tpm2-tss \"")
+	assert.Contains(t, rendered, "add_drivers+=\" tpm tpm_tis tpm_tis_core tpm_crb \"")
+	assert.Contains(t, rendered, "install_items+=\" /etc/crypttab \"")
+	assert.Contains(t, rendered, `chroot /target dracut --force --hostonly --kver "$kernel_version" "/boot/initrd.img-$kernel_version.hostonly-dracut"`)
+	assert.Contains(t, rendered, "menuentry 'Debian TPM unlock - dracut'")
+	assert.Contains(t, rendered, `initrd /initrd.img-$kernel_version.hostonly-dracut`)
+	assert.Contains(t, rendered, `GRUB_DEFAULT="Debian TPM unlock - dracut"`)
+	assert.Contains(t, rendered, "in-target update-grub")
+	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
+	assert.NotContains(t, rendered, "--unlock-key-file=luks-passphrase")
+}
+
+func TestRenderedDebianPreseedEncryptedRegularTPMUnlockHonorsDisabledSHA256BankRequirement(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
+		Encryption: mappings.StorageEncryptionConfig{
+			TPM: mappings.StorageEncryptionTPMConfig{
+				Enabled:           boolPtr(true),
+				RequireSHA256Bank: boolPtr(false),
+			},
+		},
+	}))
+
+	assert.Contains(t, rendered, "systemd-cryptenroll")
+	assert.NotContains(t, rendered, "/sys/class/tpm/tpm0/pcr-sha256")
+	assert.NotContains(t, rendered, "tpm2-pcr-bank:    sha256")
 }
 
 func TestRenderedDebianPreseedEncryptedRegularInstallsHelperWhenWipeDisabled(t *testing.T) {
@@ -1034,6 +1078,33 @@ func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {
 				"storage_encryption_key_size", "0",
 			),
 			want: "preseed/debian storage_encryption_key_size must be a positive integer when storage_encryption_enabled is true",
+		},
+		{
+			name: "tpm without encryption",
+			params: paramsWith(
+				defaultRenderParams,
+				"storage_encryption_tpm_enabled",
+				"true",
+			),
+			want: "preseed/debian storage_encryption_tpm_enabled requires storage_encryption_enabled to be true",
+		},
+		{
+			name: "tpm requires regular mode",
+			params: paramsWith(
+				paramsWith(encryptedDebianTPMParams(), "storage_mode", "lvm"),
+				"vg_name",
+				"vgluks",
+			),
+			want: "preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular",
+		},
+		{
+			name: "tpm requires dracut",
+			params: paramsWith(
+				encryptedDebianTPMParams(),
+				"storage_encryption_tpm_initramfs",
+				"initramfs-tools",
+			),
+			want: `preseed/debian storage_encryption_tpm_initramfs must be "dracut" when TPM unlock is enabled`,
 		},
 	}
 
@@ -1531,6 +1602,10 @@ func paramsWithStructuredUsers(params map[string]interface{}) map[string]interfa
 	return mappings.ParamsWithUsers(params, structuredRenderUsers)
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func encryptedDebianParams(storage mappings.StorageConfig) map[string]interface{} {
 	enabled := true
 	if storage.Encryption.Enabled == nil {
@@ -1542,6 +1617,20 @@ func encryptedDebianParams(storage mappings.StorageConfig) map[string]interface{
 	return mappings.ParamsWithProvisioning(defaultRenderParams, nil, mappings.ProvisioningConfig{
 		Storage: storage,
 		Boot:    mappings.BootConfig{Firmware: "uefi"},
+	})
+}
+
+func encryptedDebianTPMParams() map[string]interface{} {
+	return encryptedDebianParams(mappings.StorageConfig{
+		Encryption: mappings.StorageEncryptionConfig{
+			TPM: mappings.StorageEncryptionTPMConfig{
+				Enabled:           boolPtr(true),
+				Device:            "auto",
+				PCRs:              "7",
+				RequireSHA256Bank: boolPtr(true),
+				Initramfs:         "dracut",
+			},
+		},
 	})
 }
 
