@@ -981,17 +981,37 @@ func TestRenderedGeneratedLUKSTPMReenrollScriptReenrollsLUKSTPM(t *testing.T) {
 	assert.Contains(t, rendered, "REENROLL_DONE=/var/lib/shoelaces/luks-tpm-reenroll.done")
 	assert.Contains(t, rendered, "reenroll_phase reenroll-luks-tpm")
 	assert.Contains(t, rendered, ": \"${SHOELACES_LUKS_TPM_PASSPHRASE_FILE:=/var/lib/shoelaces/luks-tpm.passphrase}\"")
+	assert.Contains(t, rendered, ": \"${SHOELACES_LUKS_TPM_DEVICE:=auto}\"")
 	assert.Contains(t, rendered, ": \"${SHOELACES_LUKS_TPM_PCRS:=7}\"")
 	assert.Contains(t, rendered, "root_source=\"$(findmnt -no SOURCE /)\"")
 	assert.Contains(t, rendered, "systemd-cryptenroll --tpm2-device=list")
 	assert.Contains(t, rendered, "systemd-cryptenroll \"$backing_device\" --wipe-slot=tpm2")
 	assert.Contains(t, rendered, "--unlock-key-file=\"$SHOELACES_LUKS_TPM_PASSPHRASE_FILE\"")
+	assert.Contains(t, rendered, "--tpm2-device=\"$SHOELACES_LUKS_TPM_DEVICE\"")
+	assert.NotContains(t, rendered, "--tpm2-device=auto")
 	assert.Contains(t, rendered, "--tpm2-pcrs=\"$SHOELACES_LUKS_TPM_PCRS\"")
 	assert.Contains(t, rendered, "grep -E \"tpm2-hash-pcrs:[[:space:]]*$SHOELACES_LUKS_TPM_PCRS\"")
 	assert.Contains(t, rendered, "grep -E 'tpm2-pcr-bank:[[:space:]]*sha256'")
 	assert.Contains(t, rendered, "rm -f \"$SHOELACES_LUKS_TPM_PASSPHRASE_FILE\"")
 	assert.Contains(t, rendered, "systemctl disable shoelaces-luks-tpm-reenroll.service || true")
 	assert.Contains(t, rendered, "rm -f /etc/systemd/system/multi-user.target.wants/shoelaces-luks-tpm-reenroll.service")
+}
+
+func TestRenderedGeneratedLUKSTPMReenrollEnvPreservesTPMDevice(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/plain/luks-tpm-reenroll.env", encryptedDebianParams(mappings.StorageConfig{
+		Encryption: mappings.StorageEncryptionConfig{
+			TPM: mappings.StorageEncryptionTPMConfig{
+				Enabled:           boolPtr(true),
+				Device:            "/dev/tpmrm1",
+				PCRs:              "7",
+				RequireSHA256Bank: boolPtr(true),
+				Initramfs:         "dracut",
+			},
+		},
+	}))
+
+	assert.Contains(t, rendered, "SHOELACES_LUKS_TPM_DEVICE=/dev/tpmrm1")
+	assert.Contains(t, rendered, "SHOELACES_LUKS_TPM_PCRS=7")
 }
 
 func TestRenderedGeneratedLUKSTPMPassphraseUsesResolvedSecret(t *testing.T) {
