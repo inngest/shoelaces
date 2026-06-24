@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/log"
 )
 
@@ -36,19 +37,82 @@ type StaticConfigFileHandler struct{}
 func (s *StaticConfigFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 	envName := envNameFromRequest(r)
-	basePath := path.Join(env.DataDir, "static")
-	embeddedStatic, err := fs.Sub(shoelaces.ProvisioningDefaultsFS(), "static")
+	fp := cleanRequestPath(r.URL.Path)
+	layers, err := staticConfigLayers(env, envName)
 	if err != nil {
 		env.Logger.Error("Failed to initialize embedded static filesystem", "component", "static", "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if envName == "" {
-		OverlayFileServerWithFS(embeddedStatic, basePath).WithLogger(env.Logger).ServeHTTP(w, r)
+	exists, err := overlayPathExists(layers, fp)
+	if err != nil {
+		env.Logger.Error("Failed to inspect static overlay", "component", "static", "path", fp, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if exists {
+		(&OverlayFileServerHandler{layers: layers}).WithLogger(env.Logger).ServeHTTP(w, r)
+		return
+	}
+
+	// Static provisioning helpers may be authored as .slc templates while still
+	// being fetched from /configs/static/<name>. Literal static files win above;
+	// this fallback renders static/<name>.slc as template "static/<name>" when
+	// no literal file is present.
+	templateName := path.Join("static", fp)
+	if env.Templates != nil && env.Templates.HasTemplate(templateName, envName) {
+		resolved, ok := resolveTemplateRequest(w, r, env, templateName, false)
+		if !ok {
+			return
+		}
+		configString, err := env.Templates.RenderTemplate(templateName, resolved.variables, resolved.envName)
+		if err != nil {
+			env.Logger.Error("Failed to render static config template", "component", "static", "template", templateName, "environment", resolved.envName, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = io.WriteString(w, configString)
+		return
+	}
+
+	env.Logger.Debug("Static overlay file not found", "component", "static", "path", fp)
+	http.NotFound(w, r)
+}
+
+func staticConfigLayers(env *environment.Environment, envName string) ([]overlayLayer, error) {
+	basePath := path.Join(env.DataDir, "static")
+	embeddedStatic, err := fs.Sub(shoelaces.ProvisioningDefaultsFS(), "static")
+	if err != nil {
+		return nil, err
+	}
+	if envName == "" {
+		return overlayLayersWithFS(embeddedStatic, basePath), nil
+	}
 	envPath := filepath.Join(env.DataDir, env.EnvDir, envName, "static")
-	OverlayFileServerWithFS(embeddedStatic, envPath, basePath).WithLogger(env.Logger).ServeHTTP(w, r)
+	return overlayLayersWithFS(embeddedStatic, envPath, basePath), nil
+}
+
+func overlayLayersWithFS(lower fs.FS, diskDirs ...string) []overlayLayer {
+	layers := make([]overlayLayer, 0, len(diskDirs)+1)
+	for _, dir := range diskDirs {
+		layers = append(layers, overlayLayer{dir: dir})
+	}
+	return append(layers, overlayLayer{fsys: lower})
+}
+
+func overlayPathExists(layers []overlayLayer, fp string) (bool, error) {
+	for _, layer := range layers {
+		file, _, err := layer.open(fp)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return false, err
+		}
+		_ = file.Close()
+		return true, nil
+	}
+	return false, nil
 }
 
 // StaticConfigFileServer returns a StaticConfigFileHandler instance implementing http.Handler
@@ -85,12 +149,7 @@ func OverlayFileServer(upper, lower string) *OverlayFileServerHandler {
 // OverlayFileServerWithFS serves static content from disk directories first and
 // an embedded filesystem last.
 func OverlayFileServerWithFS(lower fs.FS, diskDirs ...string) *OverlayFileServerHandler {
-	layers := make([]overlayLayer, 0, len(diskDirs)+1)
-	for _, dir := range diskDirs {
-		layers = append(layers, overlayLayer{dir: dir})
-	}
-	layers = append(layers, overlayLayer{fsys: lower})
-	return &OverlayFileServerHandler{layers: layers, logger: log.MakeLogger(io.Discard).With("component", "static")}
+	return &OverlayFileServerHandler{layers: overlayLayersWithFS(lower, diskDirs...), logger: log.MakeLogger(io.Discard).With("component", "static")}
 }
 
 // WithLogger overrides the default discard logger used by standalone overlay

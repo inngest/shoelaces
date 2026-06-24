@@ -385,6 +385,22 @@ func (s *ShoelacesTemplates) RenderTemplate(configName string, paramMap map[stri
 	return r, nil
 }
 
+// HasTemplate reports whether configName is registered for envName. Non-default
+// environments inherit templates from the default environment, matching
+// RenderTemplate fallback behavior.
+func (s *ShoelacesTemplates) HasTemplate(configName string, envName string) bool {
+	if envName == "" {
+		envName = defaultEnvironment
+	}
+	if templateEnv, ok := s.envTemplates[envName]; ok && templateEnv.templateObj.Lookup(configName) != nil {
+		return true
+	}
+	if envName != defaultEnvironment {
+		return s.envTemplates[defaultEnvironment].templateObj.Lookup(configName) != nil
+	}
+	return false
+}
+
 func validateRenderParams(configName string, paramMap map[string]interface{}, embeddedTemplate bool) error {
 	switch configName {
 	case "preseed/debian", "generated/debian/luks-tpm-setup.sh", "generated/plain/luks-tpm.passphrase", "generated/plain/luks-tpm-reenroll.env":

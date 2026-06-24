@@ -242,6 +242,46 @@ func TestConfigsStaticRouteServesDataDirStaticFiles(t *testing.T) {
 	assert.Equal(t, "from data dir\n", rr.Body.String())
 }
 
+func TestConfigsStaticRouteRendersDataDirStaticTemplates(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "install-firstboot.sh.slc"), []byte(`{{define "static/install-firstboot.sh" -}}
+#!/bin/sh
+echo "site={{.site}}"
+echo "base={{.baseURL}}"
+{{end}}
+`), 0o644))
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/install-firstboot.sh?site=iad", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `echo "site=iad"`)
+	assert.Contains(t, rr.Body.String(), `echo "base=localhost:8081"`)
+	assert.NotContains(t, rr.Body.String(), "{{define")
+}
+
+func TestConfigsStaticRouteLiteralFileWinsOverStaticTemplate(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "static"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "install-firstboot.sh"), []byte("literal {{.site}}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "static", "install-firstboot.sh.slc"), []byte(`{{define "static/install-firstboot.sh"}}templated {{.site}}{{end}}`), 0o644))
+	handler := newTestRouterWithEnvironment(t, dataDir, func(env *environment.Environment) {
+		env.Templates.ParseTemplates(env.DataDir, env.EnvDir, env.Environments, env.TemplateExtension)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/configs/static/install-firstboot.sh?site=iad", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "literal {{.site}}\n", rr.Body.String())
+}
+
 func TestConfigsStaticRouteServesEmbeddedProvisioningAsset(t *testing.T) {
 	handler := newTestRouter(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/configs/static/provisioning-default.txt", nil)
