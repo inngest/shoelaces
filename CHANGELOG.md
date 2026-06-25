@@ -1,8 +1,17 @@
+## [1.9.6] - 2026-06-25
+
+### 🐛 Bug Fixes
+
+- *(static)* Support user-provided static slc templates (#86)
 ## [1.9.5] - 2026-06-24
 
 ### 🐛 Bug Fixes
 
 - *(debian)* Stage LUKS TPM reenroll with generated helpers (#84)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.5 (#85)
 ## [1.9.4] - 2026-06-24
 
 ### ⚙️ Miscellaneous Tasks
