@@ -114,6 +114,47 @@ flowchart TD
     class browser,uiRoutes,uiStatic,uiAssets ui;
 ```
 
+## Static Helper Templates
+
+`/configs/static/*` is for installer helper artifacts. For file requests,
+Shoelaces resolves static helpers in this order:
+
+1. literal file from `data-dir/env_overrides/<env>/static`, when an environment
+   is selected;
+2. `.slc` template from that environment's `static` directory;
+3. literal file from `data-dir/static`;
+4. `.slc` template from `data-dir/static`;
+5. embedded static defaults.
+
+Directory requests still return the merged static overlay listing. Static
+templates are rendered through the same request context as other `/configs/*`
+templates.
+
+For example, this file:
+
+```text
+data-dir/static/install-firstboot.sh.slc
+```
+
+should define:
+
+```gotemplate
+{{define "static/install-firstboot.sh" -}}
+#!/bin/sh
+echo "{{.hostname}}"
+{{end}}
+```
+
+and is fetched without the `.slc` suffix:
+
+```text
+/configs/static/install-firstboot.sh?hostname=worker-1
+```
+
+Literal files still win. If both `data-dir/static/install-firstboot.sh` and
+`data-dir/static/install-firstboot.sh.slc` exist, Shoelaces serves the literal
+file unchanged.
+
 ## Full Template Overrides
 
 To replace an embedded template completely, provide a disk `.slc` file that

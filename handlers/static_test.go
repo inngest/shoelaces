@@ -16,6 +16,8 @@
 package handlers
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +26,9 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/inngest/shoelaces/environment"
+	"github.com/inngest/shoelaces/log"
+	"github.com/inngest/shoelaces/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,7 +147,54 @@ func TestOverlayFileServerWithFSMergesDirectoryIndex(t *testing.T) {
 	assert.Contains(t, body, `<a href="embedded.txt">embedded.txt</a>`)
 }
 
+func TestStaticConfigFileServerDoesNotServeTemplateSource(t *testing.T) {
+	dataDir := t.TempDir()
+	writeTestFile(t, filepath.Join(dataDir, "static", "install-firstboot.sh.slc"), `{{define "static/install-firstboot.sh" -}}
+#!/bin/sh
+echo rendered
+{{end}}
+`)
+	env := newStaticTestEnvironment(t, dataDir)
+
+	rr := httptest.NewRecorder()
+	req := newStaticTestRequest("/install-firstboot.sh", env)
+	StaticConfigFileServer().ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "echo rendered")
+
+	rr = httptest.NewRecorder()
+	req = newStaticTestRequest("/install-firstboot.sh.slc", env)
+	StaticConfigFileServer().ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.NotContains(t, rr.Body.String(), `{{define "static/install-firstboot.sh"`)
+}
+
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func newStaticTestEnvironment(t *testing.T, dataDir string) *environment.Environment {
+	t.Helper()
+
+	logger := log.MakeLogger(io.Discard)
+	renderer := templates.New(logger)
+	renderer.ParseTemplates(dataDir, "env_overrides", nil, ".slc")
+	return &environment.Environment{
+		DataDir:           dataDir,
+		EnvDir:            "env_overrides",
+		TemplateExtension: ".slc",
+		BaseURL:           "http://shoelaces.example.test",
+		Logger:            logger,
+		Templates:         renderer,
+	}
+}
+
+func newStaticTestRequest(path string, env *environment.Environment) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	ctx := context.WithValue(req.Context(), ShoelacesEnvCtxID, env)
+	return req.WithContext(ctx)
 }

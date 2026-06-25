@@ -27,6 +27,8 @@ import (
 	"strings"
 
 	shoelaces "github.com/inngest/shoelaces"
+	"github.com/inngest/shoelaces/bootsession"
+	"github.com/inngest/shoelaces/environment"
 	"github.com/inngest/shoelaces/log"
 )
 
@@ -36,19 +38,177 @@ type StaticConfigFileHandler struct{}
 func (s *StaticConfigFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	env := envFromRequest(r)
 	envName := envNameFromRequest(r)
-	basePath := path.Join(env.DataDir, "static")
-	embeddedStatic, err := fs.Sub(shoelaces.ProvisioningDefaultsFS(), "static")
+	fp := cleanRequestPath(r.URL.Path)
+	if isStaticTemplateSourcePath(env, fp) {
+		env.Logger.Debug("Static template source request rejected", "component", "static", "path", fp)
+		http.NotFound(w, r)
+		return
+	}
+	templateName := path.Join("static", fp)
+
+	var resolved resolvedTemplateRequest
+	resolvedOK := false
+	resolveTemplateContext := func() bool {
+		if resolvedOK {
+			return true
+		}
+		var ok bool
+		resolved, ok = resolveTemplateRequest(w, r, env, templateName, false)
+		if !ok {
+			return false
+		}
+		resolvedOK = true
+		return true
+	}
+
+	resolvedEnvName := envName
+	if r.URL.Query().Get(bootsession.QueryParam) != "" {
+		if !resolveTemplateContext() {
+			return
+		}
+		resolvedEnvName = resolved.envName
+	}
+
+	diskLayers := staticConfigDiskLayers(env, resolvedEnvName)
+	embeddedLayer, err := embeddedStaticConfigLayer()
 	if err != nil {
 		env.Logger.Error("Failed to initialize embedded static filesystem", "component", "static", "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if envName == "" {
-		OverlayFileServerWithFS(embeddedStatic, basePath).WithLogger(env.Logger).ServeHTTP(w, r)
+	allLayers := append(append([]overlayLayer{}, diskLayers...), embeddedLayer)
+	exists, isDir, err := overlayPathStatus(allLayers, fp)
+	if err != nil {
+		env.Logger.Error("Failed to inspect static overlay", "component", "static", "path", fp, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if exists && isDir {
+		(&OverlayFileServerHandler{layers: allLayers}).WithLogger(env.Logger).ServeHTTP(w, r)
+		return
+	}
+
+	envDiskLayers := staticConfigEnvDiskLayers(env, resolvedEnvName)
+	exists, _, err = overlayPathStatus(envDiskLayers, fp)
+	if err != nil {
+		env.Logger.Error("Failed to inspect static disk overlay", "component", "static", "path", fp, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if exists {
+		(&OverlayFileServerHandler{layers: envDiskLayers}).WithLogger(env.Logger).ServeHTTP(w, r)
+		return
+	}
+
+	// Static provisioning helpers may be authored as .slc templates while still
+	// being fetched from /configs/static/<name>. Literal static files win above;
+	// this fallback treats disk static templates as user overrides before
+	// falling back to embedded literal static defaults.
+	if env.Templates != nil && resolvedEnvName != "" && env.Templates.HasTemplateOverride(templateName, resolvedEnvName) {
+		if !resolveTemplateContext() {
+			return
+		}
+		configString, err := env.Templates.RenderTemplate(templateName, resolved.variables, resolved.envName)
+		if err != nil {
+			env.Logger.Error("Failed to render static config template", "component", "static", "template", templateName, "environment", resolved.envName, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = io.WriteString(w, configString)
+		return
+	}
+
+	baseDiskLayers := staticConfigBaseDiskLayers(env)
+	exists, _, err = overlayPathStatus(baseDiskLayers, fp)
+	if err != nil {
+		env.Logger.Error("Failed to inspect static base disk overlay", "component", "static", "path", fp, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if exists {
+		(&OverlayFileServerHandler{layers: baseDiskLayers}).WithLogger(env.Logger).ServeHTTP(w, r)
+		return
+	}
+
+	if env.Templates != nil && env.Templates.HasTemplate(templateName, "") {
+		if !resolveTemplateContext() {
+			return
+		}
+		configString, err := env.Templates.RenderTemplate(templateName, resolved.variables, resolved.envName)
+		if err != nil {
+			env.Logger.Error("Failed to render static config template", "component", "static", "template", templateName, "environment", resolved.envName, "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = io.WriteString(w, configString)
+		return
+	}
+
+	embeddedLayers := []overlayLayer{embeddedLayer}
+	exists, _, err = overlayPathStatus(embeddedLayers, fp)
+	if err != nil {
+		env.Logger.Error("Failed to inspect embedded static overlay", "component", "static", "path", fp, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if exists {
+		(&OverlayFileServerHandler{layers: embeddedLayers}).WithLogger(env.Logger).ServeHTTP(w, r)
+		return
+	}
+
+	env.Logger.Debug("Static overlay file not found", "component", "static", "path", fp)
+	http.NotFound(w, r)
+}
+
+func staticConfigDiskLayers(env *environment.Environment, envName string) []overlayLayer {
+	return append(staticConfigEnvDiskLayers(env, envName), staticConfigBaseDiskLayers(env)...)
+}
+
+func staticConfigEnvDiskLayers(env *environment.Environment, envName string) []overlayLayer {
+	if envName == "" {
+		return nil
+	}
 	envPath := filepath.Join(env.DataDir, env.EnvDir, envName, "static")
-	OverlayFileServerWithFS(embeddedStatic, envPath, basePath).WithLogger(env.Logger).ServeHTTP(w, r)
+	return []overlayLayer{{dir: envPath}}
+}
+
+func staticConfigBaseDiskLayers(env *environment.Environment) []overlayLayer {
+	return []overlayLayer{{dir: path.Join(env.DataDir, "static")}}
+}
+
+func isStaticTemplateSourcePath(env *environment.Environment, fp string) bool {
+	return env.TemplateExtension != "" && strings.HasSuffix(fp, env.TemplateExtension)
+}
+
+func embeddedStaticConfigLayer() (overlayLayer, error) {
+	embeddedStatic, err := fs.Sub(shoelaces.ProvisioningDefaultsFS(), "static")
+	if err != nil {
+		return overlayLayer{}, err
+	}
+	return overlayLayer{fsys: embeddedStatic}, nil
+}
+
+func overlayLayersWithFS(lower fs.FS, diskDirs ...string) []overlayLayer {
+	layers := make([]overlayLayer, 0, len(diskDirs)+1)
+	for _, dir := range diskDirs {
+		layers = append(layers, overlayLayer{dir: dir})
+	}
+	return append(layers, overlayLayer{fsys: lower})
+}
+
+func overlayPathStatus(layers []overlayLayer, fp string) (bool, bool, error) {
+	for _, layer := range layers {
+		file, info, err := layer.open(fp)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return false, false, err
+		}
+		_ = file.Close()
+		return true, info.IsDir(), nil
+	}
+	return false, false, nil
 }
 
 // StaticConfigFileServer returns a StaticConfigFileHandler instance implementing http.Handler
@@ -85,12 +245,7 @@ func OverlayFileServer(upper, lower string) *OverlayFileServerHandler {
 // OverlayFileServerWithFS serves static content from disk directories first and
 // an embedded filesystem last.
 func OverlayFileServerWithFS(lower fs.FS, diskDirs ...string) *OverlayFileServerHandler {
-	layers := make([]overlayLayer, 0, len(diskDirs)+1)
-	for _, dir := range diskDirs {
-		layers = append(layers, overlayLayer{dir: dir})
-	}
-	layers = append(layers, overlayLayer{fsys: lower})
-	return &OverlayFileServerHandler{layers: layers, logger: log.MakeLogger(io.Discard).With("component", "static")}
+	return &OverlayFileServerHandler{layers: overlayLayersWithFS(lower, diskDirs...), logger: log.MakeLogger(io.Discard).With("component", "static")}
 }
 
 // WithLogger overrides the default discard logger used by standalone overlay
