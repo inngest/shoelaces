@@ -5,7 +5,6 @@ state_dir=/var/lib/shoelaces
 status_path="$state_dir/raid-esp-recovery.last-run"
 primary_efi=/boot/efi
 fallback_root=/run/shoelaces-raid-esp-recovery
-fallback_loader='\EFI\debian\shimx64.efi'
 
 log() {
   printf 'shoelaces-raid-esp-recovery: %s\n' "$*" >&2
@@ -13,6 +12,16 @@ log() {
 
 lower() {
   printf '%s' "$1" | tr 'A-Z' 'a-z'
+}
+
+efi_loader_path() {
+  if [ -f "$primary_efi/EFI/debian/shimx64.efi" ]; then
+    printf '\EFI\debian\shimx64.efi'
+  elif [ -f "$primary_efi/EFI/debian/grubx64.efi" ]; then
+    printf '\EFI\debian\grubx64.efi'
+  else
+    return 1
+  fi
 }
 
 bootnum_from_line() {
@@ -50,12 +59,13 @@ append_unique() {
 
 boot_entry_for_partuuid() {
   uuid="$(lower "$1")"
+  loader="$(lower "$fallback_loader")"
   tmp="$(mktemp)"
   efibootmgr -v >"$tmp"
   while IFS= read -r line; do
     line_lower="$(lower "$line")"
     case "$line_lower" in
-      *"$uuid"*'file(\efi\debian\shimx64.efi)'*)
+      *"$uuid"*file\("$loader"\)*)
         bootnum_from_line "$line"
         rm -f "$tmp"
         return 0
@@ -170,6 +180,11 @@ if [ ! -f "$primary_efi/EFI/BOOT/BOOTX64.EFI" ]; then
     cp -f "$primary_efi/EFI/debian/grubx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"
   fi
 fi
+
+fallback_loader="$(efi_loader_path)" || {
+  log "no Debian EFI loader found on primary ESP"
+  exit 1
+}
 
 esp_parts=
 for esp in /dev/nvme*n1p1 /dev/sd?1 /dev/vd?1; do

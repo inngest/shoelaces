@@ -1218,6 +1218,21 @@ func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
 	assert.NotContains(t, rendered, "1 2 0 ext4 / \\\n        raidid=3")
 }
 
+func TestRAIDESPRecoverySetupChoosesInstalledLoader(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "shoelaces-raid-esp-recovery-setup"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, "efi_loader_path()")
+	assert.Contains(t, script, `printf '\EFI\debian\shimx64.efi'`)
+	assert.Contains(t, script, `printf '\EFI\debian\grubx64.efi'`)
+	assert.Contains(t, script, `fallback_loader="$(efi_loader_path)"`)
+	assert.Contains(t, script, `loader="$(lower "$fallback_loader")"`)
+	assert.Contains(t, script, `*"$uuid"*file\("$loader"\)*`)
+	assert.NotContains(t, script, "fallback_loader='\\EFI\\debian\\shimx64.efi'")
+	assert.NotContains(t, script, `file(\efi\debian\shimx64.efi)`)
+}
+
 func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {
 	tests := []struct {
 		name   string
