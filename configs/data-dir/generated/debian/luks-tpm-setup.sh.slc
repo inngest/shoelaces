@@ -73,12 +73,13 @@ umask 077
 wget -O "$tpm_passphrase_file" "$base_url/configs/generated/plain/luks-tpm.passphrase$boot_ref_query"
 chmod 0600 "$tpm_passphrase_file"
 
-# Debian initramfs-tools currently ignores tpm2-device=auto for this plain-LUKS
-# root shape, so the TPM boot path uses host-only dracut and leaves the normal
-# passphrase-capable initramfs as a fallback. Keep first-boot dependencies
-# explicit: systemd-cryptenroll is in systemd-cryptsetup, cryptsetup-initramfs
-# pulls the cryptsetup CLI, tpm2-tools pulls the TSS libraries, and util-linux
-# provides findmnt for the reenroll service.
+# Debian initramfs-tools currently ignores tpm2-device=auto for the direct
+# LUKS root shapes Shoelaces uses in regular and RAID modes, so the TPM boot
+# path uses host-only dracut and leaves the normal passphrase-capable initramfs
+# as a fallback. Keep first-boot dependencies explicit: systemd-cryptenroll is
+# in systemd-cryptsetup, cryptsetup-initramfs pulls the cryptsetup CLI,
+# tpm2-tools pulls the TSS libraries, and util-linux provides findmnt for the
+# reenroll service.
 in-target apt-get -y install cryptsetup-initramfs systemd-cryptsetup dracut-core dracut-config-generic tpm2-tools util-linux
 in-target update-initramfs -u -k all || true
 
