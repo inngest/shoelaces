@@ -1143,6 +1143,21 @@ func TestRAIDLUKSInitialAutoRAIDFSHelperIsEmbedded(t *testing.T) {
 	)
 }
 
+func TestRenderedRAIDLUKSInitialAutoRAIDFSQuotesPassphrase(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "static/raid-luks-initial-auto-raid-fs.sh", map[string]interface{}{
+		"storage_encryption_cipher":     "aes-xts-plain64",
+		"storage_encryption_hash":       "sha512",
+		"storage_encryption_key_size":   "512",
+		"storage_encryption_passphrase": `pa"$(touch /tmp/shoelaces-pwn)'ss`,
+	})
+
+	quoted := `'pa"$(touch /tmp/shoelaces-pwn)'\''ss'`
+	assert.Contains(t, rendered, "if [ -z "+quoted+" ]; then")
+	assert.Contains(t, rendered, "db_set partman-crypto/passphrase "+quoted)
+	assert.Contains(t, rendered, "db_set partman-crypto/passphrase-again "+quoted)
+	assert.NotContains(t, rendered, `db_set partman-crypto/passphrase "pa"$(touch /tmp/shoelaces-pwn)'ss"`)
+}
+
 func TestRenderedDebianPreseedEncryptedLVMRecipe(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
 		Mode:        "lvm",

@@ -82,13 +82,13 @@ wipe_md_signatures() {
 }
 
 seed_crypto_passphrase() {
-	if [ -z "{{.storage_encryption_passphrase}}" ]; then
+	if [ -z {{.storage_encryption_passphrase | shquote}} ]; then
 		fail_raid "Error: RAID LUKS passphrase is empty"
 	fi
 
 	log_raid_luks "seeding partman crypto passphrase for RAID LUKS devices"
-	db_set partman-crypto/passphrase "{{.storage_encryption_passphrase}}"
-	db_set partman-crypto/passphrase-again "{{.storage_encryption_passphrase}}"
+	db_set partman-crypto/passphrase {{.storage_encryption_passphrase | shquote}}
+	db_set partman-crypto/passphrase-again {{.storage_encryption_passphrase | shquote}}
 	db_set partman-crypto/weak_passphrase true
 	db_set partman-crypto/confirm true
 	db_set partman-crypto/confirm_nooverwrite true
