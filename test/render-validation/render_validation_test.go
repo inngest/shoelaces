@@ -770,6 +770,8 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "in-target update-initramfs -u")
 	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
 	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery.service")
+	assert.Contains(t, rendered, "/target/etc/default/shoelaces-raid-esp-recovery")
+	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/nvme0n1p1 /dev/nvme1n1p1"`)
 	assert.Contains(t, rendered, "for d in /dev/nvme0n1 /dev/nvme1n1; do")
 	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
@@ -799,6 +801,7 @@ func TestRenderedDebianPreseedRAIDLateCommandHandlesStableDiskSymlinks(t *testin
 	assert.Contains(t, rendered, `primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"`)
 	assert.Contains(t, rendered, `p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"`)
 	assert.Contains(t, rendered, `[ "$p_resolved" != "$primary_part" ] || continue`)
+	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/disk/by-path/pci-0000:00:17.0-ata-1-part1 /dev/disk/by-path/pci-0000:00:17.0-ata-2-part1"`)
 	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part3#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part3")
 	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part5#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part5")
 }
@@ -1245,6 +1248,8 @@ func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "/swapfile")
 	assert.Contains(t, rendered, "mkswap /swapfile")
 	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
+	assert.Contains(t, rendered, "/target/etc/default/shoelaces-raid-esp-recovery")
+	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/nvme0n1p1 /dev/nvme1n1p1"`)
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "1 2 0 ext4 / \\\n        raidid=3")
@@ -1292,6 +1297,21 @@ func TestRAIDESPRecoverySetupChoosesInstalledLoader(t *testing.T) {
 	assert.Contains(t, script, `*"$uuid"*file\("$loader"\)*`)
 	assert.NotContains(t, script, "fallback_loader='\\EFI\\debian\\shimx64.efi'")
 	assert.NotContains(t, script, `file(\efi\debian\shimx64.efi)`)
+}
+
+func TestRAIDESPRecoverySetupUsesConfiguredESPParts(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "shoelaces-raid-esp-recovery-setup"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, "config_path=${SHOELACES_RAID_ESP_RECOVERY_CONFIG:-/etc/default/shoelaces-raid-esp-recovery}")
+	assert.Contains(t, script, `[ -f "$config_path" ] && . "$config_path"`)
+	assert.Contains(t, script, "for esp in $SHOELACES_RAID_ESP_PARTS; do")
+	assert.Contains(t, script, `esp_resolved="$(readlink -f "$esp" 2>/dev/null || echo "$esp")"`)
+	assert.Contains(t, script, `[ "$esp_resolved" != "$primary_part" ] || continue`)
+	assert.NotContains(t, script, "/dev/sd?1")
+	assert.NotContains(t, script, "/dev/vd?1")
+	assert.NotContains(t, script, "/dev/nvme*n1p1")
 }
 
 func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {

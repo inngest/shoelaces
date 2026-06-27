@@ -5,6 +5,8 @@ state_dir=/var/lib/shoelaces
 status_path="$state_dir/raid-esp-recovery.last-run"
 primary_efi=/boot/efi
 fallback_root=/run/shoelaces-raid-esp-recovery
+config_path=${SHOELACES_RAID_ESP_RECOVERY_CONFIG:-/etc/default/shoelaces-raid-esp-recovery}
+SHOELACES_RAID_ESP_PARTS=${SHOELACES_RAID_ESP_PARTS:-}
 
 log() {
   printf 'shoelaces-raid-esp-recovery: %s\n' "$*" >&2
@@ -151,6 +153,8 @@ ensure_fallback_entry() {
 
 mkdir -p "$state_dir" "$fallback_root"
 
+[ -f "$config_path" ] && . "$config_path"
+
 [ -d "$primary_efi/EFI" ] || {
   log "$primary_efi/EFI is missing"
   exit 1
@@ -166,6 +170,7 @@ primary_part="$(findmnt -rn -o SOURCE "$primary_efi")"
   log "cannot resolve mounted primary ESP"
   exit 1
 }
+primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"
 primary_uuid="$(lsblk -no PARTUUID "$primary_part" | head -n 1 | tr -d ' ')"
 [ -n "$primary_uuid" ] || {
   log "cannot resolve primary ESP PARTUUID"
@@ -187,7 +192,7 @@ fallback_loader="$(efi_loader_path)" || {
 }
 
 esp_parts=
-for esp in /dev/nvme*n1p1 /dev/sd?1 /dev/vd?1; do
+for esp in $SHOELACES_RAID_ESP_PARTS; do
   [ -b "$esp" ] || continue
   fstype="$(lsblk -no FSTYPE "$esp" | head -n 1 | tr -d ' ')"
   case "$fstype" in
@@ -200,7 +205,8 @@ done
 secondary_parts=
 secondary_uuids=
 for esp in $esp_parts; do
-  [ "$esp" != "$primary_part" ] || continue
+  esp_resolved="$(readlink -f "$esp" 2>/dev/null || echo "$esp")"
+  [ "$esp_resolved" != "$primary_part" ] || continue
   uuid="$(lsblk -no PARTUUID "$esp" | head -n 1 | tr -d ' ')"
   [ -n "$uuid" ] || continue
   secondary_parts="$(append_unique "$secondary_parts" "$esp")"

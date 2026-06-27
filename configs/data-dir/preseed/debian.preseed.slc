@@ -413,7 +413,8 @@ d-i preseed/late_command string \
   mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \
   in-target update-initramfs -u; \
   sed -i '/[[:space:]]\/boot\/efi[[:space:]]/ s/umask=0077/umask=0077,nofail/' /target/etc/fstab; \
-  mkdir -p /target/usr/local/sbin /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants; \
+  mkdir -p /target/usr/local/sbin /target/etc/default /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants; \
+  printf '%s\n' 'SHOELACES_RAID_ESP_PARTS="{{.storage_raid_device_0_part1}} {{.storage_raid_device_1_part1}}"' > /target/etc/default/shoelaces-raid-esp-recovery; \
   wget -O /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup "http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery-setup{{.boot_ref_query_question}}"; \
   chmod 0755 /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup; \
   wget -O /target/etc/systemd/system/shoelaces-raid-esp-recovery.service http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery.service; \
@@ -506,7 +507,8 @@ d-i preseed/late_command string \
   mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \
   in-target update-initramfs -u; \
   sed -i '/[[:space:]]\/boot\/efi[[:space:]]/ s/umask=0077/umask=0077,nofail/' /target/etc/fstab; \
-  mkdir -p /target/usr/local/sbin /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants; \
+  mkdir -p /target/usr/local/sbin /target/etc/default /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants; \
+  printf '%s\n' 'SHOELACES_RAID_ESP_PARTS="{{.storage_raid_device_0_part1}} {{.storage_raid_device_1_part1}}"' > /target/etc/default/shoelaces-raid-esp-recovery; \
   wget -O /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup "http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery-setup{{.boot_ref_query_question}}"; \
   chmod 0755 /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup; \
   wget -O /target/etc/systemd/system/shoelaces-raid-esp-recovery.service http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery.service; \
