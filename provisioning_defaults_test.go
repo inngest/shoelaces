@@ -43,6 +43,9 @@ var genericProvisioningDefaultCandidates = []string{
 	"provisioning/extra.slc",
 	"static/plain-luks-autopartition-crypto.sh",
 	"static/provisioning-default.txt",
+	"static/raid-luks-initial-auto-raid-fs.sh.slc",
+	"static/shoelaces-raid-esp-recovery-setup",
+	"static/shoelaces-raid-esp-recovery.service",
 }
 
 var siteOnlyProvisioningFiles = []string{

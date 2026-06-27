@@ -190,9 +190,10 @@ formatted directly on the opened LUKS mapper, and swap is created as
 `/swapfile` inside that encrypted root filesystem when regular swap is enabled.
 In `lvm` mode, the ESP and `/boot` are unencrypted partitions, and LUKS wraps
 the physical volume that backs `storage.volumeGroup`; root and swap remain
-logical volumes inside that volume group. In `raid` mode, each disk gets a
-normal duplicated ESP, `/boot` is unencrypted RAID1, and LUKS is placed on the
-RAID1 devices used for swap and root.
+logical volumes inside that volume group. In `raid` mode, the ESP boot path is
+kept on normal FAT partitions, `/boot` is unencrypted RAID1, and LUKS is placed
+directly on the RAID1 root md device. When RAID encryption and swap are enabled,
+swap is created as `/swapfile` inside encrypted root.
 
 Preseeded encryption is unattended, so the installer config necessarily
 contains the LUKS passphrase when rendered. Use environment-backed passphrases,
@@ -236,13 +237,17 @@ storage:
     bootDegraded: true
 ```
 
-Debian RAID mode creates a normal 512 MiB ESP on each disk, a 1 GiB RAID1
-ext4 `/boot`, optional RAID1 swap, and a growable RAID1 ext4 root filesystem.
+Debian plain RAID mode creates normal 512 MiB ESPs, a 1 GiB RAID1 ext4
+`/boot`, optional RAID1 swap, and a growable RAID1 ext4 root filesystem.
+Encrypted RAID mode creates RAID1 `/boot`, places LUKS directly on the RAID1
+root md device, and uses a swapfile inside encrypted root when swap is enabled.
 `storage.filesystems` can override the same named entries used by regular and
 LVM modes (`esp`, `boot`, `swap`, and `root`), but the initial documented
-defaults remain intentionally conservative. The ESPs are duplicated normal FAT
-partitions rather than mdraid members because UEFI firmware does not assemble
-Linux md arrays.
+defaults remain intentionally conservative. ESPs are normal FAT partitions
+rather than mdraid members because UEFI firmware does not assemble Linux md
+arrays. Shoelaces installs a small systemd recovery service that mirrors the
+primary ESP contents to fallback ESPs and keeps EFI boot entries usable after
+the installed system boots.
 
 ### RAID1 OS Disk Recovery
 

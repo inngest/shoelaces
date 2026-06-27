@@ -31,6 +31,7 @@ import (
 	"text/template/parse"
 
 	shoelaces "github.com/inngest/shoelaces"
+	storagepath "github.com/inngest/shoelaces/internal/storage"
 	"github.com/inngest/shoelaces/internal/validation"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
@@ -515,8 +516,10 @@ func validateDebianTPMPreseedParams(paramMap map[string]interface{}, encryptionE
 	if encryptionEnabled != "true" {
 		return errors.New("preseed/debian storage_encryption_tpm_enabled requires storage_encryption_enabled to be true")
 	}
-	if strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"])) != "regular" {
-		return errors.New("preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular")
+	switch mode := strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"])); mode {
+	case "regular", "raid":
+	default:
+		return errors.New("preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular or raid")
 	}
 	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_initramfs"])) != "dracut" {
 		return errors.New(`preseed/debian storage_encryption_tpm_initramfs must be "dracut" when TPM unlock is enabled`)
@@ -575,11 +578,22 @@ func validateDebianRAIDPreseedParams(paramMap map[string]interface{}) error {
 	if _, ok := paramMap["storage_raid_device_1"]; !ok {
 		paramMap["storage_raid_device_1"] = devices[1]
 	}
+	defaultRAIDPartitionParams(paramMap, 0, strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_device_0"])))
+	defaultRAIDPartitionParams(paramMap, 1, strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_device_1"])))
 	bootDegraded := strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_boot_degraded"]))
 	if bootDegraded != "true" && bootDegraded != "false" {
 		return errors.New(`preseed/debian storage_raid_boot_degraded must be "true" or "false", got ` + strconv.Quote(bootDegraded))
 	}
 	return nil
+}
+
+func defaultRAIDPartitionParams(paramMap map[string]interface{}, index int, device string) {
+	for partition := 1; partition <= 5; partition++ {
+		key := fmt.Sprintf("storage_raid_device_%d_part%d", index, partition)
+		if _, ok := paramMap[key]; !ok {
+			paramMap[key] = storagepath.PartitionPath(device, partition)
+		}
+	}
 }
 
 func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {

@@ -751,11 +751,11 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 		"raidid{ 1 }",
 	)
 	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
-	assert.Contains(t, rendered, "raidid=1")
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
 	assert.Contains(t, rendered, "1 2 0 swap -")
-	assert.Contains(t, rendered, "raidid=2")
+	assert.Contains(t, rendered, "/dev/nvme0n1p4#/dev/nvme1n1p4")
 	assert.Contains(t, rendered, "1 2 0 ext4 /")
-	assert.Contains(t, rendered, "raidid=3")
+	assert.Contains(t, rendered, "/dev/nvme0n1p5#/dev/nvme1n1p5")
 
 	assert.NotContains(t, rendered, "partman-lvm")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
@@ -768,6 +768,10 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i preseed/late_command string")
 	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
 	assert.Contains(t, rendered, "in-target update-initramfs -u")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery.service")
+	assert.Contains(t, rendered, "/target/etc/default/shoelaces-raid-esp-recovery")
+	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/nvme0n1p1 /dev/nvme1n1p1"`)
 	assert.Contains(t, rendered, "for d in /dev/nvme0n1 /dev/nvme1n1; do")
 	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
@@ -794,6 +798,12 @@ func TestRenderedDebianPreseedRAIDLateCommandHandlesStableDiskSymlinks(t *testin
 
 	assert.Contains(t, rendered, "for d in /dev/disk/by-path/pci-0000:00:17.0-ata-1 /dev/disk/by-path/pci-0000:00:17.0-ata-2; do")
 	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
+	assert.Contains(t, rendered, `primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"`)
+	assert.Contains(t, rendered, `p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"`)
+	assert.Contains(t, rendered, `[ "$p_resolved" != "$primary_part" ] || continue`)
+	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/disk/by-path/pci-0000:00:17.0-ata-1-part1 /dev/disk/by-path/pci-0000:00:17.0-ata-2-part1"`)
+	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part3#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part3")
+	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part5#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part5")
 }
 
 func TestRenderedDebianPreseedRAIDRecipeAppliesStructuredFilesystems(t *testing.T) {
@@ -975,6 +985,33 @@ func TestRenderedDebianLUKSTPMHelperUsesTwoPhaseEnrollment(t *testing.T) {
 	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
 }
 
+func TestRenderedDebianLUKSTPMHelperUsesRAIDSwapParams(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/debian/luks-tpm-setup.sh", paramsWith(
+		paramsWith(encryptedDebianParams(mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+			Encryption: mappings.StorageEncryptionConfig{
+				TPM: mappings.StorageEncryptionTPMConfig{
+					Enabled:           boolPtr(true),
+					Device:            "auto",
+					PCRs:              "7",
+					RequireSHA256Bank: boolPtr(true),
+					Initramfs:         "dracut",
+				},
+			},
+		}), "boot_ref_query_question", "?ref=01JTPMREFTESTREFTEST0000"),
+		"debian_raid_swap_min_size_mib",
+		"4096",
+	))
+
+	assert.Contains(t, rendered, "swap_enabled='true'")
+	assert.Contains(t, rendered, "swap_size_mib='4096'")
+	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
+}
+
 func TestRenderedGeneratedLUKSTPMReenrollScriptReenrollsLUKSTPM(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "generated/static/luks-tpm-reenroll.sh", defaultRenderParams)
 
@@ -1119,6 +1156,41 @@ func TestPlainLUKSAutopartitionHelperIsEmbedded(t *testing.T) {
 	)
 }
 
+func TestRAIDLUKSInitialAutoRAIDFSHelperIsEmbedded(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "raid-luks-initial-auto-raid-fs.sh.slc"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, `{{define "static/raid-luks-initial-auto-raid-fs.sh" -}}`)
+	assert.Contains(t, script, "prepare_crypto_md")
+	assert.Contains(t, script, "crypto-root")
+	assert.Contains(t, script, "crypto_prepare_method")
+	assert.Contains(t, script, "crypto_check_setup")
+	assert.Contains(t, script, "crypto_setup no")
+	assert.Contains(t, script, `keysize="$((keysize / 2))"`)
+	assert.Contains(t, script, "touch skip_erase")
+	assertInOrder(t, script,
+		"prepare_crypto_md \"$raidnum\" root",
+		"crypto_setup no",
+		"configure_crypto_mapper \"$cryptdev\" \"$role\"",
+	)
+}
+
+func TestRenderedRAIDLUKSInitialAutoRAIDFSQuotesPassphrase(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "static/raid-luks-initial-auto-raid-fs.sh", map[string]interface{}{
+		"storage_encryption_cipher":     "aes-xts-plain64",
+		"storage_encryption_hash":       "sha512",
+		"storage_encryption_key_size":   "512",
+		"storage_encryption_passphrase": `pa"$(touch /tmp/shoelaces-pwn)'ss`,
+	})
+
+	quoted := `'pa"$(touch /tmp/shoelaces-pwn)'\''ss'`
+	assert.Contains(t, rendered, "if [ -z "+quoted+" ]; then")
+	assert.Contains(t, rendered, "db_set partman-crypto/passphrase "+quoted)
+	assert.Contains(t, rendered, "db_set partman-crypto/passphrase-again "+quoted)
+	assert.NotContains(t, rendered, `db_set partman-crypto/passphrase "pa"$(touch /tmp/shoelaces-pwn)'ss"`)
+}
+
 func TestRenderedDebianPreseedEncryptedLVMRecipe(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
 		Mode:        "lvm",
@@ -1157,18 +1229,89 @@ func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
 	assert.Contains(t, rendered, "device{ /dev/nvme0n1 }")
 	assert.Contains(t, rendered, "device{ /dev/nvme1n1 }")
+	assert.Equal(t, 2, strings.Count(rendered, "method{ efi } format{ }"))
+	assert.Contains(t, rendered, "wget -O /lib/partman/display.d/55initial_auto_raid_fs")
+	assert.Contains(t, rendered, "chmod 0755 /lib/partman/display.d/55initial_auto_raid_fs")
+	assert.NotContains(t, rendered, "/usr/lib/partman/display.d/55initial_auto_raid_fs")
+	assert.Contains(t, rendered, "raid-luks-initial-auto-raid-fs.sh")
 	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
-	assert.Contains(t, rendered, "1 2 0 crypto -")
-	assert.Contains(t, rendered, "method=crypto")
-	assert.Contains(t, rendered, "options/cipher=aes-xts-plain64")
-	assert.Contains(t, rendered, "options/keysize=512")
-	assert.Contains(t, rendered, "options/hash=sha512")
-	assert.Contains(t, rendered, "raidid=2")
-	assert.Contains(t, rendered, "raidid=3")
+	assert.Contains(t, rendered, "/dev/nvme0n1p2#/dev/nvme1n1p2")
+	assert.Contains(t, rendered, "1 2 0 crypto-root /")
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
+	assert.NotContains(t, rendered, "1 2 0 crypto -")
+	assert.NotContains(t, rendered, "method=crypto")
+	assert.NotContains(t, rendered, "options/cipher=aes-xts-plain64")
+	assert.NotContains(t, rendered, "options/keysize=512")
+	assert.NotContains(t, rendered, "options/hash=sha512")
 	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
+	assert.Contains(t, rendered, "d-i partman-basicfilesystems/no_swap boolean false")
+	assert.Contains(t, rendered, "/swapfile")
+	assert.Contains(t, rendered, "mkswap /swapfile")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
+	assert.Contains(t, rendered, "/target/etc/default/shoelaces-raid-esp-recovery")
+	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/nvme0n1p1 /dev/nvme1n1p1"`)
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "1 2 0 ext4 / \\\n        raidid=3")
+}
+
+func TestRenderedDebianPreseedEncryptedRAIDTPMUnlock(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(encryptedDebianParams(mappings.StorageConfig{
+		Mode: "raid",
+		RAID: mappings.RAIDConfig{
+			Level:   1,
+			Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+		},
+		Encryption: mappings.StorageEncryptionConfig{
+			TPM: mappings.StorageEncryptionTPMConfig{
+				Enabled:           boolPtr(true),
+				Device:            "auto",
+				PCRs:              "7",
+				RequireSHA256Bank: boolPtr(true),
+				Initramfs:         "dracut",
+			},
+		},
+	}), "boot_ref_query_question", "?ref=01JTPMREFTESTREFTEST0000"))
+
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
+	assert.Contains(t, rendered, "d-i partman-auto-raid/recipe string")
+	assert.Contains(t, rendered, "1 2 0 crypto-root /")
+	assert.Contains(t, rendered, `wget -O /tmp/shoelaces-luks-tpm-setup.sh "http://shoelaces.example.test:8081/configs/generated/debian/luks-tpm-setup.sh?ref=01JTPMREFTESTREFTEST0000"`)
+	assert.Contains(t, rendered, "chmod 0755 /tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "/tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "rm -f /tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
+	assert.NotContains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
+}
+
+func TestRAIDESPRecoverySetupChoosesInstalledLoader(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "shoelaces-raid-esp-recovery-setup"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, "efi_loader_path()")
+	assert.Contains(t, script, `printf '\EFI\debian\shimx64.efi'`)
+	assert.Contains(t, script, `printf '\EFI\debian\grubx64.efi'`)
+	assert.Contains(t, script, `fallback_loader="$(efi_loader_path)"`)
+	assert.Contains(t, script, `loader="$(lower "$fallback_loader")"`)
+	assert.Contains(t, script, `*"$uuid"*file\("$loader"\)*`)
+	assert.NotContains(t, script, "fallback_loader='\\EFI\\debian\\shimx64.efi'")
+	assert.NotContains(t, script, `file(\efi\debian\shimx64.efi)`)
+}
+
+func TestRAIDESPRecoverySetupUsesConfiguredESPParts(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "shoelaces-raid-esp-recovery-setup"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, "config_path=${SHOELACES_RAID_ESP_RECOVERY_CONFIG:-/etc/default/shoelaces-raid-esp-recovery}")
+	assert.Contains(t, script, `[ -f "$config_path" ] && . "$config_path"`)
+	assert.Contains(t, script, "for esp in $SHOELACES_RAID_ESP_PARTS; do")
+	assert.Contains(t, script, `esp_resolved="$(readlink -f "$esp" 2>/dev/null || echo "$esp")"`)
+	assert.Contains(t, script, `[ "$esp_resolved" != "$primary_part" ] || continue`)
+	assert.NotContains(t, script, "/dev/sd?1")
+	assert.NotContains(t, script, "/dev/vd?1")
+	assert.NotContains(t, script, "/dev/nvme*n1p1")
 }
 
 func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {
@@ -1219,13 +1362,13 @@ func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {
 			want: "preseed/debian storage_encryption_tpm_enabled requires storage_encryption_enabled to be true",
 		},
 		{
-			name: "tpm requires regular mode",
+			name: "tpm rejects lvm mode",
 			params: paramsWith(
 				paramsWith(encryptedDebianTPMParams(), "storage_mode", "lvm"),
 				"vg_name",
 				"vgluks",
 			),
-			want: "preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular",
+			want: "preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular or raid",
 		},
 		{
 			name: "tpm requires dracut",

@@ -1,0 +1,16 @@
+[Unit]
+Description=Configure mirrored RAID ESP boot recovery
+After=local-fs.target
+Wants=local-fs.target
+ConditionPathExists=/boot/efi/EFI
+StartLimitIntervalSec=30min
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/shoelaces-raid-esp-recovery-setup
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

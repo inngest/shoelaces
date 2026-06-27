@@ -72,7 +72,7 @@ d-i partman-crypto/erase_disks boolean false
 {{end}}
 
 {{define "preseed/debian/storage/early_command" -}}
-{{if or (eq .storage_wipe "true") (and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true")) -}}
+{{if or (eq .storage_wipe "true") (and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true")) (and (eq .storage_mode "raid") (eq .storage_encryption_enabled "true")) -}}
 # ---- Early storage setup ----
 # Runs inside d-i's busybox shell (/bin/ash) – that's intentional.
 {{if eq .storage_wipe "true" -}}
@@ -85,6 +85,9 @@ d-i partman/early_command string \
 {{if eq .storage_wipe "true"}}{{template "preseed/debian/storage/wipe/commands" .}}{{end}}{{if and (eq .storage_mode "regular") (eq .storage_encryption_enabled "true") -}}
     wget -O /bin/autopartition-crypto http://{{.baseURL}}/configs/static/plain-luks-autopartition-crypto.sh; \
     chmod 0755 /bin/autopartition-crypto; \
+{{end}}{{if and (eq .storage_mode "raid") (eq .storage_encryption_enabled "true") -}}
+    wget -O /lib/partman/display.d/55initial_auto_raid_fs "http://{{.baseURL}}/configs/static/raid-luks-initial-auto-raid-fs.sh{{.boot_ref_query_question}}"; \
+    chmod 0755 /lib/partman/display.d/55initial_auto_raid_fs; \
 {{end}}    true'
 {{end -}}
 {{end}}
@@ -343,6 +346,9 @@ d-i partman-auto/choose_recipe select uefi-lvm-luks
 {{end}}
 
 {{define "preseed/debian/storage/raid" -}}
+{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
+{{$raidSwapDevices := printf "%s#%s" .storage_raid_device_0_part4 .storage_raid_device_1_part4 -}}
+{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part5 .storage_raid_device_1_part5 -}}
 d-i anna/choose_modules string {{.debian_raid_partman_modules}}
 
 # Use mdadm RAID across the configured member disks.
@@ -390,15 +396,15 @@ d-i partman-auto/choose_recipe select uefi-raid1
 # Map RAID member partitions to installed filesystems.
 d-i partman-auto-raid/recipe string                                      \
     1 2 0 {{.debian_raid_boot_fstype}} {{.debian_raid_boot_mountpoint}} \
-        raidid=1                                                        \
+        {{$raidBootDevices}}                                            \
     .                                                                   \
 {{if eq .debian_raid_swap_enabled "true" -}}
     1 2 0 swap -                                                        \
-        raidid=2                                                        \
+        {{$raidSwapDevices}}                                            \
     .                                                                   \
 {{end -}}
     1 2 0 {{.debian_raid_root_fstype}} {{.debian_raid_root_mountpoint}} \
-        raidid=3                                                        \
+        {{$raidRootDevices}}                                            \
     .
 
 # Persist mdadm assembly and duplicate EFI boot files to both ESPs.
@@ -406,27 +412,48 @@ d-i preseed/late_command string \
   in-target mkdir -p /etc/mdadm; \
   mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \
   in-target update-initramfs -u; \
+  sed -i '/[[:space:]]\/boot\/efi[[:space:]]/ s/umask=0077/umask=0077,nofail/' /target/etc/fstab; \
+  mkdir -p /target/usr/local/sbin /target/etc/default /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants; \
+  printf '%s\n' 'SHOELACES_RAID_ESP_PARTS="{{.storage_raid_device_0_part1}} {{.storage_raid_device_1_part1}}"' > /target/etc/default/shoelaces-raid-esp-recovery; \
+  wget -O /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup "http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery-setup{{.boot_ref_query_question}}"; \
+  chmod 0755 /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup; \
+  wget -O /target/etc/systemd/system/shoelaces-raid-esp-recovery.service http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery.service; \
+  chroot /target /bin/systemctl enable shoelaces-raid-esp-recovery.service || \
+    ln -sf /etc/systemd/system/shoelaces-raid-esp-recovery.service /target/etc/systemd/system/multi-user.target.wants/shoelaces-raid-esp-recovery.service; \
   /bin/ash -c 'set -eux; \
-    mkdir -p /target/boot/efi /target/boot/efi-secondary; \
-    first=1; \
+    primary_efi=/target/boot/efi; \
+    secondary_efi=/target/boot/efi-secondary; \
+    mkdir -p "$primary_efi" "$secondary_efi"; \
+    chroot /target grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck --no-nvram || true; \
+    mkdir -p "$primary_efi/EFI/BOOT"; \
+    if [ ! -f "$primary_efi/EFI/BOOT/BOOTX64.EFI" ]; then \
+      if [ -f "$primary_efi/EFI/debian/shimx64.efi" ]; then cp -f "$primary_efi/EFI/debian/shimx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"; \
+      elif [ -f "$primary_efi/EFI/debian/grubx64.efi" ]; then cp -f "$primary_efi/EFI/debian/grubx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"; fi; \
+    fi; \
+    primary_part="$(awk '\''$2 == "/target/boot/efi" { print $1; exit }'\'' /proc/mounts)"; \
+    primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"; \
     for d in {{.storage_raid_devices}}; do \
       p="${d}1"; \
       case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
       [ -b "$p" ] || continue; \
-      if [ "$first" = 1 ]; then efi=/target/boot/efi; first=0; else efi=/target/boot/efi-secondary; mount "$p" "$efi" || continue; fi; \
-      chroot /target grub-install --target=x86_64-efi --efi-directory="${efi#/target}" --bootloader-id=debian --recheck --no-nvram || true; \
-      mkdir -p "$efi/EFI/BOOT"; \
-      cp -f "$efi/EFI/debian/grubx64.efi" "$efi/EFI/BOOT/BOOTX64.EFI" || true; \
-      [ "$efi" = /target/boot/efi ] || umount "$efi" || true; \
+      p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"; \
+      [ "$p_resolved" != "$primary_part" ] || continue; \
+      mount "$p" "$secondary_efi" || continue; \
+      rm -rf "$secondary_efi/EFI"; \
+      cp -R "$primary_efi/EFI" "$secondary_efi/"; \
+      umount "$secondary_efi" || true; \
     done'; \
 {{if ne .installer_late_commands ""}}{{template "preseed/debian/installer/late_commands" .}}{{end}}  true
 {{end}}
 
 {{define "preseed/debian/storage/raid/encrypted" -}}
+{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part2 .storage_raid_device_1_part2 -}}
+{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
 d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_raid_partman_modules}}
 
-# Use mdadm for redundancy, then put LUKS on the md devices for swap and root.
-# ESPs remain normal partitions, and /boot remains RAID1 but unencrypted.
+# Use mdadm for redundancy, then put LUKS directly on the root md device.
+# ESPs stay outside mdraid, /boot remains RAID1 but unencrypted, and swap is
+# created later as /swapfile inside encrypted root.
 d-i partman-auto/method string raid
 
 # Make sure any crypto/md leftovers can be replaced without prompts.
@@ -454,58 +481,74 @@ d-i partman-auto/expert_recipe string \
         method{ raid }                                                   \
         raidid{ 1 }                                                       \
     .                                                                    \
-{{if eq .debian_raid_swap_enabled "true" -}}
-    {{.debian_raid_swap_min_size_mib}} {{.debian_raid_swap_priority}} {{.debian_raid_swap_max_size_mib}} raid \
-        method{ raid }                                                   \
-        raidid{ 2 }                                                       \
-    .                                                                    \
-{{end -}}
     {{.debian_raid_root_min_size_mib}} {{.debian_raid_root_priority}} {{.debian_raid_root_max_size_mib}} raid \
         method{ raid }                                                   \
-        raidid{ 3 }                                                       \
+        raidid{ 2 }                                                       \
     .
 
 d-i partman-auto/choose_recipe select uefi-raid1-luks
 
 d-i partman-auto-raid/recipe string                                      \
     1 2 0 {{.debian_raid_boot_fstype}} {{.debian_raid_boot_mountpoint}} \
-        raidid=1                                                        \
+        {{$raidBootDevices}}                                            \
     .                                                                   \
-{{if eq .debian_raid_swap_enabled "true" -}}
-    1 2 0 crypto -                                                      \
-        method=crypto                                                   \
-        options/crypto_type=luks                                        \
-        options/cipher={{.storage_encryption_cipher}}                   \
-        options/keysize={{.storage_encryption_key_size}}                \
-        options/hash={{.storage_encryption_hash}}                       \
-        raidid=2                                                        \
-    .                                                                   \
-{{end -}}
-    1 2 0 crypto -                                                      \
-        method=crypto                                                   \
-        options/crypto_type=luks                                        \
-        options/cipher={{.storage_encryption_cipher}}                   \
-        options/keysize={{.storage_encryption_key_size}}                \
-        options/hash={{.storage_encryption_hash}}                       \
-        raidid=3                                                        \
+    1 2 0 crypto-root /                                                 \
+        {{$raidRootDevices}}                                            \
     .
+
+{{if eq .debian_raid_swap_enabled "true" -}}
+# Swap is created later as /swapfile on the encrypted root filesystem. The
+# partitioner only sees partitions, so pre-answer its no-swap-partition prompt.
+d-i partman-basicfilesystems/no_swap boolean false
+{{end -}}
 
 d-i preseed/late_command string \
   in-target mkdir -p /etc/mdadm; \
   mdadm --detail --scan > /target/etc/mdadm/mdadm.conf; \
   in-target update-initramfs -u; \
+  sed -i '/[[:space:]]\/boot\/efi[[:space:]]/ s/umask=0077/umask=0077,nofail/' /target/etc/fstab; \
+  mkdir -p /target/usr/local/sbin /target/etc/default /target/etc/systemd/system /target/etc/systemd/system/multi-user.target.wants; \
+  printf '%s\n' 'SHOELACES_RAID_ESP_PARTS="{{.storage_raid_device_0_part1}} {{.storage_raid_device_1_part1}}"' > /target/etc/default/shoelaces-raid-esp-recovery; \
+  wget -O /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup "http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery-setup{{.boot_ref_query_question}}"; \
+  chmod 0755 /target/usr/local/sbin/shoelaces-raid-esp-recovery-setup; \
+  wget -O /target/etc/systemd/system/shoelaces-raid-esp-recovery.service http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery.service; \
+  chroot /target /bin/systemctl enable shoelaces-raid-esp-recovery.service || \
+    ln -sf /etc/systemd/system/shoelaces-raid-esp-recovery.service /target/etc/systemd/system/multi-user.target.wants/shoelaces-raid-esp-recovery.service; \
+{{if eq .storage_encryption_tpm_enabled "true" -}}
+  wget -O /tmp/shoelaces-luks-tpm-setup.sh "http://{{.baseURL}}/configs/generated/debian/luks-tpm-setup.sh{{.boot_ref_query_question}}"; \
+  chmod 0755 /tmp/shoelaces-luks-tpm-setup.sh; \
+  /tmp/shoelaces-luks-tpm-setup.sh; \
+  rm -f /tmp/shoelaces-luks-tpm-setup.sh; \
+{{else if eq .debian_raid_swap_enabled "true" -}}
+  if ! chroot /target /usr/bin/fallocate -l {{.debian_raid_swap_min_size_mib}}M /swapfile; then \
+    dd if=/dev/zero of=/target/swapfile bs=1M count={{.debian_raid_swap_min_size_mib}}; \
+  fi; \
+  chmod 0600 /target/swapfile; \
+  chroot /target /sbin/mkswap /swapfile; \
+  printf '/swapfile none swap sw 0 0\n' >> /target/etc/fstab; \
+{{end -}}
   /bin/ash -c 'set -eux; \
-    mkdir -p /target/boot/efi /target/boot/efi-secondary; \
-    first=1; \
+    primary_efi=/target/boot/efi; \
+    secondary_efi=/target/boot/efi-secondary; \
+    mkdir -p "$primary_efi" "$secondary_efi"; \
+    chroot /target grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck --no-nvram || true; \
+    mkdir -p "$primary_efi/EFI/BOOT"; \
+    if [ ! -f "$primary_efi/EFI/BOOT/BOOTX64.EFI" ]; then \
+      if [ -f "$primary_efi/EFI/debian/shimx64.efi" ]; then cp -f "$primary_efi/EFI/debian/shimx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"; \
+      elif [ -f "$primary_efi/EFI/debian/grubx64.efi" ]; then cp -f "$primary_efi/EFI/debian/grubx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"; fi; \
+    fi; \
+    primary_part="$(awk '\''$2 == "/target/boot/efi" { print $1; exit }'\'' /proc/mounts)"; \
+    primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"; \
     for d in {{.storage_raid_devices}}; do \
       p="${d}1"; \
       case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
       [ -b "$p" ] || continue; \
-      if [ "$first" = 1 ]; then efi=/target/boot/efi; first=0; else efi=/target/boot/efi-secondary; mount "$p" "$efi" || continue; fi; \
-      chroot /target grub-install --target=x86_64-efi --efi-directory="${efi#/target}" --bootloader-id=debian --recheck --no-nvram || true; \
-      mkdir -p "$efi/EFI/BOOT"; \
-      cp -f "$efi/EFI/debian/grubx64.efi" "$efi/EFI/BOOT/BOOTX64.EFI" || true; \
-      [ "$efi" = /target/boot/efi ] || umount "$efi" || true; \
+      p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"; \
+      [ "$p_resolved" != "$primary_part" ] || continue; \
+      mount "$p" "$secondary_efi" || continue; \
+      rm -rf "$secondary_efi/EFI"; \
+      cp -R "$primary_efi/EFI" "$secondary_efi/"; \
+      umount "$secondary_efi" || true; \
     done'; \
 {{if ne .installer_late_commands ""}}{{template "preseed/debian/installer/late_commands" .}}{{end}}  true
 {{end}}

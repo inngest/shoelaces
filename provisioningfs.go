@@ -19,7 +19,7 @@ import (
 	"io/fs"
 )
 
-//go:embed configs/data-dir/cloud-config configs/data-dir/generated configs/data-dir/ipxe configs/data-dir/kickstart configs/data-dir/preseed configs/data-dir/provisioning configs/data-dir/static/plain-luks-autopartition-crypto.sh configs/data-dir/static/provisioning-default.txt
+//go:embed configs/data-dir/cloud-config configs/data-dir/generated configs/data-dir/ipxe configs/data-dir/kickstart configs/data-dir/preseed configs/data-dir/provisioning configs/data-dir/static/plain-luks-autopartition-crypto.sh configs/data-dir/static/provisioning-default.txt configs/data-dir/static/raid-luks-initial-auto-raid-fs.sh.slc configs/data-dir/static/shoelaces-raid-esp-recovery-setup configs/data-dir/static/shoelaces-raid-esp-recovery.service
 var embeddedProvisioningDefaults embed.FS
 
 // ProvisioningDefaultsFS returns the embedded generic provisioning defaults.
