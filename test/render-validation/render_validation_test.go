@@ -741,21 +741,22 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i mdadm/boot_degraded boolean false")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1")
 	assert.Contains(t, rendered, "d-i partman-auto-raid/recipe string")
+	assert.Equal(t, 1, strings.Count(rendered, "method{ efi } format{ }"))
+	assert.NotContains(t, rendered, "device{ /dev/nvme1n1 }")
 
 	assertInOrder(t, rendered,
 		"device{ /dev/nvme0n1 }",
 		"mountpoint{ /boot/efi }",
-		"device{ /dev/nvme1n1 }",
 		"1024 1024 1024 raid",
 		"method{ raid }",
 		"raidid{ 1 }",
 	)
 	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
-	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
+	assert.Contains(t, rendered, "/dev/nvme0n1p2#/dev/nvme1n1p2")
 	assert.Contains(t, rendered, "1 2 0 swap -")
-	assert.Contains(t, rendered, "/dev/nvme0n1p4#/dev/nvme1n1p4")
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
 	assert.Contains(t, rendered, "1 2 0 ext4 /")
-	assert.Contains(t, rendered, "/dev/nvme0n1p5#/dev/nvme1n1p5")
+	assert.Contains(t, rendered, "/dev/nvme0n1p4#/dev/nvme1n1p4")
 
 	assert.NotContains(t, rendered, "partman-lvm")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
@@ -803,7 +804,7 @@ func TestRenderedDebianPreseedRAIDLateCommandHandlesStableDiskSymlinks(t *testin
 	assert.Contains(t, rendered, `[ "$p_resolved" != "$primary_part" ] || continue`)
 	assert.Contains(t, rendered, `SHOELACES_RAID_ESP_PARTS="/dev/disk/by-path/pci-0000:00:17.0-ata-1-part1 /dev/disk/by-path/pci-0000:00:17.0-ata-2-part1"`)
 	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part3#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part3")
-	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part5#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part5")
+	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part4#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part4")
 }
 
 func TestRenderedDebianPreseedRAIDRecipeAppliesStructuredFilesystems(t *testing.T) {
@@ -872,7 +873,7 @@ func TestRenderedDebianPreseedRAIDRecipeAcceptsExplicitDeviceList(t *testing.T) 
 
 	assert.Contains(t, rendered, "d-i partman-auto/disk string /dev/vda /dev/vdb")
 	assert.Contains(t, rendered, "device{ /dev/vda }")
-	assert.Contains(t, rendered, "device{ /dev/vdb }")
+	assert.NotContains(t, rendered, "device{ /dev/vdb }")
 	assert.Contains(t, rendered, "d-i mdadm/boot_degraded boolean true")
 }
 
@@ -1228,18 +1229,18 @@ func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-auto/method string raid")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
 	assert.Contains(t, rendered, "device{ /dev/nvme0n1 }")
-	assert.Contains(t, rendered, "device{ /dev/nvme1n1 }")
-	assert.Equal(t, 2, strings.Count(rendered, "method{ efi } format{ }"))
+	assert.NotContains(t, rendered, "device{ /dev/nvme1n1 }")
+	assert.Equal(t, 1, strings.Count(rendered, "method{ efi } format{ }"))
 	assert.Contains(t, rendered, "wget -O /lib/partman/display.d/55initial_auto_raid_fs")
 	assert.Contains(t, rendered, "chmod 0755 /lib/partman/display.d/55initial_auto_raid_fs")
 	assert.NotContains(t, rendered, "/usr/lib/partman/display.d/55initial_auto_raid_fs")
 	assert.Contains(t, rendered, "raid-luks-initial-auto-raid-fs.sh")
 	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
-	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
+	assert.Contains(t, rendered, "/dev/nvme0n1p2#/dev/nvme1n1p2")
 	assert.Contains(t, rendered, "1 2 0 crypto-root /")
-	assert.Contains(t, rendered, "/dev/nvme0n1p4#/dev/nvme1n1p4")
-	assert.NotRegexp(t, `1 2 0 ext4 /boot\s+\\\s+/dev/nvme0n1p2#/dev/nvme1n1p2`, rendered)
-	assert.NotRegexp(t, `1 2 0 crypto-root /\s+\\\s+/dev/nvme0n1p3#/dev/nvme1n1p3`, rendered)
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
+	assert.NotRegexp(t, `1 2 0 ext4 /boot\s+\\\s+/dev/nvme0n1p3#/dev/nvme1n1p3`, rendered)
+	assert.NotRegexp(t, `1 2 0 crypto-root /\s+\\\s+/dev/nvme0n1p4#/dev/nvme1n1p4`, rendered)
 	assert.NotContains(t, rendered, "1 2 0 crypto -")
 	assert.NotContains(t, rendered, "method=crypto")
 	assert.NotContains(t, rendered, "options/cipher=aes-xts-plain64")
@@ -1278,8 +1279,8 @@ func TestRenderedDebianPreseedEncryptedRAIDTPMUnlock(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
 	assert.Contains(t, rendered, "d-i partman-auto-raid/recipe string")
 	assert.Contains(t, rendered, "1 2 0 crypto-root /")
-	assert.Contains(t, rendered, "/dev/nvme0n1p4#/dev/nvme1n1p4")
-	assert.NotRegexp(t, `1 2 0 crypto-root /\s+\\\s+/dev/nvme0n1p3#/dev/nvme1n1p3`, rendered)
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
+	assert.NotRegexp(t, `1 2 0 crypto-root /\s+\\\s+/dev/nvme0n1p4#/dev/nvme1n1p4`, rendered)
 	assert.Contains(t, rendered, `wget -O /tmp/shoelaces-luks-tpm-setup.sh "http://shoelaces.example.test:8081/configs/generated/debian/luks-tpm-setup.sh?ref=01JTPMREFTESTREFTEST0000"`)
 	assert.Contains(t, rendered, "chmod 0755 /tmp/shoelaces-luks-tpm-setup.sh")
 	assert.Contains(t, rendered, "/tmp/shoelaces-luks-tpm-setup.sh")

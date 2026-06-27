@@ -346,9 +346,9 @@ d-i partman-auto/choose_recipe select uefi-lvm-luks
 {{end}}
 
 {{define "preseed/debian/storage/raid" -}}
-{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
-{{$raidSwapDevices := printf "%s#%s" .storage_raid_device_0_part4 .storage_raid_device_1_part4 -}}
-{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part5 .storage_raid_device_1_part5 -}}
+{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part2 .storage_raid_device_1_part2 -}}
+{{$raidSwapDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
+{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part4 .storage_raid_device_1_part4 -}}
 d-i anna/choose_modules string {{.debian_raid_partman_modules}}
 
 # Use mdadm RAID across the configured member disks.
@@ -361,6 +361,8 @@ d-i partman-md/confirm_nooverwrite boolean true
 d-i mdadm/boot_degraded boolean {{.storage_raid_boot_degraded}}
 
 # Expert recipe: ESP on each disk, then RAID members for /boot, swap, and root.
+# partman-auto's RAID method applies this single ESP stanza to both member disks.
+# Rendering a second ESP stanza creates an unused p2 and shifts the RAID members.
 # The ESPs are normal FAT partitions because UEFI firmware does not assemble mdraid.
 d-i partman-auto/expert_recipe string \
   uefi-raid1 ::                                                           \
@@ -369,11 +371,6 @@ d-i partman-auto/expert_recipe string \
         method{ efi } format{ }                                          \
         device{ {{.storage_raid_device_0}} }                             \
         mountpoint{ {{.debian_raid_esp_mountpoint}} }                    \
-    .                                                                    \
-    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
-        $primary{ } $iflabel{ gpt }                                      \
-        method{ efi } format{ }                                          \
-        device{ {{.storage_raid_device_1}} }                             \
     .                                                                    \
     {{.debian_raid_boot_min_size_mib}} {{.debian_raid_boot_priority}} {{.debian_raid_boot_max_size_mib}} raid \
         $primary{ } $iflabel{ gpt }                                      \
@@ -447,8 +444,8 @@ d-i preseed/late_command string \
 {{end}}
 
 {{define "preseed/debian/storage/raid/encrypted" -}}
-{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
-{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part4 .storage_raid_device_1_part4 -}}
+{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part2 .storage_raid_device_1_part2 -}}
+{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
 d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_raid_partman_modules}}
 
 # Use mdadm for redundancy, then put LUKS directly on the root md device.
@@ -463,6 +460,8 @@ d-i partman-md/confirm boolean true
 d-i partman-md/confirm_nooverwrite boolean true
 d-i mdadm/boot_degraded boolean {{.storage_raid_boot_degraded}}
 
+# As above, one ESP stanza is intentional: RAID mode applies it to both disks.
+# A second ESP stanza becomes an unused p2 and shifts /boot and root upward.
 d-i partman-auto/expert_recipe string \
   uefi-raid1-luks ::                                                      \
     {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
@@ -470,11 +469,6 @@ d-i partman-auto/expert_recipe string \
         method{ efi } format{ }                                          \
         device{ {{.storage_raid_device_0}} }                             \
         mountpoint{ {{.debian_raid_esp_mountpoint}} }                    \
-    .                                                                    \
-    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
-        $primary{ } $iflabel{ gpt }                                      \
-        method{ efi } format{ }                                          \
-        device{ {{.storage_raid_device_1}} }                             \
     .                                                                    \
     {{.debian_raid_boot_min_size_mib}} {{.debian_raid_boot_priority}} {{.debian_raid_boot_max_size_mib}} raid \
         $primary{ } $iflabel{ gpt }                                      \
