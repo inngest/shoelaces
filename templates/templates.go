@@ -516,8 +516,10 @@ func validateDebianTPMPreseedParams(paramMap map[string]interface{}, encryptionE
 	if encryptionEnabled != "true" {
 		return errors.New("preseed/debian storage_encryption_tpm_enabled requires storage_encryption_enabled to be true")
 	}
-	if strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"])) != "regular" {
-		return errors.New("preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular")
+	switch mode := strings.TrimSpace(fmt.Sprint(paramMap["storage_mode"])); mode {
+	case "regular", "raid":
+	default:
+		return errors.New("preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular or raid")
 	}
 	if strings.TrimSpace(fmt.Sprint(paramMap["storage_encryption_tpm_initramfs"])) != "dracut" {
 		return errors.New(`preseed/debian storage_encryption_tpm_initramfs must be "dracut" when TPM unlock is enabled`)

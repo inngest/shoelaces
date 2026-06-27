@@ -510,7 +510,12 @@ d-i preseed/late_command string \
   wget -O /target/etc/systemd/system/shoelaces-raid-esp-recovery.service http://{{.baseURL}}/configs/static/shoelaces-raid-esp-recovery.service; \
   chroot /target /bin/systemctl enable shoelaces-raid-esp-recovery.service || \
     ln -sf /etc/systemd/system/shoelaces-raid-esp-recovery.service /target/etc/systemd/system/multi-user.target.wants/shoelaces-raid-esp-recovery.service; \
-{{if eq .debian_raid_swap_enabled "true" -}}
+{{if eq .storage_encryption_tpm_enabled "true" -}}
+  wget -O /tmp/shoelaces-luks-tpm-setup.sh "http://{{.baseURL}}/configs/generated/debian/luks-tpm-setup.sh{{.boot_ref_query_question}}"; \
+  chmod 0755 /tmp/shoelaces-luks-tpm-setup.sh; \
+  /tmp/shoelaces-luks-tpm-setup.sh; \
+  rm -f /tmp/shoelaces-luks-tpm-setup.sh; \
+{{else if eq .debian_raid_swap_enabled "true" -}}
   if ! chroot /target /usr/bin/fallocate -l {{.debian_raid_swap_min_size_mib}}M /swapfile; then \
     dd if=/dev/zero of=/target/swapfile bs=1M count={{.debian_raid_swap_min_size_mib}}; \
   fi; \

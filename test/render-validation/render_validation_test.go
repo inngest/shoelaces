@@ -979,6 +979,33 @@ func TestRenderedDebianLUKSTPMHelperUsesTwoPhaseEnrollment(t *testing.T) {
 	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
 }
 
+func TestRenderedDebianLUKSTPMHelperUsesRAIDSwapParams(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "generated/debian/luks-tpm-setup.sh", paramsWith(
+		paramsWith(encryptedDebianParams(mappings.StorageConfig{
+			Mode: "raid",
+			RAID: mappings.RAIDConfig{
+				Level:   1,
+				Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+			},
+			Encryption: mappings.StorageEncryptionConfig{
+				TPM: mappings.StorageEncryptionTPMConfig{
+					Enabled:           boolPtr(true),
+					Device:            "auto",
+					PCRs:              "7",
+					RequireSHA256Bank: boolPtr(true),
+					Initramfs:         "dracut",
+				},
+			},
+		}), "boot_ref_query_question", "?ref=01JTPMREFTESTREFTEST0000"),
+		"debian_raid_swap_min_size_mib",
+		"4096",
+	))
+
+	assert.Contains(t, rendered, "swap_enabled='true'")
+	assert.Contains(t, rendered, "swap_size_mib='4096'")
+	assert.Contains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
+}
+
 func TestRenderedGeneratedLUKSTPMReenrollScriptReenrollsLUKSTPM(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "generated/static/luks-tpm-reenroll.sh", defaultRenderParams)
 
@@ -1218,6 +1245,35 @@ func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
 	assert.NotContains(t, rendered, "1 2 0 ext4 / \\\n        raidid=3")
 }
 
+func TestRenderedDebianPreseedEncryptedRAIDTPMUnlock(t *testing.T) {
+	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", paramsWith(encryptedDebianParams(mappings.StorageConfig{
+		Mode: "raid",
+		RAID: mappings.RAIDConfig{
+			Level:   1,
+			Devices: []string{"/dev/nvme0n1", "/dev/nvme1n1"},
+		},
+		Encryption: mappings.StorageEncryptionConfig{
+			TPM: mappings.StorageEncryptionTPMConfig{
+				Enabled:           boolPtr(true),
+				Device:            "auto",
+				PCRs:              "7",
+				RequireSHA256Bank: boolPtr(true),
+				Initramfs:         "dracut",
+			},
+		},
+	}), "boot_ref_query_question", "?ref=01JTPMREFTESTREFTEST0000"))
+
+	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
+	assert.Contains(t, rendered, "d-i partman-auto-raid/recipe string")
+	assert.Contains(t, rendered, "1 2 0 crypto-root /")
+	assert.Contains(t, rendered, `wget -O /tmp/shoelaces-luks-tpm-setup.sh "http://shoelaces.example.test:8081/configs/generated/debian/luks-tpm-setup.sh?ref=01JTPMREFTESTREFTEST0000"`)
+	assert.Contains(t, rendered, "chmod 0755 /tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "/tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "rm -f /tmp/shoelaces-luks-tpm-setup.sh")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
+	assert.NotContains(t, rendered, "chroot /target /sbin/mkswap /swapfile")
+}
+
 func TestRAIDESPRecoverySetupChoosesInstalledLoader(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "shoelaces-raid-esp-recovery-setup"))
 	require.NoError(t, err)
@@ -1281,13 +1337,13 @@ func TestRenderedDebianPreseedRejectsInvalidEncryptionParams(t *testing.T) {
 			want: "preseed/debian storage_encryption_tpm_enabled requires storage_encryption_enabled to be true",
 		},
 		{
-			name: "tpm requires regular mode",
+			name: "tpm rejects lvm mode",
 			params: paramsWith(
 				paramsWith(encryptedDebianTPMParams(), "storage_mode", "lvm"),
 				"vg_name",
 				"vgluks",
 			),
-			want: "preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular",
+			want: "preseed/debian storage_encryption_tpm_enabled is supported only when storage_mode is regular or raid",
 		},
 		{
 			name: "tpm requires dracut",

@@ -4,8 +4,13 @@ set -eux
 
 base_url={{printf "http://%s" .baseURL | shquote}}
 boot_ref_query={{.boot_ref_query_question | shquote}}
+{{if eq .storage_mode "raid" -}}
+swap_enabled={{.debian_raid_swap_enabled | shquote}}
+swap_size_mib={{.debian_raid_swap_min_size_mib | shquote}}
+{{else -}}
 swap_enabled={{.debian_regular_swap_enabled | shquote}}
 swap_size_mib={{.debian_regular_swap_min_size_mib | shquote}}
+{{end -}}
 tpm_device={{.storage_encryption_tpm_device | shquote}}
 installer_tpm_pcrs=""
 require_sha256_bank={{.storage_encryption_tpm_require_sha256_bank | shquote}}

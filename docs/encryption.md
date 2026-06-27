@@ -3,8 +3,9 @@
 Shoelaces supports structured Debian LUKS installs through
 `storage.encryption`. Embedded encryption rendering is Debian-only; other
 installer families should use custom templates until they have native support.
-The regular plain-LUKS and TPM unlock paths are currently verified on Debian 13;
-other OS installers have not been tested for this behavior yet.
+The regular plain-LUKS and regular TPM unlock paths are currently verified on
+Debian 13; RAID TPM enrollment is supported but should be validated on target
+hardware. Other OS installers have not been tested for this behavior yet.
 
 ## Basic LUKS
 
@@ -31,8 +32,13 @@ partition. `/` is formatted directly on the opened mapper, and swap is created
 as `/swapfile` inside encrypted root. Debian `raid` encrypted storage creates
 an unencrypted RAID1 `/boot`, opens LUKS directly on the RAID1 root md device,
 and also uses `/swapfile` inside encrypted root. Debian `lvm` encrypted storage
-keeps swap as an encrypted logical volume. TPM unlock currently applies only to
-`regular`.
+keeps swap as an encrypted logical volume.
+
+TPM unlock is implemented natively for `regular` and `raid` encrypted Debian
+layouts. The `regular` path is verified on Debian 13; the `raid` path uses the
+same two-phase enrollment helper against the RAID-backed LUKS mapper and should
+be validated on target hardware before broad rollout. `lvm` remains rejected
+for TPM unlock.
 
 ## TPM Unlock
 
