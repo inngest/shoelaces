@@ -86,8 +86,8 @@ d-i partman/early_command string \
     wget -O /bin/autopartition-crypto http://{{.baseURL}}/configs/static/plain-luks-autopartition-crypto.sh; \
     chmod 0755 /bin/autopartition-crypto; \
 {{end}}{{if and (eq .storage_mode "raid") (eq .storage_encryption_enabled "true") -}}
-    wget -O /usr/lib/partman/display.d/55initial_auto_raid_fs "http://{{.baseURL}}/configs/static/raid-luks-initial-auto-raid-fs.sh{{.boot_ref_query_question}}"; \
-    chmod 0755 /usr/lib/partman/display.d/55initial_auto_raid_fs; \
+    wget -O /lib/partman/display.d/55initial_auto_raid_fs "http://{{.baseURL}}/configs/static/raid-luks-initial-auto-raid-fs.sh{{.boot_ref_query_question}}"; \
+    chmod 0755 /lib/partman/display.d/55initial_auto_raid_fs; \
 {{end}}    true'
 {{end -}}
 {{end}}
