@@ -796,6 +796,9 @@ func TestRenderedDebianPreseedRAIDLateCommandHandlesStableDiskSymlinks(t *testin
 
 	assert.Contains(t, rendered, "for d in /dev/disk/by-path/pci-0000:00:17.0-ata-1 /dev/disk/by-path/pci-0000:00:17.0-ata-2; do")
 	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
+	assert.Contains(t, rendered, `primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"`)
+	assert.Contains(t, rendered, `p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"`)
+	assert.Contains(t, rendered, `[ "$p_resolved" != "$primary_part" ] || continue`)
 	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part3#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part3")
 	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part5#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part5")
 }

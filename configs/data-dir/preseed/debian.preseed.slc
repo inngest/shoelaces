@@ -430,11 +430,13 @@ d-i preseed/late_command string \
       elif [ -f "$primary_efi/EFI/debian/grubx64.efi" ]; then cp -f "$primary_efi/EFI/debian/grubx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"; fi; \
     fi; \
     primary_part="$(awk '\''$2 == "/target/boot/efi" { print $1; exit }'\'' /proc/mounts)"; \
+    primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"; \
     for d in {{.storage_raid_devices}}; do \
       p="${d}1"; \
       case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
       [ -b "$p" ] || continue; \
-      [ "$p" != "$primary_part" ] || continue; \
+      p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"; \
+      [ "$p_resolved" != "$primary_part" ] || continue; \
       mount "$p" "$secondary_efi" || continue; \
       rm -rf "$secondary_efi/EFI"; \
       cp -R "$primary_efi/EFI" "$secondary_efi/"; \
@@ -534,11 +536,13 @@ d-i preseed/late_command string \
       elif [ -f "$primary_efi/EFI/debian/grubx64.efi" ]; then cp -f "$primary_efi/EFI/debian/grubx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"; fi; \
     fi; \
     primary_part="$(awk '\''$2 == "/target/boot/efi" { print $1; exit }'\'' /proc/mounts)"; \
+    primary_part="$(readlink -f "$primary_part" 2>/dev/null || echo "$primary_part")"; \
     for d in {{.storage_raid_devices}}; do \
       p="${d}1"; \
       case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac; \
       [ -b "$p" ] || continue; \
-      [ "$p" != "$primary_part" ] || continue; \
+      p_resolved="$(readlink -f "$p" 2>/dev/null || echo "$p")"; \
+      [ "$p_resolved" != "$primary_part" ] || continue; \
       mount "$p" "$secondary_efi" || continue; \
       rm -rf "$secondary_efi/EFI"; \
       cp -R "$primary_efi/EFI" "$secondary_efi/"; \
