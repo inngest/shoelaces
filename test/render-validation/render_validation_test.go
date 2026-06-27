@@ -751,11 +751,11 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 		"raidid{ 1 }",
 	)
 	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
-	assert.Contains(t, rendered, "raidid=1")
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
 	assert.Contains(t, rendered, "1 2 0 swap -")
-	assert.Contains(t, rendered, "raidid=2")
+	assert.Contains(t, rendered, "/dev/nvme0n1p4#/dev/nvme1n1p4")
 	assert.Contains(t, rendered, "1 2 0 ext4 /")
-	assert.Contains(t, rendered, "raidid=3")
+	assert.Contains(t, rendered, "/dev/nvme0n1p5#/dev/nvme1n1p5")
 
 	assert.NotContains(t, rendered, "partman-lvm")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
@@ -768,6 +768,8 @@ func TestRenderedDebianPreseedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i preseed/late_command string")
 	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
 	assert.Contains(t, rendered, "in-target update-initramfs -u")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery.service")
 	assert.Contains(t, rendered, "for d in /dev/nvme0n1 /dev/nvme1n1; do")
 	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
@@ -794,6 +796,8 @@ func TestRenderedDebianPreseedRAIDLateCommandHandlesStableDiskSymlinks(t *testin
 
 	assert.Contains(t, rendered, "for d in /dev/disk/by-path/pci-0000:00:17.0-ata-1 /dev/disk/by-path/pci-0000:00:17.0-ata-2; do")
 	assert.Contains(t, rendered, `case "$d" in /dev/disk/*) p="${d}-part1";; *[0-9]) p="${d}p1";; esac`)
+	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part3#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part3")
+	assert.Contains(t, rendered, "/dev/disk/by-path/pci-0000:00:17.0-ata-1-part5#/dev/disk/by-path/pci-0000:00:17.0-ata-2-part5")
 }
 
 func TestRenderedDebianPreseedRAIDRecipeAppliesStructuredFilesystems(t *testing.T) {
@@ -1119,6 +1123,26 @@ func TestPlainLUKSAutopartitionHelperIsEmbedded(t *testing.T) {
 	)
 }
 
+func TestRAIDLUKSInitialAutoRAIDFSHelperIsEmbedded(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "configs", "data-dir", "static", "raid-luks-initial-auto-raid-fs.sh.slc"))
+	require.NoError(t, err)
+	script := string(content)
+
+	assert.Contains(t, script, `{{define "static/raid-luks-initial-auto-raid-fs.sh" -}}`)
+	assert.Contains(t, script, "prepare_crypto_md")
+	assert.Contains(t, script, "crypto-root")
+	assert.Contains(t, script, "crypto_prepare_method")
+	assert.Contains(t, script, "crypto_check_setup")
+	assert.Contains(t, script, "crypto_setup no")
+	assert.Contains(t, script, `keysize="$((keysize / 2))"`)
+	assert.Contains(t, script, "touch skip_erase")
+	assertInOrder(t, script,
+		"prepare_crypto_md \"$raidnum\" root",
+		"crypto_setup no",
+		"configure_crypto_mapper \"$cryptdev\" \"$role\"",
+	)
+}
+
 func TestRenderedDebianPreseedEncryptedLVMRecipe(t *testing.T) {
 	rendered := renderTemplate(t, newRenderer(t), "preseed/debian", encryptedDebianParams(mappings.StorageConfig{
 		Mode:        "lvm",
@@ -1156,16 +1180,23 @@ func TestRenderedDebianPreseedEncryptedRAIDRecipe(t *testing.T) {
 	assert.Contains(t, rendered, "d-i partman-auto/method string raid")
 	assert.Contains(t, rendered, "d-i partman-auto/choose_recipe select uefi-raid1-luks")
 	assert.Contains(t, rendered, "device{ /dev/nvme0n1 }")
-	assert.Contains(t, rendered, "device{ /dev/nvme1n1 }")
+	assert.NotContains(t, rendered, "device{ /dev/nvme1n1 }")
+	assert.Contains(t, rendered, "wget -O /usr/lib/partman/display.d/55initial_auto_raid_fs")
+	assert.Contains(t, rendered, "raid-luks-initial-auto-raid-fs.sh")
 	assert.Contains(t, rendered, "1 2 0 ext4 /boot")
-	assert.Contains(t, rendered, "1 2 0 crypto -")
-	assert.Contains(t, rendered, "method=crypto")
-	assert.Contains(t, rendered, "options/cipher=aes-xts-plain64")
-	assert.Contains(t, rendered, "options/keysize=512")
-	assert.Contains(t, rendered, "options/hash=sha512")
-	assert.Contains(t, rendered, "raidid=2")
-	assert.Contains(t, rendered, "raidid=3")
+	assert.Contains(t, rendered, "/dev/nvme0n1p2#/dev/nvme1n1p2")
+	assert.Contains(t, rendered, "1 2 0 crypto-root /")
+	assert.Contains(t, rendered, "/dev/nvme0n1p3#/dev/nvme1n1p3")
+	assert.NotContains(t, rendered, "1 2 0 crypto -")
+	assert.NotContains(t, rendered, "method=crypto")
+	assert.NotContains(t, rendered, "options/cipher=aes-xts-plain64")
+	assert.NotContains(t, rendered, "options/keysize=512")
+	assert.NotContains(t, rendered, "options/hash=sha512")
 	assert.Contains(t, rendered, "mdadm --detail --scan > /target/etc/mdadm/mdadm.conf")
+	assert.Contains(t, rendered, "d-i partman-basicfilesystems/no_swap boolean false")
+	assert.Contains(t, rendered, "/swapfile")
+	assert.Contains(t, rendered, "mkswap /swapfile")
+	assert.Contains(t, rendered, "shoelaces-raid-esp-recovery-setup")
 	assert.Contains(t, rendered, "grub-install --target=x86_64-efi")
 	assert.NotContains(t, rendered, "partman-auto-lvm/new_vg_name")
 	assert.NotContains(t, rendered, "1 2 0 ext4 / \\\n        raidid=3")

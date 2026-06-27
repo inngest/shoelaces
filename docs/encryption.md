@@ -28,8 +28,11 @@ Optional LUKS parameters:
 
 Debian `regular` encrypted storage creates ESP, `/boot`, and one LUKS root
 partition. `/` is formatted directly on the opened mapper, and swap is created
-as `/swapfile` inside encrypted root. Debian `lvm` and `raid` encrypted modes
-remain supported, but TPM unlock currently applies only to `regular`.
+as `/swapfile` inside encrypted root. Debian `raid` encrypted storage creates
+an unencrypted RAID1 `/boot`, opens LUKS directly on the RAID1 root md device,
+and also uses `/swapfile` inside encrypted root. Debian `lvm` encrypted storage
+keeps swap as an encrypted logical volume. TPM unlock currently applies only to
+`regular`.
 
 ## TPM Unlock
 

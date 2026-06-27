@@ -2,5 +2,8 @@
 <a href="bootstrap.sh">bootstrap.sh</a>
 <a href="plain-luks-autopartition-crypto.sh">plain-luks-autopartition-crypto.sh</a>
 <a href="provisioning-default.txt">provisioning-default.txt</a>
+<a href="raid-luks-initial-auto-raid-fs.sh.slc">raid-luks-initial-auto-raid-fs.sh.slc</a>
 <a href="rc.local-bootstrap">rc.local-bootstrap</a>
+<a href="shoelaces-raid-esp-recovery-setup">shoelaces-raid-esp-recovery-setup</a>
+<a href="shoelaces-raid-esp-recovery.service">shoelaces-raid-esp-recovery.service</a>
 </pre>

@@ -1,0 +1,291 @@
+{{define "static/raid-luks-initial-auto-raid-fs.sh" -}}
+#!/bin/sh
+
+# Debian's partman-auto-raid filesystem pass can assign normal filesystems,
+# swap, LVM PVs, and crypto-lvm PVs to newly created md arrays. It does not
+# know how to make an md array a direct LUKS-backed root filesystem. This hook
+# keeps Debian's mdadm flow, then reuses the same partman-crypto setup path as
+# Shoelaces plain LUKS: mark selected md arrays as crypto, run crypto_setup,
+# and put / on the opened mapper device.
+
+. /usr/lib/partman/lib/base.sh
+. /usr/lib/partman/lib/crypto-base.sh
+
+role_file=/var/lib/partman/raid_luks_roles
+: >"$role_file"
+
+log_raid_luks() {
+	logger -t shoelaces-raid-luks "$1"
+}
+
+fail_raid() {
+	logger -t partman-auto-raid "$1"
+	db_set partman-auto-raid/error false
+	db_input critical partman-auto-raid/error
+	db_go
+	exit 1
+}
+
+partition_dir_for_md() {
+	raidnum="$1"
+	dev="/var/lib/partman/devices/=dev=md$raidnum"
+	[ -d "$dev" ] || fail_raid "Error: directory for /dev/md$raidnum not found"
+
+	cd "$dev"
+	id="$(ls -d 0-* 2>/dev/null | head -n 1 || true)"
+	[ -n "$id" ] || fail_raid "Error: incorrect directory for /dev/md$raidnum"
+
+	printf '%s/%s\n' "$dev" "$id"
+}
+
+write_crypto_settings() {
+	id="$1"
+
+	echo dm-crypt >"$id/crypto_type"
+
+	cipher="{{.storage_encryption_cipher}}"
+	case "$cipher" in
+		*-*)
+			echo "${cipher%%-*}" >"$id/cipher"
+			echo "${cipher#*-}" >"$id/ivalgorithm"
+			;;
+		*)
+			echo "$cipher" >"$id/cipher"
+			;;
+	esac
+
+	keysize="{{.storage_encryption_key_size}}"
+	case "$(cat "$id/ivalgorithm" 2>/dev/null || true)" in
+		xts-*)
+			case "$keysize" in
+				''|*[!0-9]*) ;;
+				*) keysize="$((keysize / 2))" ;;
+			esac
+			;;
+	esac
+	echo "$keysize" >"$id/keysize"
+	echo "{{.storage_encryption_hash}}" >"$id/keyhash"
+}
+
+wipe_md_signatures() {
+	md="$1"
+
+	# d-i does not include wipefs. Clear common signature locations so
+	# cryptsetup accepts md arrays reused from earlier installer attempts.
+	log_raid_luks "clearing stale signatures on $md"
+	dd if=/dev/zero of="$md" bs=1M count=16 conv=fsync || true
+	sectors="$(blockdev --getsz "$md" 2>/dev/null || echo 0)"
+	if [ "$sectors" -gt 32768 ]; then
+		seek="$((sectors - 32768))"
+		dd if=/dev/zero of="$md" bs=512 seek="$seek" count=32768 conv=fsync || true
+	fi
+}
+
+seed_crypto_passphrase() {
+	if [ -z "{{.storage_encryption_passphrase}}" ]; then
+		fail_raid "Error: RAID LUKS passphrase is empty"
+	fi
+
+	log_raid_luks "seeding partman crypto passphrase for RAID LUKS devices"
+	db_set partman-crypto/passphrase "{{.storage_encryption_passphrase}}"
+	db_set partman-crypto/passphrase-again "{{.storage_encryption_passphrase}}"
+	db_set partman-crypto/weak_passphrase true
+	db_set partman-crypto/confirm true
+	db_set partman-crypto/confirm_nooverwrite true
+	db_set partman-crypto/erase_disks false
+	db_fset partman-crypto/passphrase seen true
+	db_fset partman-crypto/passphrase-again seen true
+	db_fset partman-crypto/weak_passphrase seen true
+	db_fset partman-crypto/confirm seen true
+	db_fset partman-crypto/confirm_nooverwrite seen true
+	db_fset partman-crypto/erase_disks seen true
+}
+
+prepare_crypto_md() {
+	raidnum="$1"
+	role="$2"
+
+	partdir="$(partition_dir_for_md "$raidnum")"
+	dev="${partdir%/*}"
+	id="${partdir##*/}"
+	md="/dev/md$raidnum"
+
+	log_raid_luks "preparing $md as encrypted $role backing device"
+	cd "$partdir"
+	rm -rf filesystem mountpoint use_filesystem options format
+	echo crypto >method
+	write_crypto_settings "$partdir"
+	wipe_md_signatures "$md"
+	touch skip_erase
+
+	log_raid_luks "running partman crypto prepare for $md"
+	crypto_prepare_method "$partdir" dm-crypt || fail_raid "Error: failed to prepare crypto on /dev/md$raidnum"
+	log_raid_luks "prepared $md for partman crypto setup"
+	echo "$md $role" >>"$role_file"
+}
+
+fix_raid_fs() {
+	raidnum="$1"
+	fstype="$2"
+	mountpoint="$3"
+
+	partdir="$(partition_dir_for_md "$raidnum")"
+	dev="${partdir%/*}"
+	id="${partdir##*/}"
+
+	cd "$partdir"
+	case "$fstype" in
+		swap)
+			log_raid_luks "configuring /dev/md$raidnum as swap"
+			rm -rf filesystem mountpoint use_filesystem options
+			echo swap >method
+			;;
+		lvm)
+			log_raid_luks "configuring /dev/md$raidnum as LVM physical volume"
+			rm -rf filesystem mountpoint use_filesystem options format
+			echo lvm >method
+			echo "/dev/md$raidnum" >>/var/lib/partman/initial_auto_raid_pvs
+			;;
+		crypto-lvm)
+			log_raid_luks "configuring /dev/md$raidnum as encrypted LVM physical volume"
+			rm -rf filesystem mountpoint use_filesystem options format
+			echo crypto >method
+			echo "/dev/md$raidnum" >>/var/lib/partman/initial_auto_raid_crypto_pvs
+			;;
+		crypto-root)
+			prepare_crypto_md "$raidnum" root
+			return
+			;;
+		crypto-swap)
+			prepare_crypto_md "$raidnum" swap
+			return
+			;;
+		efi)
+			rm -rf filesystem mountpoint use_filesystem options format
+			echo efi >method
+			;;
+		*)
+			log_raid_luks "configuring /dev/md$raidnum as $fstype mounted at $mountpoint"
+			echo "$fstype" >filesystem
+			echo "$mountpoint" >mountpoint
+			echo format >method
+			touch use_filesystem
+			mkdir -p options
+			;;
+	esac
+
+	touch format
+	touch formatable
+	update_partition "$dev" "$id"
+}
+
+role_for_mapper() {
+	cryptdev="$1"
+	device="$(cat "$cryptdev/device" 2>/dev/null || true)"
+	realdev="$(cat "$cryptdev/crypt_realdev" 2>/dev/null || true)"
+
+	while read -r md role; do
+		[ -n "$md" ] || continue
+		md_base="${md##*/}"
+		case " $device $realdev " in
+			*" $md "*|*"=dev=$md_base/"*|*"/$md_base "*|*"/$md_base/"*)
+				echo "$role"
+				return 0
+				;;
+		esac
+		case "${device##*/}" in
+			"${md_base}_crypt")
+				echo "$role"
+				return 0
+				;;
+		esac
+	done <"$role_file"
+
+	return 1
+}
+
+configure_crypto_mapper() {
+	cryptdev="$1"
+	role="$2"
+
+	cd "$cryptdev"
+	partitions=
+	open_dialog PARTITIONS
+	while { read_line num id size type fs path name; [ "$id" ]; }; do
+		[ "$fs" != free ] || continue
+		partitions="$partitions $id"
+	done
+	close_dialog
+
+	for id in $partitions; do
+		mkdir -p "$id"
+		rm -f "$id"/acting_filesystem "$id"/filesystem "$id"/format "$id"/formatable "$id"/mountpoint "$id"/use_filesystem
+		rm -rf "$id"/options
+		case "$role" in
+			root)
+				log_raid_luks "marking encrypted mapper $(cat "$cryptdev/device" 2>/dev/null || echo "$cryptdev") as root filesystem"
+				echo format >"$id/method"
+				: >"$id/format"
+				: >"$id/formatable"
+				: >"$id/use_filesystem"
+				echo ext4 >"$id/filesystem"
+				echo / >"$id/mountpoint"
+				;;
+			swap)
+				log_raid_luks "marking encrypted mapper $(cat "$cryptdev/device" 2>/dev/null || echo "$cryptdev") as swap"
+				echo swap >"$id/method"
+				: >"$id/format"
+				: >"$id/formatable"
+				;;
+		esac
+		update_partition "$cryptdev" "$id"
+	done
+}
+
+# Only run after partman-auto-raid created md arrays.
+[ -f /var/lib/partman/do_initial_auto_raid_fs ] || exit 0
+rm /var/lib/partman/do_initial_auto_raid_fs
+rm -f /var/lib/partman/initial_auto_raid_pvs
+
+db_get partman-auto-raid/raidnum
+[ -n "$RET" ] || fail_raid "Error: cannot determine device number for RAID device"
+raidnum="$RET"
+
+db_get partman-auto-raid/recipe
+recipes="$(echo "$RET" | sed -e 's/[[:blank:]]\+\.[[:blank:]]*$//')"
+
+log_raid_luks "starting RAID filesystem assignment at /dev/md$raidnum"
+while [ -n "$recipes" ]; do
+	tmp="$recipes"
+	recipes="${tmp#*[[:blank:]].[[:blank:]]}"
+	recipe="${tmp%%[[:blank:]].[[:blank:]]*}"
+
+	if [ "$recipe" = "$recipes" ]; then
+		recipes=''
+	fi
+
+	echo "$recipe" >/tmp/partman-auto-raid-fs-recipe
+	read raidtype devcount sparecount fstype mountpoint devs </tmp/partman-auto-raid-fs-recipe
+	fix_raid_fs "$raidnum" "$fstype" "$mountpoint"
+
+	raidnum="$((raidnum + 1))"
+done
+
+if [ -s "$role_file" ]; then
+	seed_crypto_passphrase
+	log_raid_luks "running partman crypto setup for RAID LUKS devices"
+	crypto_check_setup || fail_raid "Error: failed to validate RAID LUKS setup"
+	crypto_setup no || fail_raid "Error: failed to create RAID LUKS devices"
+
+	for cryptdev in "$DEVICES"/*; do
+		[ -d "$cryptdev" ] || continue
+		[ -f "$cryptdev/crypt_realdev" ] || continue
+		role="$(role_for_mapper "$cryptdev" || true)"
+		[ -n "$role" ] || continue
+		configure_crypto_mapper "$cryptdev" "$role"
+	done
+
+	menudir_default_choice /lib/partman/choose_partition finish finish || true
+	log_raid_luks "completed RAID LUKS filesystem assignment"
+fi
+{{end}}

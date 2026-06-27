@@ -31,6 +31,7 @@ import (
 	"text/template/parse"
 
 	shoelaces "github.com/inngest/shoelaces"
+	storagepath "github.com/inngest/shoelaces/internal/storage"
 	"github.com/inngest/shoelaces/internal/validation"
 	"github.com/inngest/shoelaces/log"
 	"github.com/inngest/shoelaces/mappings"
@@ -575,11 +576,22 @@ func validateDebianRAIDPreseedParams(paramMap map[string]interface{}) error {
 	if _, ok := paramMap["storage_raid_device_1"]; !ok {
 		paramMap["storage_raid_device_1"] = devices[1]
 	}
+	defaultRAIDPartitionParams(paramMap, 0, strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_device_0"])))
+	defaultRAIDPartitionParams(paramMap, 1, strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_device_1"])))
 	bootDegraded := strings.TrimSpace(fmt.Sprint(paramMap["storage_raid_boot_degraded"]))
 	if bootDegraded != "true" && bootDegraded != "false" {
 		return errors.New(`preseed/debian storage_raid_boot_degraded must be "true" or "false", got ` + strconv.Quote(bootDegraded))
 	}
 	return nil
+}
+
+func defaultRAIDPartitionParams(paramMap map[string]interface{}, index int, device string) {
+	for partition := 1; partition <= 5; partition++ {
+		key := fmt.Sprintf("storage_raid_device_%d_part%d", index, partition)
+		if _, ok := paramMap[key]; !ok {
+			paramMap[key] = storagepath.PartitionPath(device, partition)
+		}
+	}
 }
 
 func (s *ShoelacesTemplates) withInstallerExtra(paramMap map[string]interface{}, envName, configName string) (map[string]interface{}, error) {

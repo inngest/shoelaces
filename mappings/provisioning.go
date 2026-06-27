@@ -17,6 +17,8 @@ package mappings
 import (
 	"fmt"
 	"strings"
+
+	storagepath "github.com/inngest/shoelaces/internal/storage"
 )
 
 // ProvisioningConfig contains structured installer policy merged from
@@ -544,12 +546,20 @@ func projectRAIDParams(params map[string]interface{}, raid RAIDConfig) {
 		setDefaultParamValue(params, "storage_raid_devices", devices)
 		setDefaultParamValue(params, "storage_wipe_disks", devices)
 		setDefaultParamValue(params, "storage_raid_device_0", raid.Devices[0])
+		projectRAIDDevicePartitionParams(params, 0, raid.Devices[0])
 		if len(raid.Devices) > 1 {
 			setDefaultParamValue(params, "storage_raid_device_1", raid.Devices[1])
+			projectRAIDDevicePartitionParams(params, 1, raid.Devices[1])
 		}
 	}
 	if raid.BootDegraded != nil {
 		setDefaultParamValue(params, "storage_raid_boot_degraded", *raid.BootDegraded)
+	}
+}
+
+func projectRAIDDevicePartitionParams(params map[string]interface{}, index int, device string) {
+	for partition := 1; partition <= 5; partition++ {
+		setDefaultParamValue(params, fmt.Sprintf("storage_raid_device_%d_part%d", index, partition), storagepath.PartitionPath(device, partition))
 	}
 }
 

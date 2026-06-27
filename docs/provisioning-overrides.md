@@ -480,8 +480,9 @@ directly on the opened LUKS mapper, and swap is created as `/swapfile` inside
 that encrypted root filesystem when regular swap is enabled. In `lvm` mode,
 LUKS wraps the physical volume used by `storage.volumeGroup`, and root and swap
 are logical volumes inside that volume group. In `raid` mode, both disks get
-normal duplicated ESPs, `/boot` is unencrypted RAID1, and LUKS is placed on the
-RAID1 devices used for swap and root.
+normal ESP boot paths, `/boot` is unencrypted RAID1, and LUKS is placed
+directly on the RAID1 root md device. When RAID encryption and swap are enabled,
+swap is created as `/swapfile` inside encrypted root.
 
 The rendered Debian preseed must contain the passphrase so the install can run
 unattended. Boot-session references keep the passphrase out of iPXE URLs and
@@ -532,10 +533,14 @@ with Shoelaces/iPXE installer startup when the host network boots a UEFI iPXE
 binary; the UEFI-only constraint applies to installed-system disk boot and ESP
 layout.
 
-The default Debian RAID sizing is conservative: 512 MiB ESPs on both member
-disks, 1 GiB RAID1 ext4 `/boot`, optional RAID1 swap, and a growable RAID1 ext4
-root filesystem. The same named `storage.filesystems` entries can override
-these defaults across regular, LVM, and RAID modes.
+The default Debian plain RAID sizing is conservative: 512 MiB ESPs, 1 GiB
+RAID1 ext4 `/boot`, optional RAID1 swap, and a growable RAID1 ext4 root
+filesystem. Encrypted RAID uses the same `/boot` and root sizing but creates
+swap as `/swapfile` inside encrypted root. The same named
+`storage.filesystems` entries can override these defaults across regular, LVM,
+and RAID modes. Shoelaces also installs an ESP recovery service that mirrors
+the primary ESP contents to fallback ESPs and maintains EFI boot entries after
+the installed system boots.
 
 For NVMe-only hosts:
 

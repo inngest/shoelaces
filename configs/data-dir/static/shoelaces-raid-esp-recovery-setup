@@ -1,0 +1,244 @@
+#!/bin/sh
+set -eu
+
+state_dir=/var/lib/shoelaces
+status_path="$state_dir/raid-esp-recovery.last-run"
+primary_efi=/boot/efi
+fallback_root=/run/shoelaces-raid-esp-recovery
+fallback_loader='\EFI\debian\shimx64.efi'
+
+log() {
+  printf 'shoelaces-raid-esp-recovery: %s\n' "$*" >&2
+}
+
+lower() {
+  printf '%s' "$1" | tr 'A-Z' 'a-z'
+}
+
+bootnum_from_line() {
+  boot="$1"
+  boot="${boot%% *}"
+  boot="${boot#Boot}"
+  boot="${boot%%\**}"
+  printf '%s' "$boot"
+}
+
+contains_word() {
+  haystack="$1"
+  needle="$2"
+  case " $haystack " in
+    *" $needle "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+append_unique() {
+  list="$1"
+  item="$2"
+  [ -n "$item" ] || {
+    printf '%s' "$list"
+    return
+  }
+  if contains_word "$list" "$item"; then
+    printf '%s' "$list"
+  elif [ -n "$list" ]; then
+    printf '%s %s' "$list" "$item"
+  else
+    printf '%s' "$item"
+  fi
+}
+
+boot_entry_for_partuuid() {
+  uuid="$(lower "$1")"
+  tmp="$(mktemp)"
+  efibootmgr -v >"$tmp"
+  while IFS= read -r line; do
+    line_lower="$(lower "$line")"
+    case "$line_lower" in
+      *"$uuid"*'file(\efi\debian\shimx64.efi)'*)
+        bootnum_from_line "$line"
+        rm -f "$tmp"
+        return 0
+        ;;
+    esac
+  done <"$tmp"
+  rm -f "$tmp"
+  return 1
+}
+
+disk_for_partition() {
+  pkname="$(lsblk -no PKNAME "$1" | head -n 1 | tr -d ' ')"
+  [ -n "$pkname" ] || return 1
+  printf '/dev/%s' "$pkname"
+}
+
+partnum_for_partition() {
+  partnum="$(lsblk -no PARTN "$1" | head -n 1 | tr -d ' ')"
+  [ -n "$partnum" ] || return 1
+  printf '%s' "$partnum"
+}
+
+mirror_esp() {
+  esp="$1"
+  mountpoint="$fallback_root/$(basename "$esp")"
+
+  mkdir -p "$mountpoint"
+  if findmnt -rn "$mountpoint" >/dev/null 2>&1; then
+    umount "$mountpoint"
+  fi
+
+  mount "$esp" "$mountpoint"
+  rm -rf "$mountpoint/EFI"
+  cp -R "$primary_efi/EFI" "$mountpoint/"
+  sync
+  umount "$mountpoint"
+}
+
+remove_stale_fallback_entries() {
+  valid_uuids="$1"
+  tmp="$(mktemp)"
+  efibootmgr -v >"$tmp"
+
+  while IFS= read -r line; do
+    case "$line" in
+      *"shoelaces debian fallback"*|*"debian fallback"*) ;;
+      *) continue ;;
+    esac
+
+    keep=false
+    for uuid in $valid_uuids; do
+      case "$(lower "$line")" in
+        *"$(lower "$uuid")"*) keep=true ;;
+      esac
+    done
+
+    if [ "$keep" != true ]; then
+      boot="$(bootnum_from_line "$line")"
+      log "removing stale fallback boot entry Boot$boot"
+      efibootmgr -b "$boot" -B || true
+    fi
+  done <"$tmp"
+
+  rm -f "$tmp"
+}
+
+ensure_fallback_entry() {
+  esp="$1"
+  uuid="$2"
+
+  if boot_entry_for_partuuid "$uuid" >/dev/null 2>&1; then
+    boot_entry_for_partuuid "$uuid"
+    return 0
+  fi
+
+  disk="$(disk_for_partition "$esp")"
+  partnum="$(partnum_for_partition "$esp")"
+  label="shoelaces debian fallback $(basename "$disk")"
+  log "creating fallback boot entry for $esp"
+  efibootmgr -c -d "$disk" -p "$partnum" -L "$label" -l "$fallback_loader" >/dev/null
+  boot_entry_for_partuuid "$uuid"
+}
+
+mkdir -p "$state_dir" "$fallback_root"
+
+[ -d "$primary_efi/EFI" ] || {
+  log "$primary_efi/EFI is missing"
+  exit 1
+}
+
+command -v efibootmgr >/dev/null 2>&1 || {
+  log "efibootmgr is not installed"
+  exit 1
+}
+
+primary_part="$(findmnt -rn -o SOURCE "$primary_efi")"
+[ -b "$primary_part" ] || {
+  log "cannot resolve mounted primary ESP"
+  exit 1
+}
+primary_uuid="$(lsblk -no PARTUUID "$primary_part" | head -n 1 | tr -d ' ')"
+[ -n "$primary_uuid" ] || {
+  log "cannot resolve primary ESP PARTUUID"
+  exit 1
+}
+
+mkdir -p "$primary_efi/EFI/BOOT"
+if [ ! -f "$primary_efi/EFI/BOOT/BOOTX64.EFI" ]; then
+  if [ -f "$primary_efi/EFI/debian/shimx64.efi" ]; then
+    cp -f "$primary_efi/EFI/debian/shimx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"
+  elif [ -f "$primary_efi/EFI/debian/grubx64.efi" ]; then
+    cp -f "$primary_efi/EFI/debian/grubx64.efi" "$primary_efi/EFI/BOOT/BOOTX64.EFI"
+  fi
+fi
+
+esp_parts=
+for esp in /dev/nvme*n1p1 /dev/sd?1 /dev/vd?1; do
+  [ -b "$esp" ] || continue
+  fstype="$(lsblk -no FSTYPE "$esp" | head -n 1 | tr -d ' ')"
+  case "$fstype" in
+    vfat|fat|msdos) ;;
+    *) continue ;;
+  esac
+  esp_parts="$(append_unique "$esp_parts" "$esp")"
+done
+
+secondary_parts=
+secondary_uuids=
+for esp in $esp_parts; do
+  [ "$esp" != "$primary_part" ] || continue
+  uuid="$(lsblk -no PARTUUID "$esp" | head -n 1 | tr -d ' ')"
+  [ -n "$uuid" ] || continue
+  secondary_parts="$(append_unique "$secondary_parts" "$esp")"
+  secondary_uuids="$(append_unique "$secondary_uuids" "$uuid")"
+done
+
+[ -n "$secondary_parts" ] || {
+  log "no secondary ESPs found; nothing to do"
+  date -Is >"$status_path"
+  exit 0
+}
+
+remove_stale_fallback_entries "$secondary_uuids"
+
+fallback_boots=
+for esp in $secondary_parts; do
+  uuid="$(lsblk -no PARTUUID "$esp" | head -n 1 | tr -d ' ')"
+  log "mirroring $primary_efi/EFI to $esp"
+  mirror_esp "$esp"
+  boot="$(ensure_fallback_entry "$esp" "$uuid")"
+  fallback_boots="$(append_unique "$fallback_boots" "$boot")"
+done
+
+primary_boot="$(boot_entry_for_partuuid "$primary_uuid" || true)"
+if [ -z "$primary_boot" ]; then
+  primary_disk="$(disk_for_partition "$primary_part")"
+  primary_partnum="$(partnum_for_partition "$primary_part")"
+  log "creating primary boot entry for $primary_part"
+  efibootmgr -c -d "$primary_disk" -p "$primary_partnum" -L debian -l "$fallback_loader" >/dev/null
+  primary_boot="$(boot_entry_for_partuuid "$primary_uuid")"
+fi
+
+order_words="$primary_boot"
+for boot in $fallback_boots; do
+  order_words="$(append_unique "$order_words" "$boot")"
+done
+
+old_order="$(efibootmgr | sed -n 's/^BootOrder: //p' | tr ',' ' ')"
+for boot in $old_order; do
+  order_words="$(append_unique "$order_words" "$boot")"
+done
+
+new_order=
+for boot in $order_words; do
+  if [ -z "$new_order" ]; then
+    new_order="$boot"
+  else
+    new_order="$new_order,$boot"
+  fi
+done
+
+log "setting BootOrder to $new_order"
+efibootmgr -o "$new_order"
+
+date -Is >"$status_path"
+log "completed"

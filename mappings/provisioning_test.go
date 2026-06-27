@@ -222,6 +222,8 @@ func TestParamsWithProvisioningProjectsStructuredRAID(t *testing.T) {
 	assert.Equal(t, "/dev/disk/by-id/nvme-os-a /dev/disk/by-id/nvme-os-b", params["storage_wipe_disks"])
 	assert.Equal(t, "/dev/disk/by-id/nvme-os-a", params["storage_raid_device_0"])
 	assert.Equal(t, "/dev/disk/by-id/nvme-os-b", params["storage_raid_device_1"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-a-part3", params["storage_raid_device_0_part3"])
+	assert.Equal(t, "/dev/disk/by-id/nvme-os-b-part5", params["storage_raid_device_1_part5"])
 	assert.Equal(t, "true", params["storage_raid_boot_degraded"])
 }
 
