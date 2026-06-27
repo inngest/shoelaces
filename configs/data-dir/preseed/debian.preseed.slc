@@ -449,7 +449,7 @@ d-i preseed/late_command string \
 d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_raid_partman_modules}}
 
 # Use mdadm for redundancy, then put LUKS directly on the root md device.
-# ESP stays outside mdraid, /boot remains RAID1 but unencrypted, and swap is
+# ESPs stay outside mdraid, /boot remains RAID1 but unencrypted, and swap is
 # created later as /swapfile inside encrypted root.
 d-i partman-auto/method string raid
 
@@ -467,6 +467,11 @@ d-i partman-auto/expert_recipe string \
         method{ efi } format{ }                                          \
         device{ {{.storage_raid_device_0}} }                             \
         mountpoint{ {{.debian_raid_esp_mountpoint}} }                    \
+    .                                                                    \
+    {{.debian_raid_esp_min_size_mib}} {{.debian_raid_esp_priority}} {{.debian_raid_esp_max_size_mib}} {{.debian_raid_esp_fstype}} \
+        $primary{ } $iflabel{ gpt }                                      \
+        method{ efi } format{ }                                          \
+        device{ {{.storage_raid_device_1}} }                             \
     .                                                                    \
     {{.debian_raid_boot_min_size_mib}} {{.debian_raid_boot_priority}} {{.debian_raid_boot_max_size_mib}} raid \
         $primary{ } $iflabel{ gpt }                                      \
