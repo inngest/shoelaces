@@ -447,8 +447,8 @@ d-i preseed/late_command string \
 {{end}}
 
 {{define "preseed/debian/storage/raid/encrypted" -}}
-{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part2 .storage_raid_device_1_part2 -}}
-{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
+{{$raidBootDevices := printf "%s#%s" .storage_raid_device_0_part3 .storage_raid_device_1_part3 -}}
+{{$raidRootDevices := printf "%s#%s" .storage_raid_device_0_part4 .storage_raid_device_1_part4 -}}
 d-i anna/choose_modules string crypto-dm-modules partman-crypto {{.debian_raid_partman_modules}}
 
 # Use mdadm for redundancy, then put LUKS directly on the root md device.
