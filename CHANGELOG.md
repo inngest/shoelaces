@@ -1,8 +1,17 @@
+## [1.9.7] - 2026-06-27
+
+### 🐛 Bug Fixes
+
+- *(debian)* Support RAID1 LUKS and TPM unlock (#88)
 ## [1.9.6] - 2026-06-25
 
 ### 🐛 Bug Fixes
 
 - *(static)* Support user-provided static slc templates (#86)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.6 (#87)
 ## [1.9.5] - 2026-06-24
 
 ### 🐛 Bug Fixes
