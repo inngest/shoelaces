@@ -1,8 +1,17 @@
+## [1.9.8] - 2026-06-27
+
+### 🐛 Bug Fixes
+
+- *(debian)* Render compact RAID LUKS partitions (#90)
 ## [1.9.7] - 2026-06-27
 
 ### 🐛 Bug Fixes
 
 - *(debian)* Support RAID1 LUKS and TPM unlock (#88)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.7 (#89)
 ## [1.9.6] - 2026-06-25
 
 ### 🐛 Bug Fixes
