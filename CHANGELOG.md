@@ -1,8 +1,12 @@
-## [1.9.8] - 2026-06-27
+## [1.9.8] - 2026-07-06
 
 ### 🐛 Bug Fixes
 
 - *(debian)* Render compact RAID LUKS partitions (#90)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.8 (#91)
 ## [1.9.7] - 2026-06-27
 
 ### 🐛 Bug Fixes
