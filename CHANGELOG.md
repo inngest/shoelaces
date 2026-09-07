@@ -1,8 +1,17 @@
+## [1.9.9] - 2026-09-07
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove Darwin from CODEOWNERS (#96)
 ## [1.9.8] - 2026-06-27
 
 ### 🐛 Bug Fixes
 
 - *(debian)* Render compact RAID LUKS partitions (#90)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V1.9.8 (#91)
 ## [1.9.7] - 2026-06-27
 
 ### 🐛 Bug Fixes
